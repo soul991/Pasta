@@ -19,6 +19,12 @@ public struct PeelCLI {
             runListActions(filePath: args[1])
         case "convert":
             runConvert(args: Array(args.dropFirst()))
+        case "quick-action":
+            guard args.count >= 2 else {
+                fputs("Error: Missing file path for quick-action.\nUsage: peel quick-action <file>...\n", stderr)
+                exit(1)
+            }
+            runQuickAction(files: Array(args.dropFirst()))
         case "--help", "-h", "help":
             printUsage()
             exit(0)
@@ -158,5 +164,49 @@ public struct PeelCLI {
         if anyFailed {
             exit(1)
         }
+    }
+
+    private static func runQuickAction(files: [String]) {
+        for file in files {
+            let url = URL(fileURLWithPath: file)
+            guard FileManager.default.fileExists(atPath: url.path) else { continue }
+            let actions = FormatRegistry.shared.actions(for: url, isOptionHeld: false)
+            guard !actions.isEmpty else {
+                showNotification(title: "Peel", message: "No conversion formats available for \(url.lastPathComponent)")
+                continue
+            }
+
+            let actionTitles = actions.map { "\"\($0.displayName) (.\($0.outputExtension))\"" }.joined(separator: ", ")
+            let script = "choose from list {\(actionTitles)} with title \"Peel\" with prompt \"Choose target format for \(url.lastPathComponent):\" without multiple selections allowed"
+
+            let proc = Process()
+            proc.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+            proc.arguments = ["-e", script]
+            let p = Pipe()
+            proc.standardOutput = p
+            try? proc.run()
+            proc.waitUntilExit()
+
+            let data = p.fileHandleForReading.readDataToEndOfFile()
+            let chosen = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !chosen.isEmpty && chosen != "false" else { continue }
+
+            if let matched = actions.first(where: { chosen.contains($0.displayName) }) {
+                do {
+                    let out = try JobRunner.shared.run(action: matched, input: url)
+                    showNotification(title: "Peel Converted", message: "Successfully created \(out.lastPathComponent)")
+                } catch {
+                    showNotification(title: "Peel Failed", message: error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    private static func showNotification(title: String, message: String) {
+        let script = "display notification \"\(message.replacingOccurrences(of: "\"", with: "\\\""))\" with title \"\(title)\""
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        proc.arguments = ["-e", script]
+        try? proc.run()
     }
 }
