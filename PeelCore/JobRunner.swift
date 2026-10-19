@@ -17,6 +17,8 @@ public final class JobRunner {
         // Validate input file
         try InputValidator.validateInputFile(input)
 
+        let effectiveDest = destinationDirectory ?? PreferencesManager.shared.effectiveDestination(for: input)
+
         // Determine destination URL
         let isExtract = action.id == "archive.extract"
         let isPdfToImages = action.id == "pdf.to.images"
@@ -24,14 +26,16 @@ public final class JobRunner {
 
         let finalDestinationURL: URL
         if isExtract {
-            finalDestinationURL = OutputPlanner.planOutputDirectory(for: input, suffix: "extracted", destinationDirectory: destinationDirectory)
+            finalDestinationURL = OutputPlanner.planOutputDirectory(for: input, suffix: "extracted", destinationDirectory: effectiveDest)
         } else if isPdfToImages {
-            finalDestinationURL = OutputPlanner.planOutputDirectory(for: input, suffix: "pages", destinationDirectory: destinationDirectory)
+            finalDestinationURL = OutputPlanner.planOutputDirectory(for: input, suffix: "pages", destinationDirectory: effectiveDest)
         } else if isPdfSplit {
-            finalDestinationURL = OutputPlanner.planOutputDirectory(for: input, suffix: "split", destinationDirectory: destinationDirectory)
+            finalDestinationURL = OutputPlanner.planOutputDirectory(for: input, suffix: "split", destinationDirectory: effectiveDest)
         } else {
-            finalDestinationURL = OutputPlanner.planOutput(for: input, targetExtension: action.outputExtension, destinationDirectory: destinationDirectory)
+            finalDestinationURL = OutputPlanner.planOutput(for: input, targetExtension: action.outputExtension, destinationDirectory: effectiveDest)
         }
+
+        PeelLogger.shared.info("Starting action \(action.id) on '\(input.lastPathComponent)' -> '\(finalDestinationURL.lastPathComponent)'")
 
         // Create temporary isolated scratch space
         let tempDir = try OutputPlanner.makeTempDirectory()
@@ -94,6 +98,7 @@ public final class JobRunner {
         }
         try fm.moveItem(at: tempWorkingOutputURL, to: finalDestinationURL)
 
+        PeelLogger.shared.info("Successfully completed \(action.id) -> '\(finalDestinationURL.path)'")
         return finalDestinationURL
     }
 
