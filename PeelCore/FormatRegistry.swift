@@ -523,6 +523,17 @@ public final class FormatRegistry {
                     Invocation(toolName: "qpdf", arguments: [tempCopy.path, output.path])
                 ]
             },
+            ConversionAction(
+                id: "pdf.advanced.split",
+                displayName: "Split PDF Pages",
+                outputExtension: "",
+                isAdvanced: true,
+                category: .pdf,
+                iconName: "scissors"
+            ) { input, output in
+                let pattern = output.appendingPathComponent("page-%d.pdf").path
+                return [Invocation(toolName: "qpdf", arguments: [input.path, "--split-pages", pattern])]
+            },
             archiveCreateZipAction()
         ]
     }

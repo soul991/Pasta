@@ -14,19 +14,21 @@ public final class JobRunner {
     ) throws -> URL {
         let fm = FileManager.default
 
-        guard fm.fileExists(atPath: input.path) else {
-            throw PeelError.invalidInput("File not found at \(input.path)")
-        }
+        // Validate input file
+        try InputValidator.validateInputFile(input)
 
         // Determine destination URL
         let isExtract = action.id == "archive.extract"
         let isPdfToImages = action.id == "pdf.to.images"
+        let isPdfSplit = action.id == "pdf.advanced.split"
 
         let finalDestinationURL: URL
         if isExtract {
             finalDestinationURL = OutputPlanner.planOutputDirectory(for: input, suffix: "extracted", destinationDirectory: destinationDirectory)
         } else if isPdfToImages {
             finalDestinationURL = OutputPlanner.planOutputDirectory(for: input, suffix: "pages", destinationDirectory: destinationDirectory)
+        } else if isPdfSplit {
+            finalDestinationURL = OutputPlanner.planOutputDirectory(for: input, suffix: "split", destinationDirectory: destinationDirectory)
         } else {
             finalDestinationURL = OutputPlanner.planOutput(for: input, targetExtension: action.outputExtension, destinationDirectory: destinationDirectory)
         }
@@ -38,7 +40,7 @@ public final class JobRunner {
         }
 
         let tempWorkingOutputURL: URL
-        if isExtract || isPdfToImages {
+        if isExtract || isPdfToImages || isPdfSplit {
             tempWorkingOutputURL = tempDir.appendingPathComponent("output_items")
             try fm.createDirectory(at: tempWorkingOutputURL, withIntermediateDirectories: true)
         } else {
@@ -58,10 +60,8 @@ public final class JobRunner {
 
         // Verify and move output to final destination
         if isPdfToImages {
-            // Check if pages were written in tempWorkingOutputURL or parent prefix
             let contents = (try? fm.contentsOfDirectory(at: tempWorkingOutputURL, includingPropertiesForKeys: nil)) ?? []
             if contents.isEmpty {
-                // If prefix was used directly in tempDir
                 let allTemp = (try? fm.contentsOfDirectory(at: tempDir, includingPropertiesForKeys: nil)) ?? []
                 let pageFiles = allTemp.filter { $0.pathExtension.lowercased() == "png" }
                 if pageFiles.isEmpty {
@@ -76,7 +76,7 @@ public final class JobRunner {
             return finalDestinationURL
         }
 
-        if isExtract {
+        if isExtract || isPdfSplit {
             guard fm.fileExists(atPath: tempWorkingOutputURL.path) else {
                 throw PeelError.outputNotFound(finalDestinationURL.path)
             }

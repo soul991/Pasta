@@ -166,6 +166,89 @@ for tc in testCases {
     }
 }
 
+// MARK: - 5. Phase 4: InputValidator & Advanced Tools Tests
+print("\n--- 5. Phase 4: InputValidator & Advanced Actions ---")
+do {
+    // 5.1 InputValidator Tests
+    let emptyURL = testDir.appendingPathComponent("empty_zero_byte.txt")
+    var caughtEmpty = false
+    do {
+        try InputValidator.validateInputFile(emptyURL)
+    } catch {
+        caughtEmpty = true
+    }
+    assertTest(caughtEmpty, "InputValidator rejects empty zero-byte file")
+
+    var caughtTime = false
+    do {
+        try InputValidator.validateTimeRange(start: 15.0, end: 10.0)
+    } catch {
+        caughtTime = true
+    }
+    assertTest(caughtTime, "InputValidator rejects end time before start time")
+
+    var caughtDim = false
+    do {
+        try InputValidator.validateDimensions(width: -100, height: 200)
+    } catch {
+        caughtDim = true
+    }
+    assertTest(caughtDim, "InputValidator rejects negative image dimensions")
+
+    var caughtPDFMerge = false
+    do {
+        try InputValidator.validatePDFMerge(files: [testDir.appendingPathComponent("sample.pdf")])
+    } catch {
+        caughtPDFMerge = true
+    }
+    assertTest(caughtPDFMerge, "InputValidator rejects PDF merge with fewer than 2 files")
+
+    // 5.2 Advanced Actions: Metadata Stripping
+    let photoURL = testDir.appendingPathComponent("photo_🎉_cool.jpg")
+    if let stripAction = FormatRegistry.shared.action(for: photoURL, actionID: "image.advanced.strip_metadata") {
+        do {
+            let strippedOut = try JobRunner.shared.run(action: stripAction, input: photoURL, destinationDirectory: outDir)
+            assertTest(FileManager.default.fileExists(atPath: strippedOut.path), "Advanced: strip image metadata creates output")
+            
+            // Verify with exiftool that EXIF is clean
+            let exifProcess = Process()
+            exifProcess.executableURL = ToolLocator.shared.findTool("exiftool")
+            exifProcess.arguments = ["-s", strippedOut.path]
+            let pOut = Pipe()
+            exifProcess.standardOutput = pOut
+            try exifProcess.run()
+            exifProcess.waitUntilExit()
+            let exifData = pOut.fileHandleForReading.readDataToEndOfFile()
+            let exifStr = String(data: exifData, encoding: .utf8) ?? ""
+            assertTest(!exifStr.contains("Artist") && !exifStr.contains("GPS"), "Advanced: image metadata stripped clean according to exiftool")
+        } catch {
+            assertTest(false, "Advanced: strip image metadata failed", details: error.localizedDescription)
+        }
+    }
+
+    // 5.3 Advanced Actions: PDF Split
+    let samplePdfURL = testDir.appendingPathComponent("sample.pdf")
+    if let splitAction = FormatRegistry.shared.action(for: samplePdfURL, actionID: "pdf.advanced.split") {
+        do {
+            let splitFolder = try JobRunner.shared.run(action: splitAction, input: samplePdfURL, destinationDirectory: outDir)
+            let items = (try? FileManager.default.contentsOfDirectory(at: splitFolder, includingPropertiesForKeys: nil)) ?? []
+            assertTest(!items.isEmpty && items.contains { $0.lastPathComponent.hasPrefix("page-") }, "Advanced: PDF split creates directory with page PDFs")
+        } catch {
+            assertTest(false, "Advanced: PDF split failed", details: error.localizedDescription)
+        }
+    }
+
+    // 5.4 Advanced Actions: PDF Compress
+    if let pdfCompAction = FormatRegistry.shared.action(for: samplePdfURL, actionID: "pdf.advanced.compress") {
+        do {
+            let compPdf = try JobRunner.shared.run(action: pdfCompAction, input: samplePdfURL, destinationDirectory: outDir)
+            assertTest(FileManager.default.fileExists(atPath: compPdf.path), "Advanced: PDF compress produces valid PDF")
+        } catch {
+            assertTest(false, "Advanced: PDF compress failed", details: error.localizedDescription)
+        }
+    }
+}
+
 print("\n==================================================")
 print("Test Suite Summary: \(passedTests)/\(totalTests) Passed, \(failedTests) Failed")
 print("==================================================")
