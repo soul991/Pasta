@@ -63,6 +63,8 @@ public final class FormatRegistry {
             return vttActions(for: fileURL)
         case "zip", "tar", "gz", "tgz", "7z", "rar":
             return archiveExtractActions(for: fileURL, inputExt: ext)
+        case "swift", "sh", "bash", "zsh", "py", "js", "ts", "c", "cpp", "h", "json", "yaml", "yml", "xml", "css", "sql", "rb", "go", "rs", "java", "kt", "php":
+            return codeAndScriptActions(for: fileURL, inputExt: ext)
         default:
             return genericFileActions(for: fileURL)
         }
@@ -767,8 +769,86 @@ public final class FormatRegistry {
         ]
     }
 
+    private func codeAndScriptActions(for url: URL, inputExt: String) -> [ConversionAction] {
+        return [
+            ConversionAction(
+                id: "code.to.txt",
+                displayName: "Convert to Plain Text",
+                outputExtension: "txt",
+                isAdvanced: false,
+                category: .document,
+                iconName: "doc.text"
+            ) { input, output in
+                [Invocation(toolName: "ditto", arguments: [input.path, output.path])]
+            },
+            ConversionAction(
+                id: "code.to.md",
+                displayName: "Convert to Markdown",
+                outputExtension: "md",
+                isAdvanced: false,
+                category: .document,
+                iconName: "doc.text"
+            ) { input, output in
+                [Invocation(toolName: "pandoc", arguments: ["-o", output.path, input.path])]
+            },
+            ConversionAction(
+                id: "code.to.html",
+                displayName: "Convert to HTML",
+                outputExtension: "html",
+                isAdvanced: false,
+                category: .document,
+                iconName: "globe"
+            ) { input, output in
+                [Invocation(toolName: "pandoc", arguments: ["-s", "-o", output.path, input.path])]
+            },
+            ConversionAction(
+                id: "code.to.pdf",
+                displayName: "Convert to PDF",
+                outputExtension: "pdf",
+                isAdvanced: false,
+                category: .document,
+                iconName: "doc.richtext"
+            ) { input, output in
+                [Invocation(toolName: "cupsfilter", arguments: [input.path], redirectStdoutTo: output.path)]
+            },
+            archiveCreateZipAction(),
+            ConversionAction(
+                id: "archive.create.targz",
+                displayName: "Compress to TAR.GZ",
+                outputExtension: "tar.gz",
+                isAdvanced: false,
+                category: .archive,
+                iconName: "archivebox"
+            ) { input, output in
+                let parentDir = input.deletingLastPathComponent().path
+                let name = input.lastPathComponent
+                return [Invocation(toolName: "tar", arguments: ["-czf", output.path, "-C", parentDir, name])]
+            }
+        ]
+    }
+
     private func genericFileActions(for url: URL) -> [ConversionAction] {
         return [
+            ConversionAction(
+                id: "generic.to.txt",
+                displayName: "Convert to Plain Text",
+                outputExtension: "txt",
+                isAdvanced: false,
+                category: .document,
+                iconName: "doc.text"
+            ) { input, output in
+                [Invocation(toolName: "ditto", arguments: [input.path, output.path])]
+            },
+            ConversionAction(
+                id: "generic.to.pdf",
+                displayName: "Convert to PDF",
+                outputExtension: "pdf",
+                isAdvanced: false,
+                category: .document,
+                iconName: "doc.richtext"
+            ) { input, output in
+                [Invocation(toolName: "cupsfilter", arguments: [input.path], redirectStdoutTo: output.path)]
+            },
             archiveCreateZipAction(),
             ConversionAction(
                 id: "archive.create.targz",

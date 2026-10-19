@@ -6,7 +6,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private var popover: NSPopover!
     private var dropWindowController: DropWindowViewController!
-    private var overlayPanel: DragOverlayPanel!
+    private var wheelPanel: RadialWheelOverlayPanel!
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -18,19 +18,19 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         dropWindowController = DropWindowViewController()
         popover.contentViewController = dropWindowController
 
-        // Initialize Overlay Panel
-        overlayPanel = DragOverlayPanel()
+        // Initialize Radial Wheel Overlay Panel
+        wheelPanel = RadialWheelOverlayPanel()
 
         // Setup DragMonitor
         DragMonitor.shared.onDragStart = { [weak self] files, isOptionHeld, mouseLocation in
             DispatchQueue.main.async {
-                self?.overlayPanel.showNear(point: mouseLocation, files: files, isOptionHeld: isOptionHeld)
+                self?.wheelPanel.showCenteredAt(point: mouseLocation, files: files, isOptionHeld: isOptionHeld)
             }
         }
 
         DragMonitor.shared.onDragEnd = { [weak self] in
             DispatchQueue.main.async {
-                self?.overlayPanel.dismiss()
+                self?.wheelPanel.dismiss()
             }
         }
 

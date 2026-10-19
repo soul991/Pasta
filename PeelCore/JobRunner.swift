@@ -112,7 +112,15 @@ public final class JobRunner {
 
         let outPipe = Pipe()
         let errPipe = Pipe()
-        process.standardOutput = outPipe
+        var redirectHandle: FileHandle?
+
+        if let redirectPath = invocation.redirectStdoutTo {
+            FileManager.default.createFile(atPath: redirectPath, contents: nil)
+            redirectHandle = FileHandle(forWritingAtPath: redirectPath)
+            process.standardOutput = redirectHandle
+        } else {
+            process.standardOutput = outPipe
+        }
         process.standardError = errPipe
 
         var env = ProcessInfo.processInfo.environment
@@ -127,10 +135,12 @@ public final class JobRunner {
         var errData = Data()
         let group = DispatchGroup()
 
-        group.enter()
-        DispatchQueue.global(qos: .userInitiated).async {
-            outData = outPipe.fileHandleForReading.readDataToEndOfFile()
-            group.leave()
+        if redirectHandle == nil {
+            group.enter()
+            DispatchQueue.global(qos: .userInitiated).async {
+                outData = outPipe.fileHandleForReading.readDataToEndOfFile()
+                group.leave()
+            }
         }
 
         group.enter()
@@ -156,6 +166,7 @@ public final class JobRunner {
 
         process.waitUntilExit()
         timer.cancel()
+        try? redirectHandle?.close()
         group.wait()
 
         if timedOut {

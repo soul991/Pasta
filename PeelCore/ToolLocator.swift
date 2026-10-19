@@ -7,7 +7,8 @@ public final class ToolLocator {
         "/opt/homebrew/bin",
         "/usr/local/bin",
         "/usr/bin",
-        "/bin"
+        "/bin",
+        "/usr/sbin"
     ]
 
     private var cache: [String: URL] = [:]
