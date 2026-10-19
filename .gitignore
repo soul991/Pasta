@@ -1,5 +1,4 @@
 .build/
 .DS_Store
 *.app/
-test_outputs/
-test_outputs_sec8/
+test_outputs*/
