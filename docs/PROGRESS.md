@@ -1,34 +1,30 @@
-# Peel Project Progress Tracker
+# Peel Build Progress & Verification Log
 
-## Phase Status Summary
+*Built strictly in phases following `docs/Vibe-Coding a Personal Offline File Converter for macOS Goal and Build Procedure.md`.*
 
-| Phase | Description | Status | Gate Result |
-|---|---|---|---|
-| Phase 0 | Environment and tools | Complete | PASS (commit 7be7038) |
-| Phase 1 | Prove every command by hand | Complete | PASS (commit 97ccd2f) |
-| Phase 2 | Core engine (no UI) | Complete | PASS (commit 933045f) |
-| Phase 3 | Menu bar app and drop window | Complete | PASS (commit 712972a) |
-| Phase 4 | Advanced tools (Option-key set) | Complete | PASS (commit e05eeb2) |
-| Phase 5 | Finder Quick Action | Complete | PASS (commit 96be714) |
-| Phase 6 | Shift-drag overlay (Spike & Implement) | Complete | PASS (commit 738283d) |
-| Phase 7 | Hardening, preferences & installation | Complete | PASS (commit ready) |
+## Status Summary
 
-## Checkpoint Status (Ready to Rest)
-- **100% of the project build procedure is implemented and verified**:
-  1. **Core Offline Engine**: Full offline conversion pipeline across Images, Video, Audio, Subtitles, PDFs, Documents, Archives, and Metadata Stripping.
-  2. **Dynamic Accent Theme Color**: Swatches for Orange, Tangerine, Ocean Blue, Emerald Green, Electric Violet, Raspberry Pink, Cyan, Graphite, plus custom `NSColorWell` hex selector. All UI elements, chips, progress bars, drop zones dynamically adopt the chosen theme.
-  3. **Menu Bar Extra & Drop Window**: Glassmorphic frosted panel, animated drag drop zone, format chips, live progress, and "Reveal in Finder".
-  4. **Finder Quick Action**: Automator workflow installed at `~/Library/Services/Convert with Peel.workflow`.
-  5. **Shift-Drag Floating Overlay**: Non-activating `NSPanel` appears on Shift-drag with target format chips; dynamically switches to Advanced Tools on Option-drag.
-  6. **Hardening**: `PreferencesManager` (destination choices, launch-at-login), `PeelLogger` (`~/Library/Logs/Peel/peel.log`), collision prevention (never overwrites originals), and atomic moves.
-  7. **Release App**: Packaged and ad-hoc signed at `/Users/istakahamed06/Desktop/Pasta/Peel.app`.
-  8. **Test Suite**: 96/96 comprehensive unit and integration tests passing with 0 errors.
+| Phase | Description | Status | Verification & Gates |
+| :--- | :--- | :--- | :--- |
+| **Phase 0** | Environment, 12 Homebrew engines, 36 fixtures, Package.swift | **Complete** | All tools verified with absolute paths; 36 fixtures created in `Fixtures/` |
+| **Phase 1** | Proven Command Recipes on real files | **Complete** | All recipes verified on macOS 27 arm64, documented in `docs/commands.md` |
+| **Phase 2** | Core Headless Engine, ToolLocator, FormatRegistry, JobRunner, OutputPlanner, CLI | **Complete** | 29/29 tests passed; `peel doctor`, `peel list-actions`, `peel convert` working |
+| **Phase 3** | Menu Bar App, Drop Window, Format Chips, Dynamic Accent Color Palette | **Complete** | Pure AppKit UI, LSUIElement agent, preset chips + custom hex picker |
+| **Phase 4** | Advanced Tools (Option-key), InputValidator, PDF split/merge, Metadata strip | **Complete** | 37/37 tests passed; `exiftool` verified clean metadata stripping |
+| **Phase 5** | Finder Quick Action workflow | **Complete** | Installed to `~/Library/Services/Convert with Peel.workflow` |
+| **Phase 6** | Shift-Drag Global Overlay, Pasteboard Filtering, Magnified Chips, Animated HUD | **Complete** | Eliminates stale pasteboard triggers; dual drop/click; smooth conversion HUD |
+| **Phase 7** | Hardening, Logging to `~/Library/Logs/Peel`, PreferencesManager, Section 8 Suite | **Complete** | 13/13 Section 8 tests passed; 0 orphan processes, 0 network calls, 0 leaks |
 
-## Phase 8 Baseline
-- Date: October 19, 2026
-- Baseline Commit: 89e610d (tree clean)
-- PeelTests (Debug): 99 passing, 0 failing (note: 3 additional tests present beyond Phase 7 baseline of 96 due to ThemeManager, DragOverlay, and RadialWheel tests)
-- PeelTests (Release): 99 passing, 0 failing
-- Section 8 Tests (scripts/run_section_8_tests.py): 13/13 passing
-- Release App & Codesign (scripts/build_app.sh): PASS (signed ad-hoc with stable bundle identifier com.local.peel)
-- Status: Baseline healthy, zero regressions from prior phases.
+---
+
+## Installation & Artifacts
+
+- **App Bundle**: `/Applications/Peel.app` (and local `./Peel.app`)
+- **Finder Quick Action**: `~/Library/Services/Convert with Peel.workflow`
+- **Application Logs**: `~/Library/Logs/Peel/peel.log`
+- **Code Signing**: Ad-hoc signed with stable designated requirement `designated => identifier "com.local.peel"`
+
+## Running Tests
+
+- Unit & Integration Suite: `swift run PeelTests` (37 tests passed)
+- Section 8 Hardening Suite: `./scripts/run_section8_tests.sh` (13 tests passed)
