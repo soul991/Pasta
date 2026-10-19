@@ -6,6 +6,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private var popover: NSPopover!
     private var dropWindowController: DropWindowViewController!
+    private var overlayPanel: DragOverlayPanel!
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -16,6 +17,24 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         popover.behavior = .transient
         dropWindowController = DropWindowViewController()
         popover.contentViewController = dropWindowController
+
+        // Initialize Overlay Panel
+        overlayPanel = DragOverlayPanel()
+
+        // Setup DragMonitor
+        DragMonitor.shared.onDragStart = { [weak self] files, isOptionHeld, mouseLocation in
+            DispatchQueue.main.async {
+                self?.overlayPanel.showNear(point: mouseLocation, files: files, isOptionHeld: isOptionHeld)
+            }
+        }
+
+        DragMonitor.shared.onDragEnd = { [weak self] in
+            DispatchQueue.main.async {
+                self?.overlayPanel.dismiss()
+            }
+        }
+
+        DragMonitor.shared.startMonitoring()
 
         // Initialize Status Item
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -36,6 +55,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         let currentEvent = NSApp.currentEvent
         if currentEvent?.type == .rightMouseUp {
             let menu = NSMenu()
+            menu.addItem(NSMenuItem(title: "Open Drop Window", action: #selector(openDropWindow), keyEquivalent: "o"))
+            menu.addItem(NSMenuItem.separator())
+            if !DragMonitor.isAccessibilityTrusted() {
+                menu.addItem(NSMenuItem(title: "Enable Accessibility Permission...", action: #selector(requestAccessibility), keyEquivalent: ""))
+                menu.addItem(NSMenuItem.separator())
+            }
             menu.addItem(NSMenuItem(title: "About Peel", action: #selector(showAbout), keyEquivalent: ""))
             menu.addItem(NSMenuItem.separator())
             menu.addItem(NSMenuItem(title: "Quit Peel", action: #selector(quitApp), keyEquivalent: "q"))
@@ -51,6 +76,17 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.activate(ignoringOtherApps: true)
             popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .minY)
         }
+    }
+
+    @objc private func openDropWindow() {
+        if let button = statusItem.button {
+            NSApp.activate(ignoringOtherApps: true)
+            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        }
+    }
+
+    @objc private func requestAccessibility() {
+        _ = DragMonitor.isAccessibilityTrusted(prompt: true)
     }
 
     @objc private func showAbout() {
