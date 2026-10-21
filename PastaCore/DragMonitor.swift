@@ -41,7 +41,7 @@ public final class DragMonitor {
             self?.handleFlagsChanged(event)
         }
 
-        // 2. Local event monitors (when Peel is active)
+        // 2. Local event monitors (when Pasta is active)
         localDragMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDragged) { [weak self] event in
             self?.handleMouseDragged(event)
             return event

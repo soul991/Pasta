@@ -1,6 +1,6 @@
 import Foundation
 
-public struct PeelCLI {
+public struct PastaCLI {
     public static func run(arguments: [String]) {
         let args = Array(arguments.dropFirst())
         guard let command = args.first else {
@@ -13,7 +13,7 @@ public struct PeelCLI {
             runDoctor()
         case "list-actions":
             guard args.count >= 2 else {
-                fputs("Error: Missing file path for list-actions.\nUsage: peel list-actions <file>\n", stderr)
+                fputs("Error: Missing file path for list-actions.\nUsage: pasta list-actions <file>\n", stderr)
                 exit(1)
             }
             runListActions(filePath: args[1])
@@ -21,7 +21,7 @@ public struct PeelCLI {
             runConvert(args: Array(args.dropFirst()))
         case "quick-action":
             guard args.count >= 2 else {
-                fputs("Error: Missing file path for quick-action.\nUsage: peel quick-action <file>...\n", stderr)
+                fputs("Error: Missing file path for quick-action.\nUsage: pasta quick-action <file>...\n", stderr)
                 exit(1)
             }
             runQuickAction(files: Array(args.dropFirst()))
@@ -29,20 +29,20 @@ public struct PeelCLI {
             printUsage()
             exit(0)
         default:
-            fputs("Error: Unknown command '\(command)'. Run 'peel help' for usage.\n", stderr)
+            fputs("Error: Unknown command '\(command)'. Run 'pasta help' for usage.\n", stderr)
             exit(1)
         }
     }
 
     private static func printUsage() {
         print("""
-        Peel - Offline macOS File Converter
+        Pasta - Offline macOS File Converter
         Usage:
-          peel convert --action <action_id> <file>...
-          peel convert <file> --to <format>
-          peel list-actions <file>
-          peel doctor
-          peel help
+          pasta convert --action <action_id> <file>...
+          pasta convert <file> --to <format>
+          pasta list-actions <file>
+          pasta doctor
+          pasta help
         """)
     }
 
@@ -53,7 +53,7 @@ public struct PeelCLI {
             "7zz", "sips", "ditto", "tar"
         ]
 
-        print("Peel Environment & Engine Doctor:")
+        print("Pasta Environment & Engine Doctor:")
         print("--------------------------------------------------")
         var allOk = true
         for tool in tools {
@@ -172,12 +172,12 @@ public struct PeelCLI {
             guard FileManager.default.fileExists(atPath: url.path) else { continue }
             let actions = FormatRegistry.shared.actions(for: url, isOptionHeld: false)
             guard !actions.isEmpty else {
-                showNotification(title: "Peel", message: "No conversion formats available for \(url.lastPathComponent)")
+                showNotification(title: "Pasta", message: "No conversion formats available for \(url.lastPathComponent)")
                 continue
             }
 
             let actionTitles = actions.map { "\"\($0.displayName) (.\($0.outputExtension))\"" }.joined(separator: ", ")
-            let script = "choose from list {\(actionTitles)} with title \"Peel\" with prompt \"Choose target format for \(url.lastPathComponent):\" without multiple selections allowed"
+            let script = "choose from list {\(actionTitles)} with title \"Pasta\" with prompt \"Choose target format for \(url.lastPathComponent):\" without multiple selections allowed"
 
             let proc = Process()
             proc.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
@@ -194,9 +194,9 @@ public struct PeelCLI {
             if let matched = actions.first(where: { chosen.contains($0.displayName) }) {
                 do {
                     let out = try JobRunner.shared.run(action: matched, input: url)
-                    showNotification(title: "Peel Converted", message: "Successfully created \(out.lastPathComponent)")
+                    showNotification(title: "Pasta Converted", message: "Successfully created \(out.lastPathComponent)")
                 } catch {
-                    showNotification(title: "Peel Failed", message: error.localizedDescription)
+                    showNotification(title: "Pasta Failed", message: error.localizedDescription)
                 }
             }
         }

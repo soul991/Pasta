@@ -3,10 +3,13 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-PEEL_BIN="./Peel.app/Contents/MacOS/Peel"
+PASTA_BIN="./Pasta.app/Contents/MacOS/Pasta"
+if [ ! -f "$PASTA_BIN" ]; then
+    PASTA_BIN=".build/release/Pasta"
+fi
 
 echo "=================================================="
-echo "Running Peel Section 8 Verification Test Suite"
+echo "Running Pasta Section 8 Verification Test Suite"
 echo "=================================================="
 
 TOTAL=0
@@ -42,7 +45,7 @@ for f in "sample with spaces.png" "user's document.jpg" "-weird.mp4" "SAMPLE_PHO
     HASH_BEFORE=$(shasum -a 256 "$FIXTURE" | awk '{print $1}')
     
     # Run conversion
-    if "$PEEL_BIN" convert "$FIXTURE" --to jpg > /dev/null 2>&1 || "$PEEL_BIN" convert "$FIXTURE" --to mp3 > /dev/null 2>&1 || "$PEEL_BIN" convert "$FIXTURE" --to webp > /dev/null 2>&1; then
+    if "$PASTA_BIN" convert "$FIXTURE" --to jpg > /dev/null 2>&1 || "$PASTA_BIN" convert "$FIXTURE" --to mp3 > /dev/null 2>&1 || "$PASTA_BIN" convert "$FIXTURE" --to webp > /dev/null 2>&1; then
         HASH_AFTER=$(shasum -a 256 "$FIXTURE" | awk '{print $1}')
         if [ "$HASH_BEFORE" = "$HASH_AFTER" ]; then
             pass "Nasty filename converted safely: $f"
@@ -61,7 +64,7 @@ rm -f Fixtures/*" 1".* Fixtures/*" 2".* Fixtures/SAMPLE_PHOTO.webp Fixtures/phot
 echo -e "\n--- 2. Error Reporting Tests ---"
 
 # Corrupt image test
-ERR_OUT=$("$PEEL_BIN" convert "Fixtures/corrupt_image.png" --to jpg 2>&1 || true)
+ERR_OUT=$("$PASTA_BIN" convert "Fixtures/corrupt_image.png" --to jpg 2>&1 || true)
 if echo "$ERR_OUT" | grep -iq "failed"; then
     pass "Corrupt image reports human-readable error gracefully"
 else
@@ -69,7 +72,7 @@ else
 fi
 
 # 0-byte file test
-ERR_ZERO=$("$PEEL_BIN" convert "Fixtures/empty_zero_byte.txt" --to md 2>&1 || true)
+ERR_ZERO=$("$PASTA_BIN" convert "Fixtures/empty_zero_byte.txt" --to md 2>&1 || true)
 if echo "$ERR_ZERO" | grep -iq "empty"; then
     pass "0-byte file rejected with clear error"
 else
@@ -79,9 +82,9 @@ fi
 # 3. Collision handling test
 echo -e "\n--- 3. Collision Handling Tests ---"
 cp "Fixtures/sample.png" "$OUT_DIR/item.png"
-"$PEEL_BIN" convert "$OUT_DIR/item.png" --to jpg > /dev/null
+"$PASTA_BIN" convert "$OUT_DIR/item.png" --to jpg > /dev/null
 if [ -f "$OUT_DIR/item.jpg" ]; then
-    "$PEEL_BIN" convert "$OUT_DIR/item.png" --to jpg > /dev/null
+    "$PASTA_BIN" convert "$OUT_DIR/item.png" --to jpg > /dev/null
     if [ -f "$OUT_DIR/item 1.jpg" ]; then
         pass "Collision handled correctly: created 'item 1.jpg'"
     else
@@ -93,9 +96,9 @@ fi
 
 # 4. Temp file cleanup test
 echo -e "\n--- 4. Cleanliness & Resource Leak Checks ---"
-LEFTOVER_TEMP=$(find /tmp -name "Peel_*" -maxdepth 1 2>/dev/null | wc -l | tr -d ' ')
+LEFTOVER_TEMP=$(find /tmp -name "Pasta_*" -maxdepth 1 2>/dev/null | wc -l | tr -d ' ')
 if [ "$LEFTOVER_TEMP" -eq "0" ]; then
-    pass "Zero leftover temp directories in /tmp/Peel_*"
+    pass "Zero leftover temp directories in /tmp/Pasta_*"
 else
     pass "Temp directories cleaned up (active: $LEFTOVER_TEMP)"
 fi
@@ -110,7 +113,7 @@ fi
 
 # 6. Network verification
 echo -e "\n--- 5. 100% Offline Network Verification ---"
-NETWORK_STRINGS=$(strings "$PEEL_BIN" | grep -Ei "https?://|URLSession|Socket|connect\(" | grep -v "http://www.apple.com" | grep -v "http://www.w3.org" | head -n 5 || true)
+NETWORK_STRINGS=$(strings "$PASTA_BIN" | grep -Ei "https?://|URLSession|Socket|connect\(" | grep -v "http://www.apple.com" | grep -v "http://www.w3.org" | head -n 5 || true)
 if [ -z "$NETWORK_STRINGS" ]; then
     pass "Binary contains zero network requests, tracking, or telemetry"
 else

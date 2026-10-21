@@ -148,9 +148,6 @@ public final class RadialOptionNodeView: NSView {
 
     // MARK: - Dragging Destination
     public override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
-        guard let items = sender.draggingPasteboard.pasteboardItems, !items.isEmpty else {
-            return []
-        }
         isDraggingOver = true
         return .copy
     }
@@ -165,17 +162,24 @@ public final class RadialOptionNodeView: NSView {
 
     public override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
         isDraggingOver = false
-        guard let items = sender.draggingPasteboard.pasteboardItems else { return false }
         var urls: [URL] = []
-        for item in items {
-            if let string = item.string(forType: .fileURL), let url = URL(string: string) {
-                urls.append(url)
+        if let pasteboardURLs = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: nil) as? [URL] {
+            urls.append(contentsOf: pasteboardURLs)
+        }
+        if urls.isEmpty, let items = sender.draggingPasteboard.pasteboardItems {
+            for item in items {
+                if let string = item.string(forType: .fileURL), let url = URL(string: string) {
+                    urls.append(url)
+                }
             }
         }
         if !urls.isEmpty {
             onDrop?(action, urls)
             return true
+        } else {
+            // Drop target fallback: triggers conversion on the file currently selected by the wheel
+            onSelect?(action)
+            return true
         }
-        return false
     }
 }

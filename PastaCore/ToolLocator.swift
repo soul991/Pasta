@@ -38,7 +38,7 @@ public final class ToolLocator {
 
     public func requireTool(_ name: String) throws -> URL {
         guard let url = findTool(name) else {
-            throw PeelError.missingTool(name)
+            throw PastaError.missingTool(name)
         }
         return url
     }

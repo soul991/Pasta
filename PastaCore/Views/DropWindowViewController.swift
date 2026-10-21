@@ -6,7 +6,7 @@ public final class DropWindowViewController: NSViewController {
     private var isAdvancedMode: Bool = false
 
     private let headerView = NSView()
-    private let titleLabel = NSTextField(labelWithString: "Peel")
+    private let titleLabel = NSTextField(labelWithString: "Pasta")
     private let modeSegmentedControl = NSSegmentedControl(labels: ["Standard", "Advanced"], trackingMode: .selectOne, target: nil, action: nil)
 
     // Accent color palette

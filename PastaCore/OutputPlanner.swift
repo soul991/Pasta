@@ -51,7 +51,7 @@ public struct OutputPlanner {
     
     public static func makeTempDirectory() throws -> URL {
         let tempDir = URL(fileURLWithPath: NSTemporaryDirectory())
-            .appendingPathComponent("Peel_\(UUID().uuidString)")
+            .appendingPathComponent("Pasta_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         return tempDir
     }

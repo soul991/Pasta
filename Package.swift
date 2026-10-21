@@ -2,29 +2,29 @@
 import PackageDescription
 
 let package = Package(
-    name: "Peel",
+    name: "Pasta",
     platforms: [
         .macOS(.v13)
     ],
     products: [
-        .library(name: "PeelCore", targets: ["PeelCore"]),
-        .executable(name: "Peel", targets: ["Peel"]),
-        .executable(name: "PeelTests", targets: ["PeelTests"])
+        .library(name: "PastaCore", targets: ["PastaCore"]),
+        .executable(name: "Pasta", targets: ["Pasta"]),
+        .executable(name: "PastaTests", targets: ["PastaTests"])
     ],
     targets: [
         .target(
-            name: "PeelCore",
-            path: "PeelCore"
+            name: "PastaCore",
+            path: "PastaCore"
         ),
         .executableTarget(
-            name: "Peel",
-            dependencies: ["PeelCore"],
-            path: "Peel"
+            name: "Pasta",
+            dependencies: ["PastaCore"],
+            path: "Pasta"
         ),
         .executableTarget(
-            name: "PeelTests",
-            dependencies: ["PeelCore"],
-            path: "PeelTests"
+            name: "PastaTests",
+            dependencies: ["PastaCore"],
+            path: "PastaTests"
         )
     ]
 )

@@ -1,7 +1,7 @@
 import Foundation
 
-public final class PeelLogger {
-    public static let shared = PeelLogger()
+public final class PastaLogger {
+    public static let shared = PastaLogger()
 
     private let logFileURL: URL
     private let lock = NSLock()
@@ -9,9 +9,9 @@ public final class PeelLogger {
 
     public init() {
         let logsDir = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Logs/Peel")
+            .appendingPathComponent("Library/Logs/Pasta")
         try? FileManager.default.createDirectory(at: logsDir, withIntermediateDirectories: true)
-        self.logFileURL = logsDir.appendingPathComponent("peel.log")
+        self.logFileURL = logsDir.appendingPathComponent("pasta.log")
     }
 
     public func log(_ message: String, level: String = "INFO") {

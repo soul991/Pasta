@@ -1,6 +1,6 @@
 import Foundation
 import CryptoKit
-import PeelCore
+import PastaCore
 
 var totalTests = 0
 var passedTests = 0
@@ -24,7 +24,7 @@ func fileSHA256(url: URL) -> String? {
 }
 
 print("==================================================")
-print("Running PeelCore Unit & Integration Test Suite")
+print("Running PastaCore Unit & Integration Test Suite")
 print("==================================================")
 
 // MARK: - 1. ToolLocator Tests
@@ -39,12 +39,12 @@ do {
     var threwMissing = false
     do {
         _ = try ToolLocator.shared.requireTool("definitely_fake_binary_12345")
-    } catch PeelError.missingTool(let name) {
+    } catch PastaError.missingTool(let name) {
         threwMissing = (name == "definitely_fake_binary_12345")
     } catch {
         threwMissing = false
     }
-    assertTest(threwMissing, "ToolLocator throws PeelError.missingTool for nonexistent tool")
+    assertTest(threwMissing, "ToolLocator throws PastaError.missingTool for nonexistent tool")
 }
 
 // MARK: - 2. OutputPlanner Tests

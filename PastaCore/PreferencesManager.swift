@@ -8,8 +8,8 @@ public final class PreferencesManager {
         case customFolder
     }
 
-    private let modeKey = "peel_output_mode"
-    private let customPathKey = "peel_output_custom_path"
+    private let modeKey = "pasta_output_mode"
+    private let customPathKey = "pasta_output_custom_path"
 
     public var outputMode: OutputLocationMode {
         get {

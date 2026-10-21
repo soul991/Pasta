@@ -4,7 +4,7 @@ import AppKit
 public final class ThemeManager {
     public static let shared = ThemeManager()
 
-    public static let didChangeThemeNotification = Notification.Name("PeelThemeDidChangeNotification")
+    public static let didChangeThemeNotification = Notification.Name("PastaThemeDidChangeNotification")
 
     public struct PresetColor: Identifiable, Equatable {
         public let id: String
@@ -28,7 +28,7 @@ public final class ThemeManager {
         PresetColor(id: "pink", name: "Hot Pink", hex: "#EC4899")
     ]
 
-    private let userDefaultsKey = "peel_accent_hex"
+    private let userDefaultsKey = "pasta_accent_hex"
 
     public private(set) var currentHex: String {
         didSet {

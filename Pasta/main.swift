@@ -1,9 +1,9 @@
 import Foundation
 import AppKit
-import PeelCore
+import PastaCore
 
 if CommandLine.arguments.count > 1 {
-    PeelCLI.run(arguments: CommandLine.arguments)
+    PastaCLI.run(arguments: CommandLine.arguments)
 } else {
     let app = NSApplication.shared
     let delegate = AppDelegate()

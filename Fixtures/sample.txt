@@ -1,1 +1,1 @@
-Hello from Peel test suite
+Hello from Pasta test suite

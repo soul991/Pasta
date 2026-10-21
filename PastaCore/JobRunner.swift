@@ -35,7 +35,7 @@ public final class JobRunner {
             finalDestinationURL = OutputPlanner.planOutput(for: input, targetExtension: action.outputExtension, destinationDirectory: effectiveDest)
         }
 
-        PeelLogger.shared.info("Starting action \(action.id) on '\(input.lastPathComponent)' -> '\(finalDestinationURL.lastPathComponent)'")
+        PastaLogger.shared.info("Starting action \(action.id) on '\(input.lastPathComponent)' -> '\(finalDestinationURL.lastPathComponent)'")
 
         // Create temporary isolated scratch space
         let tempDir = try OutputPlanner.makeTempDirectory()
@@ -54,7 +54,7 @@ public final class JobRunner {
 
         let invocations = action.buildInvocations(input, tempWorkingOutputURL)
         guard !invocations.isEmpty else {
-            throw PeelError.executionFailed(tool: "engine", exitCode: 1, output: "No invocations built for action \(action.id)")
+            throw PastaError.executionFailed(tool: "engine", exitCode: 1, output: "No invocations built for action \(action.id)")
         }
 
         // Run each invocation in sequence
@@ -69,7 +69,7 @@ public final class JobRunner {
                 let allTemp = (try? fm.contentsOfDirectory(at: tempDir, includingPropertiesForKeys: nil)) ?? []
                 let pageFiles = allTemp.filter { $0.pathExtension.lowercased() == "png" }
                 if pageFiles.isEmpty {
-                    throw PeelError.outputNotFound(finalDestinationURL.path)
+                    throw PastaError.outputNotFound(finalDestinationURL.path)
                 }
                 for file in pageFiles {
                     let destFile = tempWorkingOutputURL.appendingPathComponent(file.lastPathComponent)
@@ -82,14 +82,14 @@ public final class JobRunner {
 
         if isExtract || isPdfSplit {
             guard fm.fileExists(atPath: tempWorkingOutputURL.path) else {
-                throw PeelError.outputNotFound(finalDestinationURL.path)
+                throw PastaError.outputNotFound(finalDestinationURL.path)
             }
             try fm.moveItem(at: tempWorkingOutputURL, to: finalDestinationURL)
             return finalDestinationURL
         }
 
         guard fm.fileExists(atPath: tempWorkingOutputURL.path) else {
-            throw PeelError.outputNotFound(finalDestinationURL.path)
+            throw PastaError.outputNotFound(finalDestinationURL.path)
         }
 
         // Safe atomic move
@@ -98,7 +98,7 @@ public final class JobRunner {
         }
         try fm.moveItem(at: tempWorkingOutputURL, to: finalDestinationURL)
 
-        PeelLogger.shared.info("Successfully completed \(action.id) -> '\(finalDestinationURL.path)'")
+        PastaLogger.shared.info("Successfully completed \(action.id) -> '\(finalDestinationURL.path)'")
         return finalDestinationURL
     }
 
@@ -152,7 +152,7 @@ public final class JobRunner {
         do {
             try process.run()
         } catch {
-            throw PeelError.executionFailed(tool: invocation.toolName, exitCode: 1, output: error.localizedDescription)
+            throw PastaError.executionFailed(tool: invocation.toolName, exitCode: 1, output: error.localizedDescription)
         }
 
         let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .default))
@@ -170,7 +170,7 @@ public final class JobRunner {
         group.wait()
 
         if timedOut {
-            throw PeelError.executionFailed(tool: invocation.toolName, exitCode: -1, output: "Execution timed out after \(timeoutSeconds) seconds")
+            throw PastaError.executionFailed(tool: invocation.toolName, exitCode: -1, output: "Execution timed out after \(timeoutSeconds) seconds")
         }
 
         let exitCode = process.terminationStatus
@@ -180,7 +180,7 @@ public final class JobRunner {
             let msg = errStr.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 ? outStr.trimmingCharacters(in: .whitespacesAndNewlines)
                 : errStr.trimmingCharacters(in: .whitespacesAndNewlines)
-            throw PeelError.executionFailed(tool: invocation.toolName, exitCode: exitCode, output: msg)
+            throw PastaError.executionFailed(tool: invocation.toolName, exitCode: exitCode, output: msg)
         }
     }
 }

@@ -1,9 +1,12 @@
 #!/bin/bash
 set -euo pipefail
 
-DEST_DIR="$HOME/Library/Services/Convert with Peel.workflow"
+DEST_DIR="$HOME/Library/Services/Convert with Pasta.workflow"
 CONTENTS_DIR="$DEST_DIR/Contents"
-PEEL_BIN="/Users/istakahamed06/Desktop/Pasta/Peel.app/Contents/MacOS/Peel"
+PASTA_BIN="/Applications/Pasta.app/Contents/MacOS/Pasta"
+if [ ! -f "$PASTA_BIN" ]; then
+    PASTA_BIN="/Users/istakahamed06/Desktop/Pasta/Pasta.app/Contents/MacOS/Pasta"
+fi
 
 echo "Creating Quick Action at $DEST_DIR..."
 rm -rf "$DEST_DIR"
@@ -24,7 +27,7 @@ cat << EOF > "$CONTENTS_DIR/Info.plist"
             <key>NSMenuItem</key>
             <dict>
                 <key>default</key>
-                <string>Convert with Peel</string>
+                <string>Convert with Pasta</string>
             </dict>
             <key>NSMessage</key>
             <string>runWorkflowAsService</string>
@@ -93,7 +96,7 @@ cat << EOF > "$CONTENTS_DIR/document.wflow"
                 <key>ActionParameters</key>
                 <dict>
                     <key>COMMAND_STRING</key>
-                    <string>"$PEEL_BIN" quick-action "\$@"</string>
+                    <string>"$PASTA_BIN" quick-action "\$@"</string>
                     <key>CheckedForUserDefaultShell</key>
                     <true/>
                     <key>inputMethod</key>
@@ -187,7 +190,7 @@ cat << EOF > "$CONTENTS_DIR/document.wflow"
                         <key>type</key>
                         <string>0</string>
                         <key>value</key>
-                        <string>"$PEEL_BIN" quick-action "\$@"</string>
+                        <string>"$PASTA_BIN" quick-action "\$@"</string>
                     </dict>
                     <key>4</key>
                     <dict>

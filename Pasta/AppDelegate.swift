@@ -1,6 +1,6 @@
 import Foundation
 import AppKit
-import PeelCore
+import PastaCore
 
 public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
@@ -39,11 +39,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         // Initialize Status Item
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusItem.button {
-            if let img = NSImage(systemSymbolName: "circle.circle", accessibilityDescription: "Peel") {
+            if let img = NSImage(systemSymbolName: "circle.circle", accessibilityDescription: "Pasta") {
                 img.isTemplate = true
                 button.image = img
             } else {
-                button.title = "Peel"
+                button.title = "Pasta"
             }
             button.target = self
             button.action = #selector(statusItemClicked(_:))
@@ -61,9 +61,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 menu.addItem(NSMenuItem(title: "Enable Accessibility Permission...", action: #selector(requestAccessibility), keyEquivalent: ""))
                 menu.addItem(NSMenuItem.separator())
             }
-            menu.addItem(NSMenuItem(title: "About Peel", action: #selector(showAbout), keyEquivalent: ""))
+            menu.addItem(NSMenuItem(title: "About Pasta", action: #selector(showAbout), keyEquivalent: ""))
             menu.addItem(NSMenuItem.separator())
-            menu.addItem(NSMenuItem(title: "Quit Peel", action: #selector(quitApp), keyEquivalent: "q"))
+            menu.addItem(NSMenuItem(title: "Quit Pasta", action: #selector(quitApp), keyEquivalent: "q"))
             statusItem.menu = menu
             statusItem.button?.performClick(nil)
             statusItem.menu = nil
@@ -91,7 +91,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func showAbout() {
         let alert = NSAlert()
-        alert.messageText = "Peel File Converter"
+        alert.messageText = "Pasta File Converter"
         alert.informativeText = "Version 1.0\nA fast, offline macOS file converter with dynamic theme accents."
         alert.alertStyle = .informational
         alert.runModal()

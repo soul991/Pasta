@@ -1,6 +1,6 @@
 import Foundation
 
-public enum PeelError: LocalizedError, Equatable {
+public enum PastaError: LocalizedError, Equatable {
     case missingTool(String)
     case unsupportedFormat(String)
     case executionFailed(tool: String, exitCode: Int32, output: String)
