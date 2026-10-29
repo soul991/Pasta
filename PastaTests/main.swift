@@ -392,6 +392,60 @@ do {
         assertTest(true, "Fix 3: cancelling after process finishes does not crash")
     }
     ToolLocator.shared.setOverride(tool: "fake_slow", url: nil)
+
+    // 5.8 Phase 8 Fix 4: Concurrency & bounded stderr tests
+    let fakeEchoScript = fakeToolDir.appendingPathComponent("fake_echo.sh")
+    let echoContent = "#!/bin/sh\necho ok\nexit 0\n"
+    try? echoContent.write(to: fakeEchoScript, atomically: true, encoding: .utf8)
+    chmod(fakeEchoScript.path, 0o755)
+    ToolLocator.shared.setOverride(tool: "fake_echo", url: fakeEchoScript)
+
+    do {
+        // Test 1: Run 8 fake-tool jobs concurrently and confirm all complete
+        let invEcho = Invocation(toolName: "fake_echo", arguments: [], timeout: 10.0)
+        let concurrentGroup = DispatchGroup()
+        let count = 8
+        var successCount = 0
+        let countLock = NSLock()
+
+        for _ in 0..<count {
+            concurrentGroup.enter()
+            DispatchQueue.global().async {
+                do {
+                    try JobRunner.shared.execute(invocation: invEcho, timeoutSeconds: 10.0)
+                    countLock.lock()
+                    successCount += 1
+                    countLock.unlock()
+                } catch {}
+                concurrentGroup.leave()
+            }
+        }
+        concurrentGroup.wait()
+        assertTest(successCount == count, "Fix 4: 8 concurrent jobs all execute and complete successfully (\(successCount)/\(count))")
+
+        // Test 2: Tool writing > 1MB to stderr: no hang and bounded error string (<= 64KB)
+        let fakeChattyScript = fakeToolDir.appendingPathComponent("fake_chatty.sh")
+        let chattyContent = "#!/bin/sh\ndd if=/dev/zero bs=1024 count=1500 2>/dev/null | tr '\\0' 'E' >&2\nexit 1\n"
+        try? chattyContent.write(to: fakeChattyScript, atomically: true, encoding: .utf8)
+        chmod(fakeChattyScript.path, 0o755)
+        ToolLocator.shared.setOverride(tool: "fake_chatty", url: fakeChattyScript)
+
+        let invChatty = Invocation(toolName: "fake_chatty", arguments: [], timeout: 10.0)
+        var chattyOutputLen = 0
+        var chattyFailedGracefully = false
+
+        do {
+            try JobRunner.shared.execute(invocation: invChatty, timeoutSeconds: 10.0)
+        } catch PastaError.executionFailed(let tool, let code, let output) {
+            chattyFailedGracefully = (tool == "fake_chatty" && code == 1)
+            chattyOutputLen = output.utf8.count
+        } catch {}
+
+        let isBounded = chattyOutputLen > 0 && chattyOutputLen <= 65536
+        assertTest(chattyFailedGracefully && isBounded, "Fix 4: tool writing > 1MB to stderr finishes without hanging and produces bounded error message (<= 64KB, got \(chattyOutputLen) bytes)")
+        ToolLocator.shared.setOverride(tool: "fake_chatty", url: nil)
+    }
+    ToolLocator.shared.setOverride(tool: "fake_echo", url: nil)
 }
 
 print("\n==================================================")
