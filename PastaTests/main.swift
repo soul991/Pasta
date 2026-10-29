@@ -247,6 +247,52 @@ do {
             assertTest(false, "Advanced: PDF compress failed", details: error.localizedDescription)
         }
     }
+
+    // 5.5 Phase 8 Fix 1: Multi-page and single-page PDF to images and split tests
+    let threePagesURL = testDir.appendingPathComponent("three_pages.pdf")
+    if FileManager.default.fileExists(atPath: threePagesURL.path) {
+        let hashBefore = fileSHA256(url: threePagesURL)
+        
+        // Test pdf.to.images on 3-page PDF
+        if let pdfToImages = FormatRegistry.shared.action(for: threePagesURL, actionID: "pdf.to.images") {
+            do {
+                let imgFolder1 = try JobRunner.shared.run(action: pdfToImages, input: threePagesURL, destinationDirectory: outDir)
+                let items1 = (try? FileManager.default.contentsOfDirectory(at: imgFolder1, includingPropertiesForKeys: nil))?.filter { $0.pathExtension.lowercased() == "png" } ?? []
+                assertTest(items1.count == 3, "Fix 1: pdf.to.images on 3-page PDF produces exactly 3 PNGs (\(items1.count) found)")
+                
+                // Collision test: run again without overwriting
+                let imgFolder2 = try JobRunner.shared.run(action: pdfToImages, input: threePagesURL, destinationDirectory: outDir)
+                assertTest(imgFolder1.path != imgFolder2.path && FileManager.default.fileExists(atPath: imgFolder2.path), "Fix 1: collision creates distinct folder without overwriting")
+            } catch {
+                assertTest(false, "Fix 1: pdf.to.images failed", details: error.localizedDescription)
+            }
+        }
+        
+        // Test pdf.advanced.split on 3-page PDF
+        if let pdfSplit = FormatRegistry.shared.action(for: threePagesURL, actionID: "pdf.advanced.split") {
+            do {
+                let splitFolder = try JobRunner.shared.run(action: pdfSplit, input: threePagesURL, destinationDirectory: outDir)
+                let items = (try? FileManager.default.contentsOfDirectory(at: splitFolder, includingPropertiesForKeys: nil))?.filter { $0.pathExtension.lowercased() == "pdf" } ?? []
+                assertTest(items.count == 3, "Fix 1: pdf.advanced.split on 3-page PDF produces exactly 3 PDFs (\(items.count) found)")
+            } catch {
+                assertTest(false, "Fix 1: pdf.advanced.split failed", details: error.localizedDescription)
+            }
+        }
+        
+        let hashAfter = fileSHA256(url: threePagesURL)
+        assertTest(hashBefore == hashAfter, "Fix 1: three_pages.pdf checksum unchanged after operations")
+    }
+
+    // Single-page PDF test: 1 file in folder
+    if let pdfToImagesSingle = FormatRegistry.shared.action(for: samplePdfURL, actionID: "pdf.to.images") {
+        do {
+            let singleImgFolder = try JobRunner.shared.run(action: pdfToImagesSingle, input: samplePdfURL, destinationDirectory: outDir)
+            let singleImgs = (try? FileManager.default.contentsOfDirectory(at: singleImgFolder, includingPropertiesForKeys: nil))?.filter { $0.pathExtension.lowercased() == "png" } ?? []
+            assertTest(singleImgs.count == 1, "Fix 1: pdf.to.images on 1-page PDF produces exactly 1 PNG")
+        } catch {
+            assertTest(false, "Fix 1: single-page pdf.to.images failed", details: error.localizedDescription)
+        }
+    }
 }
 
 print("\n==================================================")

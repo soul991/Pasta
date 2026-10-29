@@ -26,5 +26,29 @@
 
 ## Running Tests
 
-- Unit & Integration Suite: `swift run PeelTests` (37 tests passed)
+- Unit & Integration Suite: `swift run PastaTests` (37 tests passed)
 - Section 8 Hardening Suite: `./scripts/run_section8_tests.sh` (13 tests passed)
+
+---
+
+## Phase 9 baseline
+
+- **Date**: October 29, 2026
+- **Git Commit**: `947d5e8 docs: add comprehensive README for Pasta`
+- **Git Status**: Clean baseline verified.
+- **Unit & Integration Suite (Debug)**: `swift run PastaTests` -> 37/37 Passed, 0 Failed.
+- **Unit & Integration Suite (Release)**: `swift run -c release PastaTests` -> 37/37 Passed, 0 Failed.
+- **Section 8 Hardening Suite**: `./scripts/run_section8_tests.sh` -> 13/13 Passed, 0 Failed.
+- **Application Bundle & Code Signing**: `./scripts/build_app.sh` -> `Pasta.app` produced, `codesign --verify --deep --strict Pasta.app` succeeded.
+- **Test Count Reconciliation**: README and codebase contain 37 unit/integration tests and 13 Section 8 hardening tests. The `96` in `PHASE8.md` was an anticipated target count rather than the actual test count implemented in Phase 4/7.
+
+### PHASE8 Fixes Status Check
+
+| Item | What to check | Status | Notes |
+| :--- | :--- | :--- | :--- |
+| **Fix 1** | `pdf.to.images` and `pdf.advanced.split` lose pages | **DONE** (needs automated 3-page tests) | Both actions successfully create folders with 3 files for a 3-page PDF; unit tests on `Fixtures/three_pages.pdf` to be added. |
+| **Fix 2** | 120 s timeout kills long ffmpeg jobs | **OPEN** | `JobRunner` hardcodes default 120s timeout. Media conversions must have no automatic timeout; quick tools keep 300s timeout. Property on invocation. |
+| **Fix 3** | Cancellation does not work reliably | **OPEN** | No process tracking, no `cancel()` method on `JobRunner`, no `withTaskCancellationHandler`, no SIGTERM/SIGKILL sequence. |
+| **Fix 4** | `runProcess` blocks Swift concurrency pool | **OPEN** | Synchronously blocks with `waitUntilExit()` / `group.wait()`. Needs non-blocking terminationHandler, async/continuation, bounded 64KB stderr tail. |
+| **Fix 5** | Finder selection & AppleScript | **OPEN** | `NSAppleEventsUsageDescription` missing in Info.plist from `build_app.sh`. osascript errors in `PastaCLI` swallowed without logging or user guidance. |
+| **Fix 6** | Housekeeping & Compact violations | **OPEN** | Swallowed errors via `try?` in `JobRunner` (moving files), `InputValidator`, `PastaLogger`, `PastaCLI` need proper handling or justified comments. |
