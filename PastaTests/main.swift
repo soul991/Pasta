@@ -446,6 +446,15 @@ do {
         ToolLocator.shared.setOverride(tool: "fake_chatty", url: nil)
     }
     ToolLocator.shared.setOverride(tool: "fake_echo", url: nil)
+
+    // 5.9 Phase 8 Fix 5: Finder selection and permission helper tests
+    do {
+        let rawFinderPaths = "/Users/test/file1.png\n/Users/test/file 2 with spaces.jpg\n\n/Users/test/-weird.mp4\n"
+        let parsed = FinderSelectionHelper.parseSelectionPaths(from: rawFinderPaths)
+        assertTest(parsed.count == 3 && parsed[1] == "/Users/test/file 2 with spaces.jpg", "Fix 5: FinderSelectionHelper parses multiple paths with spaces correctly")
+        let permMsg = FinderSelectionHelper.formatPermissionDeniedMessage()
+        assertTest(permMsg.contains("System Settings") && permMsg.contains("Automation"), "Fix 5: FinderSelectionHelper provides helpful permission guidance")
+    }
 }
 
 print("\n==================================================")

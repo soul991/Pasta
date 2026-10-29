@@ -183,9 +183,31 @@ public struct PastaCLI {
             proc.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
             proc.arguments = ["-e", script]
             let p = Pipe()
+            let errPipe = Pipe()
             proc.standardOutput = p
-            try? proc.run()
+            proc.standardError = errPipe
+
+            do {
+                try proc.run()
+            } catch {
+                PastaLogger.shared.error("Failed to execute AppleScript dialog for \(url.lastPathComponent): \(error.localizedDescription)")
+                fputs("Error: Could not run selection dialog: \(error.localizedDescription)\n", stderr)
+                continue
+            }
             proc.waitUntilExit()
+
+            let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
+            let errStr = String(data: errData, encoding: .utf8) ?? ""
+            if proc.terminationStatus != 0 {
+                if errStr.contains("-1743") || errStr.lowercased().contains("not authorized") {
+                    let msg = FinderSelectionHelper.formatPermissionDeniedMessage()
+                    PastaLogger.shared.error(msg)
+                    fputs("Error: \(msg)\n", stderr)
+                } else if !errStr.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    PastaLogger.shared.error("AppleScript error: \(errStr.trimmingCharacters(in: .whitespacesAndNewlines))")
+                }
+                continue
+            }
 
             let data = p.fileHandleForReading.readDataToEndOfFile()
             let chosen = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -202,11 +224,23 @@ public struct PastaCLI {
         }
     }
 
-    private static func showNotification(title: String, message: String) {
+    public static func showNotification(title: String, message: String) {
         let script = "display notification \"\(message.replacingOccurrences(of: "\"", with: "\\\""))\" with title \"\(title)\""
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
         proc.arguments = ["-e", script]
-        try? proc.run()
+        let errPipe = Pipe()
+        proc.standardError = errPipe
+        do {
+            try proc.run()
+            proc.waitUntilExit()
+            if proc.terminationStatus != 0 {
+                let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
+                let errStr = String(data: errData, encoding: .utf8) ?? ""
+                PastaLogger.shared.error("Notification error: \(errStr.trimmingCharacters(in: .whitespacesAndNewlines))")
+            }
+        } catch {
+            PastaLogger.shared.error("Failed to run notification osascript: \(error.localizedDescription)")
+        }
     }
 }

@@ -44,6 +44,8 @@ cat << 'EOF' > "$CONTENTS_DIR/Info.plist"
     <true/>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Pasta requires AppleEvents automation permissions to interact with Finder and present native format selection dialogs.</string>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
 </dict>
