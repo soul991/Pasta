@@ -58,7 +58,7 @@ for f in "sample with spaces.png" "user's document.jpg" "-weird.mp4" "SAMPLE_PHO
 done
 
 # Clean up any generated output files next to fixtures
-rm -f Fixtures/*" 1".* Fixtures/*" 2".* Fixtures/SAMPLE_PHOTO.webp Fixtures/photo_🎉_cool.png
+rm -f "Fixtures/-weird.mp3" "Fixtures/sample with spaces.jpg" "Fixtures/very_long_file_name_that_exceeds_normal_lengths_for_boundary_testing_in_peel_converter_1234567890_abcdefghijklmnopqrstuvwxyz.jpg" Fixtures/*নমুনা*.jpg Fixtures/*" 1".* Fixtures/*" 2".* Fixtures/SAMPLE_PHOTO.webp Fixtures/photo_🎉_cool.png
 
 # 2. Corrupt and 0-byte error handling tests
 echo -e "\n--- 2. Error Reporting Tests ---"

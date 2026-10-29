@@ -74,6 +74,7 @@ public final class JobRunner {
         action: ConversionAction,
         input: URL,
         destinationDirectory: URL? = nil,
+        parameters: ParameterValues = [:],
         timeoutSeconds: TimeInterval? = nil,
         jobId: UUID = UUID()
     ) throws -> URL {
@@ -88,20 +89,30 @@ public final class JobRunner {
         // Validate input file
         try InputValidator.validateInputFile(input)
 
+        // Validate parameters
+        var effectiveParams = action.defaultParameterValues
+        for (k, v) in parameters {
+            effectiveParams[k] = v
+        }
+        try InputValidator.validateParameters(declared: action.parameters, values: effectiveParams)
+
         let effectiveDest = destinationDirectory ?? PreferencesManager.shared.effectiveDestination(for: input)
 
-        // Determine destination URL
-        let isExtract = action.id == "archive.extract"
-        let isPdfToImages = action.id == "pdf.to.images"
-        let isPdfSplit = action.id == "pdf.advanced.split"
+        // Determine destination URL from outputKind
+        let isFolder: Bool
+        let folderSuffix: String
+        switch action.outputKind {
+        case .folder(let suffix):
+            isFolder = true
+            folderSuffix = suffix
+        case .file:
+            isFolder = false
+            folderSuffix = ""
+        }
 
         let finalDestinationURL: URL
-        if isExtract {
-            finalDestinationURL = OutputPlanner.planOutputDirectory(for: input, suffix: "extracted", destinationDirectory: effectiveDest)
-        } else if isPdfToImages {
-            finalDestinationURL = OutputPlanner.planOutputDirectory(for: input, suffix: "pages", destinationDirectory: effectiveDest)
-        } else if isPdfSplit {
-            finalDestinationURL = OutputPlanner.planOutputDirectory(for: input, suffix: "split", destinationDirectory: effectiveDest)
+        if isFolder {
+            finalDestinationURL = OutputPlanner.planOutputDirectory(for: input, suffix: folderSuffix, destinationDirectory: effectiveDest)
         } else {
             finalDestinationURL = OutputPlanner.planOutput(for: input, targetExtension: action.outputExtension, destinationDirectory: effectiveDest)
         }
@@ -116,7 +127,7 @@ public final class JobRunner {
         }
 
         let tempWorkingOutputURL: URL
-        if isExtract || isPdfToImages || isPdfSplit {
+        if isFolder {
             tempWorkingOutputURL = tempDir.appendingPathComponent("output_items")
             try fm.createDirectory(at: tempWorkingOutputURL, withIntermediateDirectories: true)
         } else {
@@ -124,7 +135,7 @@ public final class JobRunner {
             tempWorkingOutputURL = tempDir.appendingPathComponent("output_result.\(ext)")
         }
 
-        let invocations = action.buildInvocations(input, tempWorkingOutputURL)
+        let invocations = action.buildInvocationsWithParams(input, tempWorkingOutputURL, effectiveParams)
         guard !invocations.isEmpty else {
             throw PastaError.executionFailed(tool: "engine", exitCode: 1, output: "No invocations built for action \(action.id)")
         }
@@ -135,26 +146,18 @@ public final class JobRunner {
         }
 
         // Verify and move output to final destination
-        if isPdfToImages {
+        if isFolder {
             let contents = (try? fm.contentsOfDirectory(at: tempWorkingOutputURL, includingPropertiesForKeys: nil)) ?? []
             if contents.isEmpty {
                 let allTemp = (try? fm.contentsOfDirectory(at: tempDir, includingPropertiesForKeys: nil)) ?? []
-                let pageFiles = allTemp.filter { $0.pathExtension.lowercased() == "png" }
-                if pageFiles.isEmpty {
+                let looseItems = allTemp.filter { $0.lastPathComponent != "output_items" }
+                if looseItems.isEmpty {
                     throw PastaError.outputNotFound(finalDestinationURL.path)
                 }
-                for file in pageFiles {
-                    let destFile = tempWorkingOutputURL.appendingPathComponent(file.lastPathComponent)
-                    try fm.moveItem(at: file, to: destFile)
+                for item in looseItems {
+                    let destFile = tempWorkingOutputURL.appendingPathComponent(item.lastPathComponent)
+                    try fm.moveItem(at: item, to: destFile)
                 }
-            }
-            try fm.moveItem(at: tempWorkingOutputURL, to: finalDestinationURL)
-            return finalDestinationURL
-        }
-
-        if isExtract || isPdfSplit {
-            guard fm.fileExists(atPath: tempWorkingOutputURL.path) else {
-                throw PastaError.outputNotFound(finalDestinationURL.path)
             }
             try fm.moveItem(at: tempWorkingOutputURL, to: finalDestinationURL)
             return finalDestinationURL
@@ -349,25 +352,42 @@ extension JobRunner {
         action: ConversionAction,
         input: URL,
         destinationDirectory: URL? = nil,
+        parameters: ParameterValues = [:],
         timeoutSeconds: TimeInterval? = nil,
         jobId: UUID = UUID()
     ) async throws -> URL {
         try await withTaskCancellationHandler {
             try Task.checkCancellation()
+            if self.isJobCancelled(jobId) {
+                throw PastaError.cancelled
+            }
             let fm = FileManager.default
             try InputValidator.validateInputFile(input)
+
+            // Validate parameters
+            var effectiveParams = action.defaultParameterValues
+            for (k, v) in parameters {
+                effectiveParams[k] = v
+            }
+            try InputValidator.validateParameters(declared: action.parameters, values: effectiveParams)
+
             let effectiveDest = destinationDirectory ?? PreferencesManager.shared.effectiveDestination(for: input)
-            let isExtract = action.id == "archive.extract"
-            let isPdfToImages = action.id == "pdf.to.images"
-            let isPdfSplit = action.id == "pdf.advanced.split"
+
+            // Determine destination URL from outputKind
+            let isFolder: Bool
+            let folderSuffix: String
+            switch action.outputKind {
+            case .folder(let suffix):
+                isFolder = true
+                folderSuffix = suffix
+            case .file:
+                isFolder = false
+                folderSuffix = ""
+            }
 
             let finalDestinationURL: URL
-            if isExtract {
-                finalDestinationURL = OutputPlanner.planOutputDirectory(for: input, suffix: "extracted", destinationDirectory: effectiveDest)
-            } else if isPdfToImages {
-                finalDestinationURL = OutputPlanner.planOutputDirectory(for: input, suffix: "pages", destinationDirectory: effectiveDest)
-            } else if isPdfSplit {
-                finalDestinationURL = OutputPlanner.planOutputDirectory(for: input, suffix: "split", destinationDirectory: effectiveDest)
+            if isFolder {
+                finalDestinationURL = OutputPlanner.planOutputDirectory(for: input, suffix: folderSuffix, destinationDirectory: effectiveDest)
             } else {
                 finalDestinationURL = OutputPlanner.planOutput(for: input, targetExtension: action.outputExtension, destinationDirectory: effectiveDest)
             }
@@ -381,7 +401,7 @@ extension JobRunner {
             }
 
             let tempWorkingOutputURL: URL
-            if isExtract || isPdfToImages || isPdfSplit {
+            if isFolder {
                 tempWorkingOutputURL = tempDir.appendingPathComponent("output_items")
                 try fm.createDirectory(at: tempWorkingOutputURL, withIntermediateDirectories: true)
             } else {
@@ -389,7 +409,7 @@ extension JobRunner {
                 tempWorkingOutputURL = tempDir.appendingPathComponent("output_result.\(ext)")
             }
 
-            let invocations = action.buildInvocations(input, tempWorkingOutputURL)
+            let invocations = action.buildInvocationsWithParams(input, tempWorkingOutputURL, effectiveParams)
             guard !invocations.isEmpty else {
                 throw PastaError.executionFailed(tool: "engine", exitCode: 1, output: "No invocations built for action \(action.id)")
             }
@@ -398,26 +418,18 @@ extension JobRunner {
                 try await executeAsync(invocation: inv, timeoutSeconds: timeoutSeconds, jobId: jobId)
             }
 
-            if isPdfToImages {
+            if isFolder {
                 let contents = (try? fm.contentsOfDirectory(at: tempWorkingOutputURL, includingPropertiesForKeys: nil)) ?? []
                 if contents.isEmpty {
                     let allTemp = (try? fm.contentsOfDirectory(at: tempDir, includingPropertiesForKeys: nil)) ?? []
-                    let pageFiles = allTemp.filter { $0.pathExtension.lowercased() == "png" }
-                    if pageFiles.isEmpty {
+                    let looseItems = allTemp.filter { $0.lastPathComponent != "output_items" }
+                    if looseItems.isEmpty {
                         throw PastaError.outputNotFound(finalDestinationURL.path)
                     }
-                    for file in pageFiles {
-                        let destFile = tempWorkingOutputURL.appendingPathComponent(file.lastPathComponent)
-                        try fm.moveItem(at: file, to: destFile)
+                    for item in looseItems {
+                        let destFile = tempWorkingOutputURL.appendingPathComponent(item.lastPathComponent)
+                        try fm.moveItem(at: item, to: destFile)
                     }
-                }
-                try fm.moveItem(at: tempWorkingOutputURL, to: finalDestinationURL)
-                return finalDestinationURL
-            }
-
-            if isExtract || isPdfSplit {
-                guard fm.fileExists(atPath: tempWorkingOutputURL.path) else {
-                    throw PastaError.outputNotFound(finalDestinationURL.path)
                 }
                 try fm.moveItem(at: tempWorkingOutputURL, to: finalDestinationURL)
                 return finalDestinationURL

@@ -455,6 +455,116 @@ do {
         let permMsg = FinderSelectionHelper.formatPermissionDeniedMessage()
         assertTest(permMsg.contains("System Settings") && permMsg.contains("Automation"), "Fix 5: FinderSelectionHelper provides helpful permission guidance")
     }
+
+    // MARK: - 6. Phase 9 Step 1: Parameterized Actions Tests
+    print("\n--- 6. Phase 9 Step 1: Parameterized Actions Tests ---")
+    do {
+        let testVideoURL = URL(fileURLWithPath: "/tmp/sample.mp4")
+        let testImageURL = URL(fileURLWithPath: "/tmp/sample.jpg")
+        let testOutputURL = URL(fileURLWithPath: "/tmp/output.mp4")
+        let testOutputImgURL = URL(fileURLWithPath: "/tmp/output.jpg")
+
+        // 6.1 Defaults reproduce old behavior exactly
+        if let trimAction = FormatRegistry.shared.action(for: testVideoURL, actionID: "video.trim") {
+            let invs = trimAction.buildInvocations(testVideoURL, testOutputURL)
+            let args = invs.first?.arguments ?? []
+            let matchesOld = args.contains("-ss") && args.contains("00:00:00") && args.contains("-to") && args.contains("00:00:10")
+            assertTest(matchesOld, "Step 1: video.trim default parameters reproduce 10-second trim exactly")
+        } else {
+            assertTest(false, "Step 1: video.trim action registered")
+        }
+
+        if let resizeAction = FormatRegistry.shared.action(for: testImageURL, actionID: "image.resize") {
+            let invs = resizeAction.buildInvocations(testImageURL, testOutputImgURL)
+            let args = invs.first?.arguments ?? []
+            let matchesOld = args.contains("-Z") && args.contains("1200")
+            assertTest(matchesOld, "Step 1: image.resize default parameters reproduce 1200px resize exactly")
+        } else {
+            assertTest(false, "Step 1: image.resize action registered")
+        }
+
+        // 6.2 Aliases work
+        let trimAlias = FormatRegistry.shared.action(for: testVideoURL, actionID: "video.advanced.trim10")
+        assertTest(trimAlias != nil, "Step 1: video.advanced.trim10 alias resolves")
+        let resizeAlias = FormatRegistry.shared.action(for: testImageURL, actionID: "image.advanced.resize_50")
+        assertTest(resizeAlias != nil, "Step 1: image.advanced.resize_50 alias resolves")
+
+        // 6.3 Custom parameters take effect
+        if let trimAction = FormatRegistry.shared.action(for: testVideoURL, actionID: "video.trim") {
+            let customInvs = trimAction.buildInvocationsWithParams(testVideoURL, testOutputURL, ["start": .number(15.0), "end": .number(30.0)])
+            let customArgs = customInvs.first?.arguments ?? []
+            let customMatches = customArgs.contains("00:00:15") && customArgs.contains("00:00:30")
+            assertTest(customMatches, "Step 1: video.trim respects custom start and end parameters")
+        }
+
+        if let resizeAction = FormatRegistry.shared.action(for: testImageURL, actionID: "image.resize") {
+            let customInvs = resizeAction.buildInvocationsWithParams(testImageURL, testOutputImgURL, ["percent": .number(75.0)])
+            let customArgs = customInvs.first?.arguments ?? []
+            let customMatches = customArgs.contains("-resize") && customArgs.contains("75%")
+            assertTest(customMatches, "Step 1: image.resize respects custom percent parameter")
+        }
+
+        // 6.4 Out-of-range values rejected
+        if let trimAction = FormatRegistry.shared.action(for: testVideoURL, actionID: "video.trim") {
+            var threwOutOfRange = false
+            do {
+                try InputValidator.validateParameters(declared: trimAction.parameters, values: ["start": .number(-5.0)])
+            } catch PastaError.invalidInput(let msg) {
+                threwOutOfRange = msg.contains("below minimum")
+            } catch {}
+            assertTest(threwOutOfRange, "Step 1: Out-of-range negative start time is rejected")
+        }
+
+        if let resizeAction = FormatRegistry.shared.action(for: testImageURL, actionID: "image.resize") {
+            var threwPercentOutOfRange = false
+            do {
+                try InputValidator.validateParameters(declared: resizeAction.parameters, values: ["percent": .number(600.0)])
+            } catch PastaError.invalidInput(let msg) {
+                threwPercentOutOfRange = msg.contains("outside allowed range")
+            } catch {}
+            assertTest(threwPercentOutOfRange, "Step 1: Out-of-range percent (>500%) is rejected")
+        }
+
+        // 6.5 Unknown parameter names rejected
+        if let trimAction = FormatRegistry.shared.action(for: testVideoURL, actionID: "video.trim") {
+            var threwUnknown = false
+            do {
+                try InputValidator.validateParameters(declared: trimAction.parameters, values: ["bogusParam": .text("hello")])
+            } catch PastaError.invalidInput(let msg) {
+                threwUnknown = msg.contains("Unknown parameter 'bogusParam'")
+            } catch {}
+            assertTest(threwUnknown, "Step 1: Unknown parameter name is rejected")
+        }
+
+        // 6.6 Hostile characters rejected
+        let hostileInputs = ["; rm -rf /", "| cat /etc/passwd", "`whoami`", "$HOME", "\n", "\"", "'", "\0"]
+        var allHostileRejected = true
+        for hostile in hostileInputs {
+            do {
+                try InputValidator.validateParameters(
+                    declared: [ActionParameter(id: "tag", label: "Tag", kind: .text, defaultValue: .text("test"))],
+                    values: ["tag": .text(hostile)]
+                )
+                allHostileRejected = false
+            } catch PastaError.invalidInput(let msg) {
+                if !msg.contains("Hostile character") { allHostileRejected = false }
+            } catch {
+                allHostileRejected = false
+            }
+        }
+        assertTest(allHostileRejected, "Step 1: Hostile characters (; & | ` $ \\n \\r \" ' \\0) rejected before process runs")
+
+        // 6.7 OutputKind on folder actions
+        let pdfURL = URL(fileURLWithPath: "/tmp/sample.pdf")
+        let pdfImagesAction = FormatRegistry.shared.action(for: pdfURL, actionID: "pdf.to.images")
+        let pdfSplitAction = FormatRegistry.shared.action(for: pdfURL, actionID: "pdf.advanced.split")
+        let zipURL = URL(fileURLWithPath: "/tmp/sample.zip")
+        let zipExtractAction = FormatRegistry.shared.action(for: zipURL, actionID: "archive.extract")
+
+        assertTest(pdfImagesAction?.outputKind == .folder(suffix: "pages"), "Step 1: pdf.to.images has OutputKind .folder(suffix: 'pages')")
+        assertTest(pdfSplitAction?.outputKind == .folder(suffix: "split"), "Step 1: pdf.advanced.split has OutputKind .folder(suffix: 'split')")
+        assertTest(zipExtractAction?.outputKind == .folder(suffix: "extracted"), "Step 1: archive.extract has OutputKind .folder(suffix: 'extracted')")
+    }
 }
 
 print("\n==================================================")

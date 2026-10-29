@@ -20,8 +20,37 @@ public final class FormatRegistry {
         return availableActions(for: fileURL)
     }
 
+    public static func formatFfmpegTimestamp(_ seconds: Double) -> String {
+        let totalSecs = Int(seconds)
+        let hours = totalSecs / 3600
+        let mins = (totalSecs % 3600) / 60
+        let secs = totalSecs % 60
+        let frac = seconds - Double(totalSecs)
+        if frac > 0.0001 {
+            return String(format: "%02d:%02d:%02d.%03d", hours, mins, secs, Int(round(frac * 1000)))
+        } else {
+            return String(format: "%02d:%02d:%02d", hours, mins, secs)
+        }
+    }
+
     public func action(for fileURL: URL, actionID: String) -> ConversionAction? {
-        return availableActions(for: fileURL).first { $0.id == actionID }
+        let actions = availableActions(for: fileURL)
+        if let matched = actions.first(where: { $0.id == actionID }) {
+            return matched
+        }
+        if actionID == "video.advanced.trim10" {
+            return actions.first(where: { $0.id == "video.trim" })
+        }
+        if actionID == "video.trim" {
+            return actions.first(where: { $0.id == "video.advanced.trim10" })
+        }
+        if actionID == "image.advanced.resize_50" {
+            return actions.first(where: { $0.id == "image.resize" })
+        }
+        if actionID == "image.resize" {
+            return actions.first(where: { $0.id == "image.advanced.resize_50" })
+        }
+        return nil
     }
 
     public func action(for fileURL: URL, targetExtension: String, preferAdvanced: Bool = false) -> ConversionAction? {
@@ -208,16 +237,56 @@ public final class FormatRegistry {
             }
         })
 
+        let resizeParams = [
+            ActionParameter(
+                id: "percent",
+                label: "Resize Percent",
+                kind: .percent,
+                defaultValue: .number(50.0),
+                minValue: 1.0,
+                maxValue: 500.0
+            ),
+            ActionParameter(
+                id: "maxDimension",
+                label: "Max Dimension (px)",
+                kind: .number,
+                defaultValue: .number(1200.0),
+                minValue: 1.0,
+                maxValue: 50000.0
+            )
+        ]
+        let resizeBuilder: (URL, URL, ParameterValues) -> [Invocation] = { input, output, params in
+            if let pctVal = params["percent"], pctVal != .number(50.0) {
+                let pct = pctVal.asDouble ?? 50.0
+                let pctStr = (pct.rounded() == pct) ? "\(Int(pct))%" : "\(pct)%"
+                return [Invocation(toolName: "magick", arguments: [input.path, "-resize", pctStr, output.path])]
+            } else {
+                let maxDim = params["maxDimension"]?.asInt ?? 1200
+                return [Invocation(toolName: "sips", arguments: ["-Z", "\(maxDim)", input.path, "--out", output.path])]
+            }
+        }
+
+        list.append(ConversionAction(
+            id: "image.resize",
+            displayName: "Resize Image",
+            outputExtension: inputExt == "svg" ? "png" : inputExt,
+            isAdvanced: true,
+            category: .image,
+            iconName: "arrow.up.left.and.arrow.down.right",
+            parameters: resizeParams,
+            buildInvocations: resizeBuilder
+        ))
+
         list.append(ConversionAction(
             id: "image.advanced.resize_50",
             displayName: "Resize (Max 1200px)",
             outputExtension: inputExt == "svg" ? "png" : inputExt,
             isAdvanced: true,
             category: .image,
-            iconName: "arrow.up.left.and.arrow.down.right"
-        ) { input, output in
-            [Invocation(toolName: "sips", arguments: ["-Z", "1200", input.path, "--out", output.path])]
-        })
+            iconName: "arrow.up.left.and.arrow.down.right",
+            parameters: resizeParams,
+            buildInvocations: resizeBuilder
+        ))
 
         // Standard compress to zip
         list.append(archiveCreateZipAction())
@@ -342,16 +411,51 @@ public final class FormatRegistry {
             [Invocation(toolName: "ffmpeg", arguments: ["-nostdin", "-n", "-i", input.path, "-c:v", "libx264", "-crf", "28", "-preset", "medium", "-c:a", "aac", "-b:a", "128k", output.path])]
         })
 
+        let trimParams = [
+            ActionParameter(
+                id: "start",
+                label: "Start Time (seconds)",
+                kind: .number,
+                defaultValue: .number(0.0),
+                minValue: 0.0
+            ),
+            ActionParameter(
+                id: "end",
+                label: "End Time (seconds)",
+                kind: .number,
+                defaultValue: .number(10.0),
+                minValue: 0.0
+            )
+        ]
+        let trimBuilder: (URL, URL, ParameterValues) -> [Invocation] = { input, output, params in
+            let start = params["start"]?.asDouble ?? 0.0
+            let end = params["end"]?.asDouble ?? 10.0
+            let startStr = FormatRegistry.formatFfmpegTimestamp(start)
+            let endStr = FormatRegistry.formatFfmpegTimestamp(end)
+            return [Invocation(toolName: "ffmpeg", arguments: ["-nostdin", "-n", "-i", input.path, "-ss", startStr, "-to", endStr, "-c", "copy", output.path])]
+        }
+
+        list.append(ConversionAction(
+            id: "video.trim",
+            displayName: "Trim Video",
+            outputExtension: inputExt,
+            isAdvanced: true,
+            category: .video,
+            iconName: "scissors",
+            parameters: trimParams,
+            buildInvocations: trimBuilder
+        ))
+
         list.append(ConversionAction(
             id: "video.advanced.trim10",
             displayName: "Trim First 10 Seconds",
             outputExtension: inputExt,
             isAdvanced: true,
             category: .video,
-            iconName: "scissors"
-        ) { input, output in
-            [Invocation(toolName: "ffmpeg", arguments: ["-nostdin", "-n", "-i", input.path, "-ss", "00:00:00", "-to", "00:00:10", "-c", "copy", output.path])]
-        })
+            iconName: "scissors",
+            parameters: trimParams,
+            buildInvocations: trimBuilder
+        ))
 
         list.append(ConversionAction(
             id: "video.advanced.strip_metadata",
@@ -483,7 +587,8 @@ public final class FormatRegistry {
                 outputExtension: "png",
                 isAdvanced: false,
                 category: .image,
-                iconName: "photo.stack"
+                iconName: "photo.stack",
+                outputKind: .folder(suffix: "pages")
             ) { input, output in
                 // pdftoppm outputs output-1.png, output-2.png...
                 // output is used as the prefix path
@@ -531,7 +636,8 @@ public final class FormatRegistry {
                 outputExtension: "",
                 isAdvanced: true,
                 category: .pdf,
-                iconName: "scissors"
+                iconName: "scissors",
+                outputKind: .folder(suffix: "split")
             ) { input, output in
                 let pattern = output.appendingPathComponent("page-%d.pdf").path
                 return [Invocation(toolName: "qpdf", arguments: [input.path, "--split-pages", pattern])]
@@ -727,7 +833,8 @@ public final class FormatRegistry {
                 outputExtension: "",
                 isAdvanced: false,
                 category: .archive,
-                iconName: "archivebox"
+                iconName: "archivebox",
+                outputKind: .folder(suffix: "extracted")
             ) { input, output in
                 if inputExt == "zip" {
                     return [Invocation(toolName: "ditto", arguments: ["-x", "-k", input.path, output.path])]

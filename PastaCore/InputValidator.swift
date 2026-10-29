@@ -48,4 +48,73 @@ public struct InputValidator {
             try validateInputFile(file)
         }
     }
+
+    public static func validateParameters(declared: [ActionParameter], values: ParameterValues) throws {
+        let declaredMap = Dictionary(uniqueKeysWithValues: declared.map { ($0.id, $0) })
+        for (key, val) in values {
+            guard let param = declaredMap[key] else {
+                throw PastaError.invalidInput("Unknown parameter '\(key)'")
+            }
+
+            // Check hostile string characters
+            let strVal = val.asString
+            let hostileChars = [";", "&", "|", "`", "$", "\n", "\r", "\"", "'", "\0"]
+            for ch in hostileChars {
+                if strVal.contains(ch) {
+                    throw PastaError.invalidInput("Hostile character '\(ch)' detected in parameter '\(key)'")
+                }
+            }
+
+            // Range checks
+            switch param.kind {
+            case .percent:
+                guard let num = val.asDouble else {
+                    throw PastaError.invalidInput("Parameter '\(key)' must be a numeric percentage")
+                }
+                let min = param.minValue ?? 0.0
+                let max = param.maxValue ?? 100.0
+                if num < min || num > max {
+                    throw PastaError.invalidInput("Parameter '\(key)' value \(num) is outside allowed range (\(min)-\(max)%)")
+                }
+            case .number:
+                guard let num = val.asDouble else {
+                    throw PastaError.invalidInput("Parameter '\(key)' must be a number")
+                }
+                if let min = param.minValue, num < min {
+                    throw PastaError.invalidInput("Parameter '\(key)' value \(num) is below minimum \(min)")
+                }
+                if let max = param.maxValue, num > max {
+                    throw PastaError.invalidInput("Parameter '\(key)' value \(num) exceeds maximum \(max)")
+                }
+            case .sizeInBytes:
+                guard let bytes = val.asInt64, bytes > 0 else {
+                    throw PastaError.invalidInput("Parameter '\(key)' must be a positive byte count")
+                }
+            case .timeRange:
+                switch val {
+                case .timeRange(let s, let e):
+                    try validateTimeRange(start: s, end: e)
+                default:
+                    throw PastaError.invalidInput("Parameter '\(key)' must be a time range")
+                }
+            case .rectangle:
+                switch val {
+                case .rectangle(let x, let y, let w, let h):
+                    guard x >= 0 && y >= 0 else {
+                        throw PastaError.invalidInput("Rectangle origin must be non-negative: (\(x), \(y))")
+                    }
+                    try validateDimensions(width: w, height: h)
+                default:
+                    throw PastaError.invalidInput("Parameter '\(key)' must be a rectangle")
+                }
+            case .choice(let options):
+                let choice = val.asString
+                guard options.contains(choice) else {
+                    throw PastaError.invalidInput("Invalid choice '\(choice)' for '\(key)'. Allowed: \(options.joined(separator: ", "))")
+                }
+            case .text:
+                break
+            }
+        }
+    }
 }

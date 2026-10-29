@@ -38,7 +38,7 @@ public struct PastaCLI {
         print("""
         Pasta - Offline macOS File Converter
         Usage:
-          pasta convert --action <action_id> <file>...
+          pasta convert --action <action_id> [--param key=value] <file>...
           pasta convert <file> --to <format>
           pasta list-actions <file>
           pasta doctor
@@ -85,17 +85,28 @@ public struct PastaCLI {
         print("Actions for: \(url.lastPathComponent)")
         print("Standard Actions:")
         for a in standard {
-            print("  - \(a.id.padding(toLength: 30, withPad: " ", startingAt: 0)) (\(a.displayName) -> .\(a.outputExtension))")
+            var line = "  - \(a.id.padding(toLength: 30, withPad: " ", startingAt: 0)) (\(a.displayName) -> .\(a.outputExtension))"
+            if !a.parameters.isEmpty {
+                let pList = a.parameters.map { "\($0.id)=\($0.defaultValue.asString)" }.joined(separator: ", ")
+                line += " [params: \(pList)]"
+            }
+            print(line)
         }
         print("\nAdvanced Actions:")
         for a in advanced {
-            print("  - \(a.id.padding(toLength: 30, withPad: " ", startingAt: 0)) (\(a.displayName) -> .\(a.outputExtension))")
+            var line = "  - \(a.id.padding(toLength: 30, withPad: " ", startingAt: 0)) (\(a.displayName) -> .\(a.outputExtension))"
+            if !a.parameters.isEmpty {
+                let pList = a.parameters.map { "\($0.id)=\($0.defaultValue.asString)" }.joined(separator: ", ")
+                line += " [params: \(pList)]"
+            }
+            print(line)
         }
     }
 
     private static func runConvert(args: [String]) {
         var actionId: String?
         var targetFormat: String?
+        var rawParams: [String: String] = [:]
         var files: [String] = []
 
         var i = 0
@@ -107,6 +118,13 @@ public struct PastaCLI {
             } else if arg == "--to" && i + 1 < args.count {
                 targetFormat = args[i + 1]
                 i += 2
+            } else if arg == "--param" && i + 1 < args.count {
+                let pair = args[i + 1]
+                let parts = pair.split(separator: "=", maxSplits: 1).map(String.init)
+                if parts.count == 2 {
+                    rawParams[parts[0]] = parts[1]
+                }
+                i += 2
             } else if !arg.hasPrefix("-") {
                 files.append(arg)
                 i += 1
@@ -116,7 +134,7 @@ public struct PastaCLI {
         }
 
         guard !files.isEmpty else {
-            fputs("Error: No input files specified.\nUsage: peel convert --action <action_id> <file>...\n", stderr)
+            fputs("Error: No input files specified.\nUsage: pasta convert --action <action_id> [--param key=value] <file>...\n", stderr)
             exit(1)
         }
 
@@ -152,8 +170,17 @@ public struct PastaCLI {
 
             guard let selectedAction = action else { continue }
 
+            var effectiveParams: ParameterValues = [:]
+            for (k, v) in rawParams {
+                if let declared = selectedAction.parameters.first(where: { $0.id == k }) {
+                    effectiveParams[k] = ActionParameter.parseCLIValue(v, for: declared.kind)
+                } else {
+                    effectiveParams[k] = .text(v)
+                }
+            }
+
             do {
-                let output = try JobRunner.shared.run(action: selectedAction, input: url)
+                let output = try JobRunner.shared.run(action: selectedAction, input: url, parameters: effectiveParams)
                 print("OK: \(output.path)")
             } catch {
                 fputs("Failed to convert '\(url.lastPathComponent)': \(error.localizedDescription)\n", stderr)
