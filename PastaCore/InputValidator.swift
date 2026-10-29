@@ -7,8 +7,13 @@ public struct InputValidator {
             throw PastaError.invalidInput("File does not exist at '\(url.path)'")
         }
 
-        let attrs = try? fm.attributesOfItem(atPath: url.path)
-        let size = (attrs?[.size] as? NSNumber)?.int64Value ?? 0
+        let attrs: [FileAttributeKey: Any]
+        do {
+            attrs = try fm.attributesOfItem(atPath: url.path)
+        } catch {
+            throw PastaError.invalidInput("Cannot read attributes for file '\(url.path)': \(error.localizedDescription)")
+        }
+        let size = (attrs[.size] as? NSNumber)?.int64Value ?? 0
         if size == 0 {
             throw PastaError.invalidInput("File is empty (0 bytes): '\(url.lastPathComponent)'")
         }

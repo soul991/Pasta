@@ -111,6 +111,7 @@ public final class JobRunner {
         // Create temporary isolated scratch space
         let tempDir = try OutputPlanner.makeTempDirectory()
         defer {
+            // Safe to swallow: best-effort temporary scratch directory removal on scope exit
             try? fm.removeItem(at: tempDir)
         }
 
@@ -144,7 +145,7 @@ public final class JobRunner {
                 }
                 for file in pageFiles {
                     let destFile = tempWorkingOutputURL.appendingPathComponent(file.lastPathComponent)
-                    try? fm.moveItem(at: file, to: destFile)
+                    try fm.moveItem(at: file, to: destFile)
                 }
             }
             try fm.moveItem(at: tempWorkingOutputURL, to: finalDestinationURL)
@@ -316,6 +317,7 @@ extension JobRunner {
         }
         let remErr = errPipe.fileHandleForReading.readDataToEndOfFile()
         if !remErr.isEmpty { collector.appendErr(remErr) }
+        // Safe to swallow: best-effort closing of redirected output handle
         try? redirectHandle?.close()
 
         processLock.lock()
@@ -374,6 +376,7 @@ extension JobRunner {
 
             let tempDir = try OutputPlanner.makeTempDirectory()
             defer {
+                // Safe to swallow: best-effort temporary scratch directory removal on scope exit
                 try? fm.removeItem(at: tempDir)
             }
 
@@ -405,7 +408,7 @@ extension JobRunner {
                     }
                     for file in pageFiles {
                         let destFile = tempWorkingOutputURL.appendingPathComponent(file.lastPathComponent)
-                        try? fm.moveItem(at: file, to: destFile)
+                        try fm.moveItem(at: file, to: destFile)
                     }
                 }
                 try fm.moveItem(at: tempWorkingOutputURL, to: finalDestinationURL)
@@ -521,6 +524,7 @@ extension JobRunner {
                     }
                     let remErr = errPipe.fileHandleForReading.readDataToEndOfFile()
                     if !remErr.isEmpty { collector.appendErr(remErr) }
+                    // Safe to swallow: best-effort closing of redirected output handle
                     try? rHandle?.close()
 
                     let wasCancelled = self.untrackProcess(for: jobId)

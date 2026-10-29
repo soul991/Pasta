@@ -10,6 +10,7 @@ public final class PastaLogger {
     public init() {
         let logsDir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Logs/Pasta")
+        // Safe to swallow: best-effort creation of user logs directory
         try? FileManager.default.createDirectory(at: logsDir, withIntermediateDirectories: true)
         self.logFileURL = logsDir.appendingPathComponent("pasta.log")
     }
@@ -24,12 +25,15 @@ public final class PastaLogger {
         guard let data = line.data(using: .utf8) else { return }
 
         if FileManager.default.fileExists(atPath: logFileURL.path) {
+            // Safe to swallow: logging must never crash or interrupt application execution if file open fails
             if let handle = try? FileHandle(forWritingTo: logFileURL) {
                 handle.seekToEndOfFile()
                 handle.write(data)
+                // Safe to swallow: best-effort handle cleanup
                 try? handle.close()
             }
         } else {
+            // Safe to swallow: best-effort initial log file write
             try? data.write(to: logFileURL, options: .atomic)
         }
     }
