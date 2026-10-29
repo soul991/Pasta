@@ -3,15 +3,63 @@ import Foundation
 public final class JobRunner {
     public static let shared = JobRunner()
 
+    private var runningProcesses: [UUID: Process] = [:]
+    private var cancelledJobIds: Set<UUID> = []
+    private let processLock = NSLock()
+
     public init() {}
+
+    public func cancel(jobId: UUID) {
+        processLock.lock()
+        cancelledJobIds.insert(jobId)
+        let proc = runningProcesses[jobId]
+        processLock.unlock()
+        if let proc = proc {
+            terminateGracefully(proc)
+        }
+    }
+
+    public func cancel() {
+        cancelAll()
+    }
+
+    public func cancelAll() {
+        processLock.lock()
+        let procs = Array(runningProcesses.values)
+        for (id, _) in runningProcesses {
+            cancelledJobIds.insert(id)
+        }
+        processLock.unlock()
+        for proc in procs {
+            terminateGracefully(proc)
+        }
+    }
+
+    private func terminateGracefully(_ proc: Process) {
+        guard proc.isRunning else { return }
+        proc.terminate()
+        let pid = proc.processIdentifier
+        DispatchQueue.global().asyncAfter(deadline: .now() + 2.0) {
+            if proc.isRunning && pid > 0 {
+                kill(pid, SIGKILL)
+            }
+        }
+    }
 
     @discardableResult
     public func run(
         action: ConversionAction,
         input: URL,
         destinationDirectory: URL? = nil,
-        timeoutSeconds: TimeInterval? = nil
+        timeoutSeconds: TimeInterval? = nil,
+        jobId: UUID = UUID()
     ) throws -> URL {
+        processLock.lock()
+        if cancelledJobIds.contains(jobId) {
+            processLock.unlock()
+            throw PastaError.cancelled
+        }
+        processLock.unlock()
         let fm = FileManager.default
 
         // Validate input file
@@ -59,7 +107,7 @@ public final class JobRunner {
 
         // Run each invocation in sequence
         for inv in invocations {
-            try execute(invocation: inv, timeoutSeconds: timeoutSeconds)
+            try execute(invocation: inv, timeoutSeconds: timeoutSeconds, jobId: jobId)
         }
 
         // Verify and move output to final destination
@@ -102,7 +150,14 @@ public final class JobRunner {
         return finalDestinationURL
     }
 
-    public func execute(invocation: Invocation, timeoutSeconds: TimeInterval? = nil) throws {
+    public func execute(invocation: Invocation, timeoutSeconds: TimeInterval? = nil, jobId: UUID = UUID()) throws {
+        processLock.lock()
+        if cancelledJobIds.contains(jobId) {
+            processLock.unlock()
+            throw PastaError.cancelled
+        }
+        processLock.unlock()
+
         let toolURL = try ToolLocator.shared.requireTool(invocation.toolName)
 
         let process = Process()
@@ -149,6 +204,20 @@ public final class JobRunner {
             group.leave()
         }
 
+        processLock.lock()
+        if cancelledJobIds.contains(jobId) {
+            processLock.unlock()
+            throw PastaError.cancelled
+        }
+        runningProcesses[jobId] = process
+        processLock.unlock()
+
+        defer {
+            processLock.lock()
+            runningProcesses.removeValue(forKey: jobId)
+            processLock.unlock()
+        }
+
         do {
             try process.run()
         } catch {
@@ -182,6 +251,14 @@ public final class JobRunner {
         try? redirectHandle?.close()
         group.wait()
 
+        processLock.lock()
+        let wasCancelled = cancelledJobIds.contains(jobId)
+        processLock.unlock()
+
+        if wasCancelled {
+            throw PastaError.cancelled
+        }
+
         if timedOut {
             throw PastaError.timedOut(tool: invocation.toolName)
         }
@@ -194,6 +271,31 @@ public final class JobRunner {
                 ? outStr.trimmingCharacters(in: .whitespacesAndNewlines)
                 : errStr.trimmingCharacters(in: .whitespacesAndNewlines)
             throw PastaError.executionFailed(tool: invocation.toolName, exitCode: exitCode, output: msg)
+        }
+    }
+
+    @discardableResult
+    public func runAsync(
+        action: ConversionAction,
+        input: URL,
+        destinationDirectory: URL? = nil,
+        timeoutSeconds: TimeInterval? = nil,
+        jobId: UUID = UUID()
+    ) async throws -> URL {
+        try await withTaskCancellationHandler {
+            try Task.checkCancellation()
+            return try run(action: action, input: input, destinationDirectory: destinationDirectory, timeoutSeconds: timeoutSeconds, jobId: jobId)
+        } onCancel: {
+            self.cancel(jobId: jobId)
+        }
+    }
+
+    public func executeAsync(invocation: Invocation, timeoutSeconds: TimeInterval? = nil, jobId: UUID = UUID()) async throws {
+        try await withTaskCancellationHandler {
+            try Task.checkCancellation()
+            try execute(invocation: invocation, timeoutSeconds: timeoutSeconds, jobId: jobId)
+        } onCancel: {
+            self.cancel(jobId: jobId)
         }
     }
 }

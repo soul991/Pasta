@@ -326,6 +326,72 @@ do {
         assertTest(noTimeoutSucceeded, "Fix 2: fake tool with nil/0 timeout succeeds without killing")
     }
     ToolLocator.shared.setOverride(tool: "fake_sleep", url: nil)
+
+    // 5.7 Phase 8 Fix 3: Cancellation tests
+    let fakeSlowScript = fakeToolDir.appendingPathComponent("fake_slow.sh")
+    let slowContent = "#!/bin/sh\nsleep 2\nexit 0\n"
+    try? slowContent.write(to: fakeSlowScript, atomically: true, encoding: .utf8)
+    chmod(fakeSlowScript.path, 0o755)
+    ToolLocator.shared.setOverride(tool: "fake_slow", url: fakeSlowScript)
+
+    do {
+        // Test 1: Start two slow jobs, cancel one, confirm only that process dies and the other finishes
+        let job1 = UUID()
+        let job2 = UUID()
+        let inv1 = Invocation(toolName: "fake_slow", arguments: [], timeout: 10.0)
+        let inv2 = Invocation(toolName: "fake_slow", arguments: [], timeout: 10.0)
+
+        var job1Result: Error?
+        var job2Success = false
+        let group = DispatchGroup()
+
+        group.enter()
+        DispatchQueue.global().async {
+            do {
+                try JobRunner.shared.execute(invocation: inv1, timeoutSeconds: 10.0, jobId: job1)
+            } catch {
+                job1Result = error
+            }
+            group.leave()
+        }
+
+        group.enter()
+        DispatchQueue.global().async {
+            do {
+                try JobRunner.shared.execute(invocation: inv2, timeoutSeconds: 10.0, jobId: job2)
+                job2Success = true
+            } catch {
+                job2Success = false
+            }
+            group.leave()
+        }
+
+        // Give them a moment to start, then cancel job1 only
+        Thread.sleep(forTimeInterval: 0.2)
+        JobRunner.shared.cancel(jobId: job1)
+        group.wait()
+
+        let job1Cancelled = (job1Result as? PastaError) == .cancelled
+        assertTest(job1Cancelled && job2Success, "Fix 3: cancelling one of two concurrent jobs cancels only that job and leaves the other running")
+
+        // Test 2: Cancel before process starts
+        let preCancelId = UUID()
+        JobRunner.shared.cancel(jobId: preCancelId)
+        var preCancelCaught = false
+        do {
+            try JobRunner.shared.execute(invocation: inv1, timeoutSeconds: 10.0, jobId: preCancelId)
+        } catch PastaError.cancelled {
+            preCancelCaught = true
+        } catch {
+            preCancelCaught = false
+        }
+        assertTest(preCancelCaught, "Fix 3: cancelling before process starts throws PastaError.cancelled without running")
+
+        // Test 3: Cancel after process has finished without crashing
+        JobRunner.shared.cancel(jobId: job2)
+        assertTest(true, "Fix 3: cancelling after process finishes does not crash")
+    }
+    ToolLocator.shared.setOverride(tool: "fake_slow", url: nil)
 }
 
 print("\n==================================================")
