@@ -11,14 +11,29 @@ public final class ToolLocator {
         "/usr/sbin"
     ]
 
+    private var overrides: [String: URL] = [:]
     private var cache: [String: URL] = [:]
     private let lock = NSLock()
 
     public init() {}
 
+    public func setOverride(tool: String, url: URL?) {
+        lock.lock()
+        defer { lock.unlock() }
+        if let url = url {
+            overrides[tool] = url
+        } else {
+            overrides.removeValue(forKey: tool)
+        }
+    }
+
     public func findTool(_ name: String) -> URL? {
         lock.lock()
         defer { lock.unlock() }
+
+        if let overridden = overrides[name] {
+            return overridden
+        }
 
         if let cached = cache[name] {
             return cached

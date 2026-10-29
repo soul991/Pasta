@@ -293,6 +293,39 @@ do {
             assertTest(false, "Fix 1: single-page pdf.to.images failed", details: error.localizedDescription)
         }
     }
+
+    // 5.6 Phase 8 Fix 2: Timeout tests with fake sleep tool
+    let fakeToolDir = outDir.appendingPathComponent("fake_tools")
+    try? FileManager.default.createDirectory(at: fakeToolDir, withIntermediateDirectories: true)
+    let fakeSleepScript = fakeToolDir.appendingPathComponent("fake_sleep.sh")
+    let scriptContent = "#!/bin/sh\nsleep 2\nexit 0\n"
+    try? scriptContent.write(to: fakeSleepScript, atomically: true, encoding: .utf8)
+    chmod(fakeSleepScript.path, 0o755)
+    ToolLocator.shared.setOverride(tool: "fake_sleep", url: fakeSleepScript)
+
+    do {
+        let invTimeout = Invocation(toolName: "fake_sleep", arguments: [], timeout: 1.0)
+        var timedOutCaught = false
+        do {
+            try JobRunner.shared.execute(invocation: invTimeout, timeoutSeconds: 1.0)
+        } catch PastaError.timedOut {
+            timedOutCaught = true
+        } catch {
+            timedOutCaught = false
+        }
+        assertTest(timedOutCaught, "Fix 2: fake tool times out with 1.0s timeout and throws PastaError.timedOut")
+
+        let invNoTimeout = Invocation(toolName: "fake_sleep", arguments: [], timeout: nil)
+        var noTimeoutSucceeded = false
+        do {
+            try JobRunner.shared.execute(invocation: invNoTimeout, timeoutSeconds: 0)
+            noTimeoutSucceeded = true
+        } catch {
+            noTimeoutSucceeded = false
+        }
+        assertTest(noTimeoutSucceeded, "Fix 2: fake tool with nil/0 timeout succeeds without killing")
+    }
+    ToolLocator.shared.setOverride(tool: "fake_sleep", url: nil)
 }
 
 print("\n==================================================")

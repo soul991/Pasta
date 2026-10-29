@@ -10,7 +10,7 @@ public final class JobRunner {
         action: ConversionAction,
         input: URL,
         destinationDirectory: URL? = nil,
-        timeoutSeconds: TimeInterval = 120.0
+        timeoutSeconds: TimeInterval? = nil
     ) throws -> URL {
         let fm = FileManager.default
 
@@ -102,7 +102,7 @@ public final class JobRunner {
         return finalDestinationURL
     }
 
-    public func execute(invocation: Invocation, timeoutSeconds: TimeInterval) throws {
+    public func execute(invocation: Invocation, timeoutSeconds: TimeInterval? = nil) throws {
         let toolURL = try ToolLocator.shared.requireTool(invocation.toolName)
 
         let process = Process()
@@ -155,22 +155,35 @@ public final class JobRunner {
             throw PastaError.executionFailed(tool: invocation.toolName, exitCode: 1, output: error.localizedDescription)
         }
 
-        let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .default))
-        var timedOut = false
-        timer.schedule(deadline: .now() + timeoutSeconds)
-        timer.setEventHandler {
-            timedOut = true
-            process.terminate()
+        let effectiveTimeout: TimeInterval?
+        if let explicit = timeoutSeconds, explicit > 0 {
+            effectiveTimeout = explicit
+        } else if let explicit = timeoutSeconds, explicit <= 0 {
+            effectiveTimeout = nil
+        } else {
+            effectiveTimeout = invocation.timeoutSeconds
         }
-        timer.resume()
+
+        var timer: DispatchSourceTimer?
+        var timedOut = false
+        if let timeout = effectiveTimeout, timeout > 0 {
+            let t = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .default))
+            t.schedule(deadline: .now() + timeout)
+            t.setEventHandler {
+                timedOut = true
+                process.terminate()
+            }
+            t.resume()
+            timer = t
+        }
 
         process.waitUntilExit()
-        timer.cancel()
+        timer?.cancel()
         try? redirectHandle?.close()
         group.wait()
 
         if timedOut {
-            throw PastaError.executionFailed(tool: invocation.toolName, exitCode: -1, output: "Execution timed out after \(timeoutSeconds) seconds")
+            throw PastaError.timedOut(tool: invocation.toolName)
         }
 
         let exitCode = process.terminationStatus

@@ -7,6 +7,7 @@ public enum PastaError: LocalizedError, Equatable {
     case outputNotFound(String)
     case invalidInput(String)
     case cancelled
+    case timedOut(tool: String)
 
     public var errorDescription: String? {
         switch self {
@@ -22,6 +23,8 @@ public enum PastaError: LocalizedError, Equatable {
             return "Invalid input file: \(reason)"
         case .cancelled:
             return "Conversion was cancelled"
+        case .timedOut(let tool):
+            return "Execution of '\(tool)' timed out"
         }
     }
 }
