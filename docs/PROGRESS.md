@@ -42,13 +42,14 @@
 - **Application Bundle & Code Signing**: `./scripts/build_app.sh` -> `Pasta.app` produced, `codesign --verify --deep --strict Pasta.app` succeeded.
 - **Test Count Reconciliation**: README and codebase contain 37 unit/integration tests and 13 Section 8 hardening tests. The `96` in `PHASE8.md` was an anticipated target count rather than the actual test count implemented in Phase 4/7.
 
-### PHASE8 Fixes Status Check
+### PHASE8 Fixes Status Check (Step 0 - Complete)
 
 | Item | What to check | Status | Notes |
 | :--- | :--- | :--- | :--- |
-| **Fix 1** | `pdf.to.images` and `pdf.advanced.split` lose pages | **DONE** (needs automated 3-page tests) | Both actions successfully create folders with 3 files for a 3-page PDF; unit tests on `Fixtures/three_pages.pdf` to be added. |
-| **Fix 2** | 120 s timeout kills long ffmpeg jobs | **OPEN** | `JobRunner` hardcodes default 120s timeout. Media conversions must have no automatic timeout; quick tools keep 300s timeout. Property on invocation. |
-| **Fix 3** | Cancellation does not work reliably | **OPEN** | No process tracking, no `cancel()` method on `JobRunner`, no `withTaskCancellationHandler`, no SIGTERM/SIGKILL sequence. |
-| **Fix 4** | `runProcess` blocks Swift concurrency pool | **OPEN** | Synchronously blocks with `waitUntilExit()` / `group.wait()`. Needs non-blocking terminationHandler, async/continuation, bounded 64KB stderr tail. |
-| **Fix 5** | Finder selection & AppleScript | **OPEN** | `NSAppleEventsUsageDescription` missing in Info.plist from `build_app.sh`. osascript errors in `PastaCLI` swallowed without logging or user guidance. |
-| **Fix 6** | Housekeeping & Compact violations | **OPEN** | Swallowed errors via `try?` in `JobRunner` (moving files), `InputValidator`, `PastaLogger`, `PastaCLI` need proper handling or justified comments. |
+| **Fix 1** | `pdf.to.images` and `pdf.advanced.split` lose pages | **DONE** | Added unit tests verifying 3-page and single-page outputs, non-destructive collision handling, and fixture integrity. |
+| **Fix 2** | 120 s timeout kills long ffmpeg jobs | **DONE** | Implemented per-invocation `timeoutSeconds`, defaulted `ffmpeg` to `nil` (no timeout), quick tools to 300s, and surfaced `PastaError.timedOut`. |
+| **Fix 3** | Cancellation does not work reliably | **DONE** | Implemented job process registry, `cancel(jobId:)`, `cancelAll()`, Swift concurrency `withTaskCancellationHandler`, and SIGTERM -> SIGKILL escalation. |
+| **Fix 4** | `runProcess` blocks Swift concurrency pool | **DONE** | Non-blocking `process.terminationHandler` with continuation, concurrent pipe streaming via `readabilityHandler`, and 64KB bounded stderr tail. |
+| **Fix 5** | Finder selection & AppleScript | **DONE** | Added `NSAppleEventsUsageDescription` to Info.plist in `build_app.sh`, added `FinderSelectionHelper`, and logged/surfaced Automation error (-1743). |
+| **Fix 6** | Housekeeping & Compact violations | **DONE** | Replaced swallowed move/read `try?` calls in `JobRunner` and `InputValidator` with explicit error throws; documented justified cleanup/logging `try?` calls. |
+
