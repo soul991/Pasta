@@ -15,6 +15,8 @@ public final class PreferencesManager {
     private let showRingKey = "pasta_show_charging_ring"
     private let reduceMotionKey = "pasta_reduce_motion"
 
+    public init() {}
+
     public var outputMode: OutputLocationMode {
         get {
             guard let raw = UserDefaults.standard.string(forKey: modeKey),
