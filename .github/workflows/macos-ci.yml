@@ -19,7 +19,7 @@ jobs:
       - name: Install dependencies via Homebrew
         run: |
           brew update --quiet
-          brew install ffmpeg imagemagick qpdf ghostscript poppler pandoc exiftool webp unar sevenzip
+          brew install ffmpeg imagemagick qpdf ghostscript poppler pandoc exiftool webp unar sevenzip librsvg
 
       - name: Environment Diagnostics
         run: |

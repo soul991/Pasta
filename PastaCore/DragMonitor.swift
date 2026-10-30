@@ -197,7 +197,7 @@ public final class DragMonitor {
             let elapsed = timestamp - startedAt
             let duration = holdDurationSeconds
 
-            if elapsed >= duration {
+            if elapsed >= duration - 0.0005 {
                 // Open wheel! Latches open.
                 openWheel(openedAt: timestamp, files: files, location: location, isAdvanced: false)
             } else if elapsed >= 0.120 {
@@ -218,7 +218,7 @@ public final class DragMonitor {
             let elapsed = timestamp - startedAt
             let duration = holdDurationSeconds
 
-            if elapsed >= duration {
+            if elapsed >= duration - 0.0005 {
                 openWheel(openedAt: timestamp, files: files, location: location, isAdvanced: false)
             } else {
                 let ringProgress = min(max(elapsed / duration, 0.0), 1.0)
@@ -244,7 +244,7 @@ public final class DragMonitor {
             }
 
             let elapsed = timestamp - startedAt
-            if elapsed >= holdDurationSeconds {
+            if elapsed >= holdDurationSeconds - 0.0005 {
                 // Second Shift hold closes wheel!
                 closeWheel()
             }
@@ -305,7 +305,7 @@ public final class DragMonitor {
                 state = .open(openedAt: startedAt, files: files, location: .zero, isAdvanced: false)
             } else {
                 let elapsed = timestamp - startedAt
-                if elapsed >= holdDurationSeconds {
+                if elapsed >= holdDurationSeconds - 0.0005 {
                     closeWheel()
                 }
             }
