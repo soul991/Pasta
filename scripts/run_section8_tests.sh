@@ -5,7 +5,28 @@ cd "$(dirname "$0")/.."
 
 PASTA_BIN="./Pasta.app/Contents/MacOS/Pasta"
 if [ ! -f "$PASTA_BIN" ]; then
-    PASTA_BIN=".build/release/Pasta"
+    if [ -f ".build/release/Pasta" ]; then
+        PASTA_BIN=".build/release/Pasta"
+    elif [ -f ".build/arm64-apple-macosx/release/Pasta" ]; then
+        PASTA_BIN=".build/arm64-apple-macosx/release/Pasta"
+    elif [ -f ".build/debug/Pasta" ]; then
+        PASTA_BIN=".build/debug/Pasta"
+    elif [ -f ".build/arm64-apple-macosx/debug/Pasta" ]; then
+        PASTA_BIN=".build/arm64-apple-macosx/debug/Pasta"
+    else
+        FOUND=$(find .build -type f -name Pasta -perm +111 2>/dev/null | grep -v "PastaTests" | head -n 1 || true)
+        if [ -n "$FOUND" ] && [ -f "$FOUND" ]; then
+            PASTA_BIN="$FOUND"
+        else
+            PASTA_BIN=".build/debug/Pasta"
+        fi
+    fi
+fi
+
+echo "Using Pasta binary for Section 8 tests: $PASTA_BIN"
+if [ ! -f "$PASTA_BIN" ]; then
+    echo "ERROR: Pasta binary not found. Please run 'swift build' first."
+    exit 1
 fi
 
 echo "=================================================="
