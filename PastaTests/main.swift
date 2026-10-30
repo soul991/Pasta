@@ -839,6 +839,198 @@ do {
     }
 }
 
+// MARK: - 9. Phase 9 Step 4: Video and Audio Tools Tests
+print("\n--- 9. Phase 9 Step 4: Video and Audio Tools Tests ---")
+do {
+    let fixturesDir = URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent("Fixtures")
+    let testTempDir = try OutputPlanner.makeTempDirectory()
+    defer { try? FileManager.default.removeItem(at: testTempDir) }
+
+    let sampleMp4 = fixturesDir.appendingPathComponent("sample.mp4")
+    let sampleWav = fixturesDir.appendingPathComponent("sample.wav")
+
+    func probeDims(_ url: URL) -> (Int, Int)? {
+        guard let ffprobe = ToolLocator.shared.findTool("ffprobe") else { return nil }
+        let p = Process()
+        p.executableURL = ffprobe
+        p.arguments = ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=s=x:p=0", url.path]
+        let pipe = Pipe()
+        p.standardOutput = pipe
+        p.standardError = Pipe()
+        try? p.run()
+        p.waitUntilExit()
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        guard let str = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) else { return nil }
+        let parts = str.split(separator: "x").compactMap { Int($0) }
+        return parts.count == 2 ? (parts[0], parts[1]) : nil
+    }
+
+    func probeChannels(_ url: URL) -> Int? {
+        guard let ffprobe = ToolLocator.shared.findTool("ffprobe") else { return nil }
+        let p = Process()
+        p.executableURL = ffprobe
+        p.arguments = ["-v", "error", "-select_streams", "a:0", "-show_entries", "stream=channels", "-of", "default=noprint_wrappers=1:nokey=1", url.path]
+        let pipe = Pipe()
+        p.standardOutput = pipe
+        p.standardError = Pipe()
+        try? p.run()
+        p.waitUntilExit()
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        guard let str = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) else { return nil }
+        return Int(str)
+    }
+
+    // 9.1 video.speed
+    if let speedAction = FormatRegistry.shared.action(for: sampleMp4, actionID: "video.speed") {
+        assertTest(true, "Step 4: video.speed action is registered")
+        let out = try? JobRunner.shared.run(
+            action: speedAction,
+            input: sampleMp4,
+            destinationDirectory: testTempDir,
+            parameters: ["factor": .number(2.0)]
+        )
+        let dur = out != nil ? Compressor.shared.probeDuration(url: out!) : 0
+        assertTest(out != nil && abs(dur - 1.0) < 0.25, "Step 4: video.speed 2.0x halves duration to ~1.0s (got \(dur)s)")
+    } else {
+        assertTest(false, "Step 4: video.speed action is registered")
+    }
+
+    // 9.2 video.crop
+    if let cropAction = FormatRegistry.shared.action(for: sampleMp4, actionID: "video.crop") {
+        assertTest(true, "Step 4: video.crop action is registered")
+        let out = try? JobRunner.shared.run(
+            action: cropAction,
+            input: sampleMp4,
+            destinationDirectory: testTempDir,
+            parameters: ["rectangle": .rectangle(x: 10, y: 10, width: 160, height: 120)]
+        )
+        let dims = out != nil ? probeDims(out!) : nil
+        assertTest(dims?.0 == 160 && dims?.1 == 120, "Step 4: video.crop crops to 160x120 (got \(dims?.0 ?? 0)x\(dims?.1 ?? 0))")
+
+        // Test out of bounds rejection
+        var rejectedOutOfBounds = false
+        do {
+            _ = try JobRunner.shared.run(
+                action: cropAction,
+                input: sampleMp4,
+                destinationDirectory: testTempDir,
+                parameters: ["rectangle": .rectangle(x: 0, y: 0, width: 640, height: 480)]
+            )
+        } catch {
+            rejectedOutOfBounds = true
+        }
+        assertTest(rejectedOutOfBounds, "Step 4: video.crop rejects rectangle exceeding container dimensions")
+    } else {
+        assertTest(false, "Step 4: video.crop action is registered")
+    }
+
+    // 9.3 video.split
+    if let splitAction = FormatRegistry.shared.action(for: sampleMp4, actionID: "video.split") {
+        assertTest(true, "Step 4: video.split action is registered")
+        let out = try? JobRunner.shared.run(
+            action: splitAction,
+            input: sampleMp4,
+            destinationDirectory: testTempDir,
+            parameters: ["times": .text("1.0")]
+        )
+        let folderExists = out != nil && FileManager.default.fileExists(atPath: out!.path)
+        let parts = out != nil ? ((try? FileManager.default.contentsOfDirectory(at: out!, includingPropertiesForKeys: nil)) ?? []) : []
+        assertTest(folderExists && parts.count == 2, "Step 4: video.split splits into 2 parts in folder (\(parts.count) parts)")
+    } else {
+        assertTest(false, "Step 4: video.split action is registered")
+    }
+
+    // 9.4 video.join
+    if let joinAction = FormatRegistry.shared.action(for: sampleMp4, actionID: "video.join") {
+        assertTest(true, "Step 4: video.join action is registered")
+        let out = try? JobRunner.shared.runBatch(
+            action: joinAction,
+            inputs: [sampleMp4, sampleMp4],
+            destinationDirectory: testTempDir,
+            parameters: [:]
+        )
+        let dur = out != nil ? Compressor.shared.probeDuration(url: out!) : 0
+        assertTest(out != nil && abs(dur - 4.0) < 0.3, "Step 4: video.join sums duration of 2 clips to ~4.0s (got \(dur)s)")
+    } else {
+        assertTest(false, "Step 4: video.join action is registered")
+    }
+
+    // 9.5 video.snapshot
+    if let snapshotAction = FormatRegistry.shared.action(for: sampleMp4, actionID: "video.snapshot") {
+        assertTest(true, "Step 4: video.snapshot action is registered")
+        let out = try? JobRunner.shared.run(
+            action: snapshotAction,
+            input: sampleMp4,
+            destinationDirectory: testTempDir,
+            parameters: ["time": .number(1.0)]
+        )
+        let dims = out != nil ? probeDims(out!) : nil
+        assertTest(out != nil && dims?.0 == 320 && dims?.1 == 240, "Step 4: video.snapshot extracts 320x240 frame at 1.0s")
+    } else {
+        assertTest(false, "Step 4: video.snapshot action is registered")
+    }
+
+    // 9.6 audio.normalize
+    if let normAction = FormatRegistry.shared.action(for: sampleWav, actionID: "audio.normalize") {
+        assertTest(true, "Step 4: audio.normalize action is registered")
+        let out = try? JobRunner.shared.run(
+            action: normAction,
+            input: sampleWav,
+            destinationDirectory: testTempDir,
+            parameters: [:]
+        )
+        let outSize = out != nil ? ((try? FileManager.default.attributesOfItem(atPath: out!.path)[.size] as? Int64) ?? 0) : 0
+        assertTest(out != nil && outSize > 0, "Step 4: audio.normalize produces normalized audio file (\(outSize) bytes)")
+    } else {
+        assertTest(false, "Step 4: audio.normalize action is registered")
+    }
+
+    // 9.7 audio.channels
+    if let chanAction = FormatRegistry.shared.action(for: sampleWav, actionID: "audio.channels") {
+        assertTest(true, "Step 4: audio.channels action is registered")
+        let out = try? JobRunner.shared.run(
+            action: chanAction,
+            input: sampleWav,
+            destinationDirectory: testTempDir,
+            parameters: ["channels": .text("stereo")]
+        )
+        let channels = out != nil ? probeChannels(out!) : nil
+        assertTest(channels == 2, "Step 4: audio.channels produces 2 channels (stereo)")
+    } else {
+        assertTest(false, "Step 4: audio.channels action is registered")
+    }
+
+    // 9.8 audio.bleep
+    if let bleepAction = FormatRegistry.shared.action(for: sampleWav, actionID: "audio.bleep") {
+        assertTest(true, "Step 4: audio.bleep action is registered")
+        let out = try? JobRunner.shared.run(
+            action: bleepAction,
+            input: sampleWav,
+            destinationDirectory: testTempDir,
+            parameters: ["ranges": .text("0.5-1.0")]
+        )
+        let dur = out != nil ? Compressor.shared.probeDuration(url: out!) : 0
+        assertTest(out != nil && abs(dur - 2.0) < 0.2, "Step 4: audio.bleep keeps duration intact (~2.0s)")
+    } else {
+        assertTest(false, "Step 4: audio.bleep action is registered")
+    }
+
+    // 9.9 audio.trim
+    if let trimAction = FormatRegistry.shared.action(for: sampleWav, actionID: "audio.trim") {
+        assertTest(true, "Step 4: audio.trim action is registered")
+        let out = try? JobRunner.shared.run(
+            action: trimAction,
+            input: sampleWav,
+            destinationDirectory: testTempDir,
+            parameters: ["start": .number(0.5), "end": .number(1.5)]
+        )
+        let dur = out != nil ? Compressor.shared.probeDuration(url: out!) : 0
+        assertTest(out != nil && abs(dur - 1.0) < 0.2, "Step 4: audio.trim trims to ~1.0s (got \(dur)s)")
+    } else {
+        assertTest(false, "Step 4: audio.trim action is registered")
+    }
+}
+
 print("\n==================================================")
 print("Test Suite Summary: \(passedTests)/\(totalTests) Passed, \(failedTests) Failed")
 print("==================================================")

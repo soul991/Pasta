@@ -611,6 +611,147 @@ public final class FormatRegistry {
             [Invocation(toolName: "ffmpeg", arguments: ["-nostdin", "-n", "-i", input.path, "-map_metadata", "-1", "-c", "copy", output.path])]
         })
 
+        // Video Tools (Phase 9 Step 4)
+        list.append(ConversionAction(
+            id: "video.speed",
+            displayName: "Change Video Speed",
+            outputExtension: inputExt,
+            isAdvanced: true,
+            category: .video,
+            iconName: "speedometer",
+            parameters: [
+                ActionParameter(
+                    id: "factor",
+                    label: "Speed Factor",
+                    kind: .number,
+                    defaultValue: .number(2.0),
+                    minValue: 0.25,
+                    maxValue: 4.0
+                )
+            ],
+            buildInvocations: { input, output, params in
+                let factor = params["factor"]?.asDouble ?? 2.0
+                let atempo = MediaTools.atempoFilter(factor: factor)
+                let pts = 1.0 / factor
+                return [Invocation(toolName: "ffmpeg", arguments: [
+                    "-nostdin", "-n", "-i", input.path,
+                    "-vf", "setpts=\(pts)*PTS",
+                    "-af", atempo,
+                    output.path
+                ])]
+            }
+        ))
+
+        list.append(ConversionAction(
+            id: "video.crop",
+            displayName: "Crop Video",
+            outputExtension: inputExt,
+            isAdvanced: true,
+            category: .video,
+            iconName: "crop",
+            parameters: [
+                ActionParameter(
+                    id: "rectangle",
+                    label: "Crop Rectangle (w:h:x:y)",
+                    kind: .rectangle,
+                    defaultValue: .rectangle(x: 0, y: 0, width: 320, height: 240)
+                )
+            ],
+            buildInvocations: { input, output, params in
+                var (x, y, w, h) = (0, 0, 320, 240)
+                if let rectVal = params["rectangle"], case .rectangle(let rx, let ry, let rw, let rh) = rectVal {
+                    (x, y, w, h) = (rx, ry, rw, rh)
+                }
+                return [Invocation(toolName: "ffmpeg", arguments: [
+                    "-nostdin", "-n", "-i", input.path,
+                    "-vf", "crop=\(w):\(h):\(x):\(y)",
+                    "-c:a", "copy",
+                    output.path
+                ])]
+            },
+            customRunner: { input, output, params, runner, jobId in
+                var (x, y, w, h) = (0, 0, 320, 240)
+                if let rectVal = params["rectangle"], case .rectangle(let rx, let ry, let rw, let rh) = rectVal {
+                    (x, y, w, h) = (rx, ry, rw, rh)
+                }
+                if let dims = MediaTools.shared.probeDimensions(url: input) {
+                    try InputValidator.validateCropWithinBounds(width: w, height: h, x: x, y: y, containerWidth: dims.width, containerHeight: dims.height)
+                }
+                let inv = Invocation(toolName: "ffmpeg", arguments: [
+                    "-nostdin", "-y", "-i", input.path,
+                    "-vf", "crop=\(w):\(h):\(x):\(y)",
+                    "-c:a", "copy",
+                    output.path
+                ])
+                try runner.execute(invocation: inv, jobId: jobId)
+            }
+        ))
+
+        list.append(ConversionAction(
+            id: "video.split",
+            displayName: "Split Video",
+            outputExtension: inputExt,
+            isAdvanced: true,
+            category: .video,
+            iconName: "square.split.2x1",
+            outputKind: .folder(suffix: "split"),
+            parameters: [
+                ActionParameter(
+                    id: "times",
+                    label: "Split Times (seconds, comma-separated)",
+                    kind: .text,
+                    defaultValue: .text("1.0")
+                )
+            ],
+            customRunner: { input, output, params, runner, jobId in
+                let times = params["times"]?.asString ?? "1.0"
+                try MediaTools.shared.splitVideo(input: input, outputDir: output, timesString: times, runner: runner, jobId: jobId)
+            }
+        ))
+
+        list.append(ConversionAction(
+            id: "video.join",
+            displayName: "Join Videos",
+            outputExtension: inputExt,
+            isAdvanced: true,
+            category: .video,
+            iconName: "film.stack",
+            isBatch: true,
+            customBatchRunner: { inputs, output, params, runner, jobId in
+                try MediaTools.shared.joinVideos(inputs: inputs, output: output, runner: runner, jobId: jobId)
+            }
+        ))
+
+        list.append(ConversionAction(
+            id: "video.snapshot",
+            displayName: "Snapshot Frame",
+            outputExtension: "png",
+            isAdvanced: true,
+            category: .image,
+            iconName: "camera",
+            parameters: [
+                ActionParameter(
+                    id: "time",
+                    label: "Snapshot Time (seconds)",
+                    kind: .number,
+                    defaultValue: .number(0.0),
+                    minValue: 0.0
+                )
+            ],
+            buildInvocations: { input, output, params in
+                let t = params["time"]?.asDouble ?? 0.0
+                let tStr = FormatRegistry.formatFfmpegTimestamp(t)
+                return [Invocation(toolName: "ffmpeg", arguments: [
+                    "-nostdin", "-n",
+                    "-ss", tStr,
+                    "-i", input.path,
+                    "-update", "1",
+                    "-frames:v", "1",
+                    output.path
+                ])]
+            }
+        ))
+
         list.append(archiveCreateZipAction())
         list.append(archiveCreateGzipAction())
         return list
@@ -758,6 +899,121 @@ public final class FormatRegistry {
         ) { input, output in
             [Invocation(toolName: "ffmpeg", arguments: ["-nostdin", "-n", "-i", input.path, "-map_metadata", "-1", "-c", "copy", output.path])]
         })
+
+        // Audio Tools (Phase 9 Step 4)
+        list.append(ConversionAction(
+            id: "audio.normalize",
+            displayName: "Normalize Audio (EBU R128)",
+            outputExtension: inputExt,
+            isAdvanced: true,
+            category: .audio,
+            iconName: "speaker.wave.3",
+            customRunner: { input, output, params, runner, jobId in
+                try MediaTools.shared.normalizeAudio(input: input, output: output, runner: runner, jobId: jobId)
+            }
+        ))
+
+        list.append(ConversionAction(
+            id: "audio.channels",
+            displayName: "Change Audio Channels",
+            outputExtension: inputExt,
+            isAdvanced: true,
+            category: .audio,
+            iconName: "hifispeaker.2",
+            parameters: [
+                ActionParameter(
+                    id: "channels",
+                    label: "Audio Channels",
+                    kind: .choice(options: ["mono", "stereo"]),
+                    defaultValue: .text("stereo")
+                )
+            ],
+            buildInvocations: { input, output, params in
+                let ch = (params["channels"]?.asString == "mono") ? 1 : 2
+                return [Invocation(toolName: "ffmpeg", arguments: [
+                    "-nostdin", "-n", "-i", input.path,
+                    "-ac", "\(ch)",
+                    output.path
+                ])]
+            }
+        ))
+
+        list.append(ConversionAction(
+            id: "audio.bleep",
+            displayName: "Bleep Out Audio Ranges",
+            outputExtension: inputExt,
+            isAdvanced: true,
+            category: .audio,
+            iconName: "waveform.badge.exclamationmark",
+            parameters: [
+                ActionParameter(
+                    id: "ranges",
+                    label: "Time Ranges (e.g. 0.5-1.0, 2.0-3.0)",
+                    kind: .text,
+                    defaultValue: .text("0.5-1.0")
+                )
+            ],
+            buildInvocations: { input, output, params in
+                let raw = params["ranges"]?.asString ?? "0.5-1.0"
+                let rangeParts = raw.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+                var conds: [String] = []
+                for rp in rangeParts {
+                    let sep: Character = rp.contains(":") ? ":" : "-"
+                    let sub = rp.split(separator: sep).map(String.init)
+                    if sub.count == 2, let s = Double(sub[0]), let e = Double(sub[1]) {
+                        conds.append("between(t,\(s),\(e))")
+                    }
+                }
+                let cond = conds.isEmpty ? "between(t,0,0)" : conds.joined(separator: "+")
+                let totalDur = Compressor.shared.probeDuration(url: input)
+                let filterStr = "[0:a]volume=enable='\(cond)':volume=0[v0];sine=f=1000:d=\(totalDur)[b];[b]volume=enable='\(cond)':volume=0.5:volume=0[b1];[v0][b1]amix=inputs=2:duration=first[out]"
+                return [Invocation(toolName: "ffmpeg", arguments: [
+                    "-nostdin", "-n", "-i", input.path,
+                    "-filter_complex", filterStr,
+                    "-map", "[out]",
+                    output.path
+                ])]
+            }
+        ))
+
+        let audioTrimParams = [
+            ActionParameter(
+                id: "start",
+                label: "Start Time (seconds)",
+                kind: .number,
+                defaultValue: .number(0.0),
+                minValue: 0.0
+            ),
+            ActionParameter(
+                id: "end",
+                label: "End Time (seconds)",
+                kind: .number,
+                defaultValue: .number(10.0),
+                minValue: 0.0
+            )
+        ]
+        list.append(ConversionAction(
+            id: "audio.trim",
+            displayName: "Trim Audio",
+            outputExtension: inputExt,
+            isAdvanced: true,
+            category: .audio,
+            iconName: "scissors",
+            parameters: audioTrimParams,
+            buildInvocations: { input, output, params in
+                let start = params["start"]?.asDouble ?? 0.0
+                let end = params["end"]?.asDouble ?? 10.0
+                let startStr = FormatRegistry.formatFfmpegTimestamp(start)
+                let endStr = FormatRegistry.formatFfmpegTimestamp(end)
+                return [Invocation(toolName: "ffmpeg", arguments: [
+                    "-nostdin", "-n", "-i", input.path,
+                    "-ss", startStr,
+                    "-to", endStr,
+                    "-c", "copy",
+                    output.path
+                ])]
+            }
+        ))
 
         list.append(archiveCreateZipAction())
         list.append(archiveCreateGzipAction())

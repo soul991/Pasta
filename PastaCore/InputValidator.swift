@@ -37,6 +37,18 @@ public struct InputValidator {
         }
     }
 
+    public static func validateCropWithinBounds(width: Int, height: Int, x: Int, y: Int, containerWidth: Int, containerHeight: Int) throws {
+        guard x >= 0 && y >= 0 else {
+            throw PastaError.invalidInput("Crop rectangle origin must be non-negative: (\(x), \(y))")
+        }
+        guard width > 0 && height > 0 else {
+            throw PastaError.invalidInput("Crop rectangle dimensions must be positive: (\(width)x\(height))")
+        }
+        if x + width > containerWidth || y + height > containerHeight {
+            throw PastaError.invalidInput("Crop rectangle (\(width)x\(height)+\(x)+\(y)) exceeds container dimensions (\(containerWidth)x\(containerHeight))")
+        }
+    }
+
     public static func validatePDFMerge(files: [URL]) throws {
         guard files.count >= 2 else {
             throw PastaError.invalidInput("Merging PDFs requires at least 2 PDF files (received \(files.count))")
