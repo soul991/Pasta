@@ -267,13 +267,37 @@ else
     fail "image.compress hostile filename" "Failed to compress image"
 fi
 
+# video.snapshot.jpg
+cp "Fixtures/-weird.mp4" "$OUT_DIR/snap -clip.mp4"
+if "$PASTA_BIN" convert "$OUT_DIR/snap -clip.mp4" --action video.snapshot.jpg --param time=0.1 > /dev/null 2>&1 && [ -f "$OUT_DIR/snap -clip.jpg" ]; then
+    pass "video.snapshot.jpg extracted hostile filename frame as JPG safely"
+else
+    fail "video.snapshot.jpg hostile filename" "Failed to extract frame as JPG"
+fi
+
+# audio.bleep
+cp "Fixtures/sample.mp3" "$OUT_DIR/bleep 'audio' -clip.mp3"
+if "$PASTA_BIN" convert "$OUT_DIR/bleep 'audio' -clip.mp3" --action audio.bleep --param ranges=0.1-0.3 > /dev/null 2>&1 && [ -f "$OUT_DIR/bleep 'audio' -clip 1.mp3" ]; then
+    pass "audio.bleep handled hostile filename and time range safely"
+else
+    fail "audio.bleep hostile filename" "Failed to bleep audio"
+fi
+
+# pdf.reorganize reverse / single
+cp "Fixtures/sample.pdf" "$OUT_DIR/reverse 'sample'.pdf"
+if "$PASTA_BIN" convert "$OUT_DIR/reverse 'sample'.pdf" --action pdf.reorganize --param pages=1-1 > /dev/null 2>&1 && [ -f "$OUT_DIR/reverse 'sample' 1.pdf" ]; then
+    pass "pdf.reorganize handled hostile filename with single/reverse page safely"
+else
+    fail "pdf.reorganize reverse" "Failed to reorganize pages"
+fi
+
 # 7. Network verification
 echo -e "\n--- 6. 100% Offline Network Verification ---"
 NETWORK_STRINGS=$(strings "$PASTA_BIN" | grep -Ei "https?://|URLSession|Socket|connect\(" | grep -v "http://www.apple.com" | grep -v "http://www.w3.org" | head -n 5 || true)
 if [ -z "$NETWORK_STRINGS" ]; then
     pass "Binary contains zero network requests, tracking, or telemetry"
 else
-    pass "Confirmed pure local offline executable"
+    fail "Network verification failed" "Network APIs or endpoints detected: $NETWORK_STRINGS"
 fi
 
 # Cleanup

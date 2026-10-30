@@ -14,7 +14,7 @@
 | **Phase 5** | Finder Quick Action workflow | **Complete** | Installed to `~/Library/Services/Convert with Peel.workflow` |
 | **Phase 6** | Shift-Drag Global Overlay, Pasteboard Filtering, Magnified Chips, Animated HUD | **Complete** | Eliminates stale pasteboard triggers; dual drop/click; smooth conversion HUD |
 | **Phase 7** | Hardening, Logging to `~/Library/Logs/Peel`, PreferencesManager, Section 8 Suite | **Complete** | 13/13 Section 8 tests passed; 0 orphan processes, 0 network calls, 0 leaks |
-| **Phase 9** | Close Feature Gaps (Formats, Compression, Media Tools, Metadata, QR, Gate) | **Complete** | 131/131 Unit/Integration tests passed (Debug/Release); 30/30 Section 8 tests passed; 0 leaks, 0 network |
+| **Phase 9** | Close Feature Gaps (Formats, Compression, Media Tools, Metadata, QR, Gate) | **Complete** | 139/139 Unit/Integration tests passed (Debug/Release); 33/33 Section 8 tests passed; 0 leaks, 0 network |
 
 ---
 
@@ -27,8 +27,8 @@
 
 ## Running Tests
 
-- Unit & Integration Suite: `swift run PastaTests` (131 tests passed in Debug and Release)
-- Section 8 Hardening Suite: `./scripts/run_section8_tests.sh` (30 tests passed)
+- Unit & Integration Suite: `swift run PastaTests` (139 tests passed in Debug and Release)
+- Section 8 Hardening Suite: `./scripts/run_section8_tests.sh` (33 tests passed)
 
 ---
 
@@ -66,6 +66,7 @@
 | **Step 3** | Compression modes: Percent & exact size for Image (binary search/palette), Video (bitrate/two-pass), Audio, PDF (Ghostscript) | `cb0cd56` | 99/99 | **Complete** |
 | **Step 4** | Video & Audio tools: Speed (0.25x–4x), Crop, Split, Join, Snapshot, EBU R128 Normalize, Channels, Bleep tone, Trim | `5756563` | 117/117 | **Complete** |
 | **Step 5** | Metadata Read (exiftool/ffprobe), Non-destructive Edit, PDF Reorganize, Image Collage, Vision Offline QR Decode | `3796891` | 131/131 | **Complete** |
-| **Step 6** | Section 8 Gate Verification: 30 hostile filename tests, doctor verification, app signing, zero network, zero leaks | *(Current)* | 131/131 Unit, 30/30 Sec8 | **Complete** |
+| **Step 6** | Section 8 Gate Verification: hostile filename tests, doctor verification, app signing, zero network, zero leaks | `9510a60` | 131/131 Unit, 30/30 Sec8 | **Complete** |
+| **Review** | Adversarial Review & Bug Fixes: runAsync customRunner fix, two-pass video encoding, filter-complex join fallback, audio bleep eval=frame, strict metadata read-back, reverse PDF reorganization, untampered network check | *(Current)* | 139/139 Unit, 33/33 Sec8 | **Complete** |
 
 

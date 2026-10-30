@@ -5,18 +5,13 @@ public final class MediaTools {
     public init() {}
 
     public func probeDimensions(url: URL) -> (width: Int, height: Int)? {
-        guard let ffprobe = ToolLocator.shared.findTool("ffprobe") else { return nil }
-        let p = Process()
-        p.executableURL = ffprobe
-        p.arguments = ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=s=x:p=0", url.path]
-        let pipe = Pipe()
-        p.standardOutput = pipe
-        p.standardError = Pipe()
+        let inv = Invocation(
+            toolName: "ffprobe",
+            arguments: ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=s=x:p=0", "--", url.path]
+        )
         do {
-            try p.run()
-            p.waitUntilExit()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            guard let str = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) else { return nil }
+            let (outStr, _) = try JobRunner.shared.executeCapture(invocation: inv, timeoutSeconds: 30)
+            let str = outStr.trimmingCharacters(in: .whitespacesAndNewlines)
             let parts = str.split(separator: "x").compactMap { Int($0) }
             return parts.count == 2 ? (parts[0], parts[1]) : nil
         } catch {
@@ -106,12 +101,12 @@ public final class MediaTools {
         let listFile = scratchDir.appendingPathComponent("concat_list.txt")
         var content = ""
         for inp in inputs {
-            let escapedPath = inp.path.replacingOccurrences(of: "'", with: "'\\''")
+            let escapedPath = inp.path.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "'", with: "\\'")
             content += "file '\(escapedPath)'\n"
         }
         try content.write(to: listFile, atomically: true, encoding: .utf8)
 
-        // Try copy demuxer first
+        // Try copy demuxer first for maximum speed
         let copyInv = Invocation(
             toolName: "ffmpeg",
             arguments: [
@@ -126,21 +121,26 @@ public final class MediaTools {
         do {
             try runner.execute(invocation: copyInv, jobId: jobId)
         } catch {
-            // Re-encode fallback
+            // Re-encode fallback using concat filter (handles differing video/audio codecs and sample rates)
             if fm.fileExists(atPath: output.path) {
                 try? fm.removeItem(at: output)
             }
+            var reencodeArgs = ["-nostdin", "-y"]
+            for inp in inputs {
+                reencodeArgs.append(contentsOf: ["-i", inp.path])
+            }
+            let filterGraph = inputs.indices.map { "[\($0):v][\($0):a]" }.joined() + "concat=n=\(inputs.count):v=1:a=1[v][a]"
+            reencodeArgs.append(contentsOf: [
+                "-filter_complex", filterGraph,
+                "-map", "[v]",
+                "-map", "[a]",
+                "-c:v", "libx264", "-crf", "23", "-preset", "medium",
+                "-c:a", "aac",
+                output.path
+            ])
             let reencodeInv = Invocation(
                 toolName: "ffmpeg",
-                arguments: [
-                    "-nostdin", "-y",
-                    "-f", "concat",
-                    "-safe", "0",
-                    "-i", listFile.path,
-                    "-c:v", "libx264", "-crf", "23", "-preset", "medium",
-                    "-c:a", "aac",
-                    output.path
-                ]
+                arguments: reencodeArgs
             )
             try runner.execute(invocation: reencodeInv, jobId: jobId)
         }
@@ -152,22 +152,12 @@ public final class MediaTools {
         runner: JobRunner,
         jobId: UUID
     ) throws {
-        guard let ffmpeg = ToolLocator.shared.findTool("ffmpeg") else {
-            throw PastaError.missingTool("ffmpeg")
-        }
-
-        // Pass 1: measure
-        let p1 = Process()
-        p1.executableURL = ffmpeg
-        p1.arguments = ["-nostdin", "-i", input.path, "-af", "loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json", "-f", "null", "-"]
-        let stderrPipe = Pipe()
-        p1.standardOutput = Pipe()
-        p1.standardError = stderrPipe
-        try? p1.run()
-        p1.waitUntilExit()
-
-        let errData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-        let errStr = String(data: errData, encoding: .utf8) ?? ""
+        // Pass 1: measure integrated loudness via JobRunner
+        let p1Inv = Invocation(
+            toolName: "ffmpeg",
+            arguments: ["-nostdin", "-i", input.path, "-af", "loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json", "-f", "null", "-"]
+        )
+        let (_, errStr) = try runner.executeCapture(invocation: p1Inv, jobId: jobId)
 
         var measuredI = "-16.0"
         var measuredTP = "-1.5"

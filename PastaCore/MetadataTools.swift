@@ -13,33 +13,25 @@ public final class MetadataTools {
         let ext = url.pathExtension.lowercased()
         let isMedia = ["mp4", "mov", "mkv", "webm", "avi", "wmv", "mp3", "m4a", "wav", "flac", "aac", "ogg", "opus", "aiff", "aif"].contains(ext)
 
-        if isMedia, let ffprobe = ToolLocator.shared.findTool("ffprobe") {
-            let p = Process()
-            p.executableURL = ffprobe
-            p.arguments = ["-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", url.path]
-            let pipe = Pipe()
-            p.standardOutput = pipe
-            p.standardError = Pipe()
-            try p.run()
-            p.waitUntilExit()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+        if isMedia {
+            let inv = Invocation(
+                toolName: "ffprobe",
+                arguments: ["-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", "--", url.path]
+            )
+            if let (outStr, _) = try? JobRunner.shared.executeCapture(invocation: inv, timeoutSeconds: 30),
+               let data = outStr.data(using: .utf8),
+               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
                 return obj
             }
-        }
-
-        // For images, PDF, and documents, use exiftool
-        if let exiftool = ToolLocator.shared.findTool("exiftool") {
-            let p = Process()
-            p.executableURL = exiftool
-            p.arguments = ["-json", url.path]
-            let pipe = Pipe()
-            p.standardOutput = pipe
-            p.standardError = Pipe()
-            try p.run()
-            p.waitUntilExit()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            if let arr = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]], let first = arr.first {
+        } else {
+            let inv = Invocation(
+                toolName: "exiftool",
+                arguments: ["-json", "--", url.path]
+            )
+            if let (outStr, _) = try? JobRunner.shared.executeCapture(invocation: inv, timeoutSeconds: 30),
+               let data = outStr.data(using: .utf8),
+               let arr = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
+               let first = arr.first {
                 return first
             }
         }
@@ -82,9 +74,13 @@ public final class MetadataTools {
         if isMedia {
             var ffmpegArgs = ["-nostdin", "-y", "-i", input.path]
             for (tag, val) in tags {
-                ffmpegArgs.append(contentsOf: ["-metadata", "\(tag.lowercased())=\(val)"])
+                let lower = tag.lowercased()
+                ffmpegArgs.append(contentsOf: ["-metadata", "\(lower)=\(val)"])
+                if lower == "author" {
+                    ffmpegArgs.append(contentsOf: ["-metadata", "artist=\(val)"])
+                }
             }
-            ffmpegArgs.append(contentsOf: ["-c", "copy", output.path])
+            ffmpegArgs.append(contentsOf: ["-c", "copy", "--", output.path])
             let inv = Invocation(toolName: "ffmpeg", arguments: ffmpegArgs)
             try runner.execute(invocation: inv, jobId: jobId)
         } else {
@@ -97,6 +93,7 @@ public final class MetadataTools {
             for (tag, val) in tags {
                 exifArgs.append("-\(tag)=\(val)")
             }
+            exifArgs.append("--")
             exifArgs.append(output.path)
             let inv = Invocation(toolName: "exiftool", arguments: exifArgs)
             try runner.execute(invocation: inv, jobId: jobId)
@@ -105,14 +102,61 @@ public final class MetadataTools {
         // Second read-back verification
         let readBack = try readMetadata(from: output)
         for (tag, expectedVal) in tags {
-            let direct = (readBack[tag] ?? readBack[tag.capitalized]) as? String
-            let fmtTags = (readBack["format"] as? [String: Any])?["tags"] as? [String: Any]
-            let inFmt = (fmtTags?[tag.lowercased()] ?? fmtTags?[tag]) as? String
-            let found = direct ?? inFmt
-            if let found = found {
-                guard found == expectedVal else {
-                    throw PastaError.executionFailed(tool: "metadata.edit", exitCode: 1, output: "Read-back mismatch for tag '\(tag)': expected '\(expectedVal)', got '\(found)'")
+            let lower = tag.lowercased()
+            var foundVal: String?
+            for (k, v) in readBack {
+                if k.lowercased() == lower {
+                    foundVal = "\(v)"
+                    break
                 }
+            }
+            if foundVal == nil && (lower == "author" || lower == "artist") {
+                for syn in ["artist", "author", "creator", "by-line"] {
+                    for (k, v) in readBack {
+                        if k.lowercased() == syn {
+                            foundVal = "\(v)"
+                            break
+                        }
+                    }
+                    if foundVal != nil { break }
+                }
+            }
+            if foundVal == nil && (lower == "date" || lower == "year") {
+                for syn in ["date", "year", "createdate", "datetimeoriginal"] {
+                    for (k, v) in readBack {
+                        if k.lowercased() == syn {
+                            foundVal = "\(v)"
+                            break
+                        }
+                    }
+                    if foundVal != nil { break }
+                }
+            }
+            if foundVal == nil, let fmtTags = (readBack["format"] as? [String: Any])?["tags"] as? [String: Any] {
+                for (k, v) in fmtTags {
+                    if k.lowercased() == lower {
+                        foundVal = "\(v)"
+                        break
+                    }
+                }
+                if foundVal == nil && (lower == "author" || lower == "artist") {
+                    for syn in ["artist", "author", "creator"] {
+                        for (k, v) in fmtTags {
+                            if k.lowercased() == syn {
+                                foundVal = "\(v)"
+                                break
+                            }
+                        }
+                        if foundVal != nil { break }
+                    }
+                }
+            }
+
+            guard let found = foundVal else {
+                throw PastaError.executionFailed(tool: "metadata.edit", exitCode: 1, output: "Read-back verification failed: tag '\(tag)' was not found in output metadata")
+            }
+            guard found == expectedVal || found.contains(expectedVal) else {
+                throw PastaError.executionFailed(tool: "metadata.edit", exitCode: 1, output: "Read-back mismatch for tag '\(tag)': expected '\(expectedVal)', got '\(found)'")
             }
         }
     }

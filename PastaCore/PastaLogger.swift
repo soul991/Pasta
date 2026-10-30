@@ -42,6 +42,10 @@ public final class PastaLogger {
         log(message, level: "INFO")
     }
 
+    public func warning(_ message: String) {
+        log(message, level: "WARN")
+    }
+
     public func error(_ message: String) {
         log(message, level: "ERROR")
     }

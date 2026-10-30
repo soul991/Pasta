@@ -151,9 +151,19 @@ public final class JobRunner {
 
         // Verify and move output to final destination
         if isFolder {
-            let contents = (try? fm.contentsOfDirectory(at: tempWorkingOutputURL, includingPropertiesForKeys: nil)) ?? []
+            let contents: [URL]
+            do {
+                contents = try fm.contentsOfDirectory(at: tempWorkingOutputURL, includingPropertiesForKeys: nil)
+            } catch {
+                throw PastaError.executionFailed(tool: "engine", exitCode: 1, output: "Failed to read output directory contents: \(error.localizedDescription)")
+            }
             if contents.isEmpty {
-                let allTemp = (try? fm.contentsOfDirectory(at: tempDir, includingPropertiesForKeys: nil)) ?? []
+                let allTemp: [URL]
+                do {
+                    allTemp = try fm.contentsOfDirectory(at: tempDir, includingPropertiesForKeys: nil)
+                } catch {
+                    throw PastaError.executionFailed(tool: "engine", exitCode: 1, output: "Failed to inspect scratch directory: \(error.localizedDescription)")
+                }
                 let looseItems = allTemp.filter { $0.lastPathComponent != "output_items" }
                 if looseItems.isEmpty {
                     throw PastaError.outputNotFound(finalDestinationURL.path)
@@ -165,6 +175,15 @@ public final class JobRunner {
             }
             try fm.moveItem(at: tempWorkingOutputURL, to: finalDestinationURL)
             return finalDestinationURL
+        }
+
+        if !fm.fileExists(atPath: tempWorkingOutputURL.path) {
+            let looseFiles = (try? fm.contentsOfDirectory(at: tempDir, includingPropertiesForKeys: nil))?.filter {
+                $0.lastPathComponent != "output_items" && $0.pathExtension.lowercased() == action.outputExtension.lowercased()
+            } ?? []
+            if looseFiles.count == 1 {
+                try? fm.moveItem(at: looseFiles[0], to: tempWorkingOutputURL)
+            }
         }
 
         guard fm.fileExists(atPath: tempWorkingOutputURL.path) else {
@@ -287,9 +306,19 @@ public final class JobRunner {
 
         switch action.outputKind {
         case .folder:
-            let contents = (try? fm.contentsOfDirectory(at: tempWorkingOutputURL, includingPropertiesForKeys: nil)) ?? []
+            let contents: [URL]
+            do {
+                contents = try fm.contentsOfDirectory(at: tempWorkingOutputURL, includingPropertiesForKeys: nil)
+            } catch {
+                throw PastaError.executionFailed(tool: "engine", exitCode: 1, output: "Failed to read batch output directory contents: \(error.localizedDescription)")
+            }
             if contents.isEmpty {
-                let allTemp = (try? fm.contentsOfDirectory(at: tempDir, includingPropertiesForKeys: nil)) ?? []
+                let allTemp: [URL]
+                do {
+                    allTemp = try fm.contentsOfDirectory(at: tempDir, includingPropertiesForKeys: nil)
+                } catch {
+                    throw PastaError.executionFailed(tool: "engine", exitCode: 1, output: "Failed to inspect batch scratch directory: \(error.localizedDescription)")
+                }
                 let looseItems = allTemp.filter { $0.lastPathComponent != "output_items" }
                 if looseItems.isEmpty {
                     throw PastaError.outputNotFound(finalDestinationURL.path)
@@ -302,6 +331,14 @@ public final class JobRunner {
             try fm.moveItem(at: tempWorkingOutputURL, to: finalDestinationURL)
             return finalDestinationURL
         case .file:
+            if !fm.fileExists(atPath: tempWorkingOutputURL.path) {
+                let looseFiles = (try? fm.contentsOfDirectory(at: tempDir, includingPropertiesForKeys: nil))?.filter {
+                    $0.lastPathComponent != "output_items" && $0.pathExtension.lowercased() == action.outputExtension.lowercased()
+                } ?? []
+                if looseFiles.count == 1 {
+                    try? fm.moveItem(at: looseFiles[0], to: tempWorkingOutputURL)
+                }
+            }
             guard fm.fileExists(atPath: tempWorkingOutputURL.path) else {
                 throw PastaError.outputNotFound(finalDestinationURL.path)
             }
@@ -344,7 +381,8 @@ private final class PipeCollector {
 }
 
 extension JobRunner {
-    public func execute(invocation: Invocation, timeoutSeconds: TimeInterval? = nil, jobId: UUID = UUID()) throws {
+    @discardableResult
+    public func executeCapture(invocation: Invocation, timeoutSeconds: TimeInterval? = nil, jobId: UUID = UUID()) throws -> (stdout: String, stderr: String) {
         processLock.lock()
         if cancelledJobIds.contains(jobId) {
             processLock.unlock()
@@ -473,15 +511,21 @@ extension JobRunner {
         }
 
         let exitCode = process.terminationStatus
+        let (outData, errData) = collector.results
+        let outStr = String(data: outData, encoding: .utf8) ?? ""
+        let errStr = String(data: errData, encoding: .utf8) ?? ""
+
         if exitCode != 0 {
-            let (outData, errData) = collector.results
-            let outStr = String(data: outData, encoding: .utf8) ?? ""
-            let errStr = String(data: errData, encoding: .utf8) ?? ""
             let msg = errStr.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 ? outStr.trimmingCharacters(in: .whitespacesAndNewlines)
                 : errStr.trimmingCharacters(in: .whitespacesAndNewlines)
             throw PastaError.executionFailed(tool: invocation.toolName, exitCode: exitCode, output: msg)
         }
+        return (outStr, errStr)
+    }
+
+    public func execute(invocation: Invocation, timeoutSeconds: TimeInterval? = nil, jobId: UUID = UUID()) throws {
+        _ = try executeCapture(invocation: invocation, timeoutSeconds: timeoutSeconds, jobId: jobId)
     }
 
     @discardableResult
@@ -546,19 +590,33 @@ extension JobRunner {
                 tempWorkingOutputURL = tempDir.appendingPathComponent("output_result.\(ext)")
             }
 
-            let invocations = action.buildInvocationsWithParams(input, tempWorkingOutputURL, effectiveParams)
-            guard !invocations.isEmpty else {
-                throw PastaError.executionFailed(tool: "engine", exitCode: 1, output: "No invocations built for action \(action.id)")
-            }
+            if let custom = action.customRunner {
+                try custom(input, tempWorkingOutputURL, effectiveParams, self, jobId)
+            } else {
+                let invocations = action.buildInvocationsWithParams(input, tempWorkingOutputURL, effectiveParams)
+                guard !invocations.isEmpty else {
+                    throw PastaError.executionFailed(tool: "engine", exitCode: 1, output: "No invocations built for action \(action.id)")
+                }
 
-            for inv in invocations {
-                try await executeAsync(invocation: inv, timeoutSeconds: timeoutSeconds, jobId: jobId)
+                for inv in invocations {
+                    try await executeAsync(invocation: inv, timeoutSeconds: timeoutSeconds, jobId: jobId)
+                }
             }
 
             if isFolder {
-                let contents = (try? fm.contentsOfDirectory(at: tempWorkingOutputURL, includingPropertiesForKeys: nil)) ?? []
+                let contents: [URL]
+                do {
+                    contents = try fm.contentsOfDirectory(at: tempWorkingOutputURL, includingPropertiesForKeys: nil)
+                } catch {
+                    throw PastaError.executionFailed(tool: "engine", exitCode: 1, output: "Failed to read async output directory contents: \(error.localizedDescription)")
+                }
                 if contents.isEmpty {
-                    let allTemp = (try? fm.contentsOfDirectory(at: tempDir, includingPropertiesForKeys: nil)) ?? []
+                    let allTemp: [URL]
+                    do {
+                        allTemp = try fm.contentsOfDirectory(at: tempDir, includingPropertiesForKeys: nil)
+                    } catch {
+                        throw PastaError.executionFailed(tool: "engine", exitCode: 1, output: "Failed to inspect async scratch directory: \(error.localizedDescription)")
+                    }
                     let looseItems = allTemp.filter { $0.lastPathComponent != "output_items" }
                     if looseItems.isEmpty {
                         throw PastaError.outputNotFound(finalDestinationURL.path)
@@ -570,6 +628,15 @@ extension JobRunner {
                 }
                 try fm.moveItem(at: tempWorkingOutputURL, to: finalDestinationURL)
                 return finalDestinationURL
+            }
+
+            if !fm.fileExists(atPath: tempWorkingOutputURL.path) {
+                let looseFiles = (try? fm.contentsOfDirectory(at: tempDir, includingPropertiesForKeys: nil))?.filter {
+                    $0.lastPathComponent != "output_items" && $0.pathExtension.lowercased() == action.outputExtension.lowercased()
+                } ?? []
+                if looseFiles.count == 1 {
+                    try? fm.moveItem(at: looseFiles[0], to: tempWorkingOutputURL)
+                }
             }
 
             guard fm.fileExists(atPath: tempWorkingOutputURL.path) else {

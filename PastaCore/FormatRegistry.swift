@@ -80,6 +80,12 @@ public final class FormatRegistry {
         if actionID == "archive.create.gzip" {
             return actions.first(where: { $0.id == "archive.create.gzip" || $0.id == "archive.gzip" })
         }
+        if actionID == "video.snapshot.png" {
+            return actions.first(where: { $0.id == "video.snapshot" || $0.id == "video.snapshot.png" })
+        }
+        if actionID == "video.snapshot.jpeg" {
+            return actions.first(where: { $0.id == "video.snapshot.jpg" })
+        }
         return nil
     }
 
@@ -323,7 +329,7 @@ public final class FormatRegistry {
             category: .metadata,
             iconName: "lock.shield"
         ) { input, output in
-            [Invocation(toolName: "exiftool", arguments: ["-all=", "-o", output.path, input.path])]
+            [Invocation(toolName: "exiftool", arguments: ["-all=", "-o", output.path, "--", input.path])]
         })
 
         list.append(ConversionAction(
@@ -810,8 +816,38 @@ public final class FormatRegistry {
 
         list.append(ConversionAction(
             id: "video.snapshot",
-            displayName: "Snapshot Frame",
+            displayName: "Snapshot Frame (PNG)",
             outputExtension: "png",
+            isAdvanced: true,
+            category: .image,
+            iconName: "camera",
+            parameters: [
+                ActionParameter(
+                    id: "time",
+                    label: "Snapshot Time (seconds)",
+                    kind: .number,
+                    defaultValue: .number(0.0),
+                    minValue: 0.0
+                )
+            ],
+            buildInvocations: { input, output, params in
+                let t = params["time"]?.asDouble ?? 0.0
+                let tStr = FormatRegistry.formatFfmpegTimestamp(t)
+                return [Invocation(toolName: "ffmpeg", arguments: [
+                    "-nostdin", "-n",
+                    "-ss", tStr,
+                    "-i", input.path,
+                    "-update", "1",
+                    "-frames:v", "1",
+                    output.path
+                ])]
+            }
+        ))
+
+        list.append(ConversionAction(
+            id: "video.snapshot.jpg",
+            displayName: "Snapshot Frame (JPG)",
+            outputExtension: "jpg",
             isAdvanced: true,
             category: .image,
             iconName: "camera",
@@ -1052,9 +1088,9 @@ public final class FormatRegistry {
                         conds.append("between(t,\(s),\(e))")
                     }
                 }
-                let cond = conds.isEmpty ? "between(t,0,0)" : conds.joined(separator: "+")
+                let inCond = conds.isEmpty ? "0" : conds.joined(separator: "+")
                 let totalDur = Compressor.shared.probeDuration(url: input)
-                let filterStr = "[0:a]volume=enable='\(cond)':volume=0[v0];sine=f=1000:d=\(totalDur)[b];[b]volume=enable='\(cond)':volume=0.5:volume=0[b1];[v0][b1]amix=inputs=2:duration=first[out]"
+                let filterStr = "[0:a]volume='if(\(inCond),0,1)':eval=frame[v0];sine=f=1000:d=\(totalDur)[b];[b]volume='if(\(inCond),0.5,0)':eval=frame[b1];[v0][b1]amix=inputs=2:duration=first:dropout_transition=0[out]"
                 return [Invocation(toolName: "ffmpeg", arguments: [
                     "-nostdin", "-n", "-i", input.path,
                     "-filter_complex", filterStr,
@@ -1182,9 +1218,9 @@ public final class FormatRegistry {
                 // Two step pipeline: copy to temp, exiftool clean, then qpdf linearize to output
                 let tempCopy = output.deletingLastPathComponent().appendingPathComponent("temp_pdf_clean.pdf")
                 return [
-                    Invocation(toolName: "ditto", arguments: [input.path, tempCopy.path]),
-                    Invocation(toolName: "exiftool", arguments: ["-all=", "-overwrite_original", tempCopy.path]),
-                    Invocation(toolName: "qpdf", arguments: [tempCopy.path, output.path])
+                    Invocation(toolName: "ditto", arguments: ["--", input.path, tempCopy.path]),
+                    Invocation(toolName: "exiftool", arguments: ["-all=", "-overwrite_original", "--", tempCopy.path]),
+                    Invocation(toolName: "qpdf", arguments: ["--", tempCopy.path, output.path])
                 ]
             },
             ConversionAction(
@@ -1236,7 +1272,7 @@ public final class FormatRegistry {
 
     // MARK: - Documents
     private func docxActions(for url: URL) -> [ConversionAction] {
-        return [
+        var actions: [ConversionAction] = [
             ConversionAction(
                 id: "docx.to.md",
                 displayName: "Convert to Markdown",
@@ -1276,10 +1312,26 @@ public final class FormatRegistry {
                 iconName: "book"
             ) { input, output in
                 [Invocation(toolName: "pandoc", arguments: ["-o", output.path, input.path])]
-            },
-            archiveCreateZipAction(),
-            archiveCreateGzipAction()
+            }
         ]
+
+        if ToolLocator.shared.isOptionalToolAvailable("soffice") {
+            actions.append(ConversionAction(
+                id: "docx.to.pdf",
+                displayName: "Convert to PDF",
+                outputExtension: "pdf",
+                isAdvanced: false,
+                category: .document,
+                iconName: "doc.richtext"
+            ) { input, output in
+                let outDir = output.deletingLastPathComponent().path
+                return [Invocation(toolName: "soffice", arguments: ["--headless", "--convert-to", "pdf", input.path, "--outdir", outDir])]
+            })
+        }
+
+        actions.append(archiveCreateZipAction())
+        actions.append(archiveCreateGzipAction())
+        return actions
     }
 
     private func markdownActions(for url: URL) -> [ConversionAction] {

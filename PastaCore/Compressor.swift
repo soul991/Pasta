@@ -19,22 +19,19 @@ public final class Compressor {
     }
 
     public func probeDuration(url: URL) -> Double {
-        guard let ffprobeURL = ToolLocator.shared.findTool("ffprobe") else { return 2.0 }
-        let proc = Process()
-        proc.executableURL = ffprobeURL
-        proc.arguments = ["-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", url.path]
-        let pipe = Pipe()
-        proc.standardOutput = pipe
-        proc.standardError = Pipe()
         do {
-            try proc.run()
-            proc.waitUntilExit()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            if let str = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
-               let dur = Double(str), dur > 0 {
+            let inv = Invocation(
+                toolName: "ffprobe",
+                arguments: ["-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", "--", url.path]
+            )
+            let (outStr, _) = try JobRunner.shared.executeCapture(invocation: inv, timeoutSeconds: 30)
+            let trimmed = outStr.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let dur = Double(trimmed), dur > 0 {
                 return dur
             }
-        } catch {}
+        } catch {
+            PastaLogger.shared.warning("probeDuration failed for '\(url.lastPathComponent)': \(error.localizedDescription)")
+        }
         return 2.0
     }
 
@@ -46,8 +43,13 @@ public final class Compressor {
         jobId: UUID
     ) throws {
         let fm = FileManager.default
-        let attrs = try? fm.attributesOfItem(atPath: input.path)
-        let sourceSize = (attrs?[.size] as? Int64) ?? 0
+        let attrs: [FileAttributeKey: Any]
+        do {
+            attrs = try fm.attributesOfItem(atPath: input.path)
+        } catch {
+            throw PastaError.invalidInput("Cannot read attributes for file '\(input.path)': \(error.localizedDescription)")
+        }
+        let sourceSize = (attrs[.size] as? Int64) ?? 0
         let target = Self.targetBytes(for: sourceSize, parameters: parameters)
 
         let scratchDir = try OutputPlanner.makeTempDirectory()
@@ -126,8 +128,13 @@ public final class Compressor {
         jobId: UUID
     ) throws {
         let fm = FileManager.default
-        let attrs = try? fm.attributesOfItem(atPath: input.path)
-        let sourceSize = (attrs?[.size] as? Int64) ?? 0
+        let attrs: [FileAttributeKey: Any]
+        do {
+            attrs = try fm.attributesOfItem(atPath: input.path)
+        } catch {
+            throw PastaError.invalidInput("Cannot read attributes for file '\(input.path)': \(error.localizedDescription)")
+        }
+        let sourceSize = (attrs[.size] as? Int64) ?? 0
         let target = Self.targetBytes(for: sourceSize, parameters: parameters)
 
         let duration = probeDuration(url: input)
@@ -139,17 +146,56 @@ public final class Compressor {
         let scratchDir = try OutputPlanner.makeTempDirectory()
         defer { try? fm.removeItem(at: scratchDir) }
 
+        let passlogPrefix = scratchDir.appendingPathComponent("passlog").path
         let tempOut = scratchDir.appendingPathComponent("compressed.mp4")
-        let inv = Invocation(
+
+        // Two-pass encoding for optimal bitrate budget distribution
+        let pass1Inv = Invocation(
             toolName: "ffmpeg",
             arguments: [
-                "-y", "-nostdin", "-i", input.path,
+                "-y", "-nostdin",
+                "-i", input.path,
                 "-c:v", "libx264", "-b:v", "\(Int(videoBitrate))",
+                "-pass", "1",
+                "-passlogfile", passlogPrefix,
+                "-an",
+                "-f", "null",
+                "/dev/null"
+            ]
+        )
+        let pass2Inv = Invocation(
+            toolName: "ffmpeg",
+            arguments: [
+                "-y", "-nostdin",
+                "-i", input.path,
+                "-c:v", "libx264", "-b:v", "\(Int(videoBitrate))",
+                "-pass", "2",
+                "-passlogfile", passlogPrefix,
                 "-c:a", "aac", "-b:a", "\(Int(audioBitrate))",
                 tempOut.path
             ]
         )
-        try runner.execute(invocation: inv, jobId: jobId)
+
+        do {
+            try runner.execute(invocation: pass1Inv, jobId: jobId)
+            try runner.execute(invocation: pass2Inv, jobId: jobId)
+        } catch {
+            // Fallback to single pass if two-pass fails
+            if fm.fileExists(atPath: tempOut.path) {
+                try? fm.removeItem(at: tempOut)
+            }
+            let singlePassInv = Invocation(
+                toolName: "ffmpeg",
+                arguments: [
+                    "-y", "-nostdin",
+                    "-i", input.path,
+                    "-c:v", "libx264", "-b:v", "\(Int(videoBitrate))",
+                    "-c:a", "aac", "-b:a", "\(Int(audioBitrate))",
+                    tempOut.path
+                ]
+            )
+            try runner.execute(invocation: singlePassInv, jobId: jobId)
+        }
 
         guard fm.fileExists(atPath: tempOut.path) else {
             throw PastaError.executionFailed(tool: "ffmpeg", exitCode: 1, output: "Video compression produced no output")
@@ -176,8 +222,13 @@ public final class Compressor {
         jobId: UUID
     ) throws {
         let fm = FileManager.default
-        let attrs = try? fm.attributesOfItem(atPath: input.path)
-        let sourceSize = (attrs?[.size] as? Int64) ?? 0
+        let attrs: [FileAttributeKey: Any]
+        do {
+            attrs = try fm.attributesOfItem(atPath: input.path)
+        } catch {
+            throw PastaError.invalidInput("Cannot read attributes for file '\(input.path)': \(error.localizedDescription)")
+        }
+        let sourceSize = (attrs[.size] as? Int64) ?? 0
         let target = Self.targetBytes(for: sourceSize, parameters: parameters)
 
         let duration = probeDuration(url: input)
@@ -224,8 +275,13 @@ public final class Compressor {
         jobId: UUID
     ) throws {
         let fm = FileManager.default
-        let attrs = try? fm.attributesOfItem(atPath: input.path)
-        let sourceSize = (attrs?[.size] as? Int64) ?? 0
+        let attrs: [FileAttributeKey: Any]
+        do {
+            attrs = try fm.attributesOfItem(atPath: input.path)
+        } catch {
+            throw PastaError.invalidInput("Cannot read attributes for file '\(input.path)': \(error.localizedDescription)")
+        }
+        let sourceSize = (attrs[.size] as? Int64) ?? 0
         let target = Self.targetBytes(for: sourceSize, parameters: parameters)
 
         let scratchDir = try OutputPlanner.makeTempDirectory()
@@ -248,6 +304,7 @@ public final class Compressor {
                     "-dQUIET",
                     "-dBATCH",
                     "-sOutputFile=\(iterOut.path)",
+                    "--",
                     input.path
                 ]
             )

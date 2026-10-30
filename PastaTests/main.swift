@@ -1164,8 +1164,154 @@ do {
         let exists = out != nil && FileManager.default.fileExists(atPath: out!.path)
         let text = out != nil ? (try? String(contentsOf: out!, encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines) : ""
         assertTest(exists && text == "Hello Pasta QR", "Step 5: image.qr.read decodes QR fixture correctly to 'Hello Pasta QR' (got '\(text ?? "")')")
+    }
+
+    // -------------------------------------------------------------------------
+    // SECTION 11: Phase 9 Adversarial Review Fixes & Deep Verification
+    // -------------------------------------------------------------------------
+    print("\n--- Section 11: Phase 9 Adversarial Review Verification ---")
+    let sampleMp4 = fixturesDir.appendingPathComponent("sample.mp4")
+    let sampleWav = fixturesDir.appendingPathComponent("sample.wav")
+
+    // 11.1 JobRunner.runAsync with customRunner
+    if let qrAction = FormatRegistry.shared.action(for: sampleQr, actionID: "image.qr.read") {
+        let group = DispatchGroup()
+        group.enter()
+        var asyncOut: URL?
+        var asyncErr: Error?
+        Task {
+            do {
+                asyncOut = try await JobRunner.shared.runAsync(
+                    action: qrAction,
+                    input: sampleQr,
+                    destinationDirectory: testTempDir,
+                    parameters: [:]
+                )
+            } catch {
+                asyncErr = error
+            }
+            group.leave()
+        }
+        group.wait()
+        let ok = asyncOut != nil && FileManager.default.fileExists(atPath: asyncOut!.path)
+        let content = asyncOut != nil ? (try? String(contentsOf: asyncOut!, encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines) : ""
+        assertTest(ok && content == "Hello Pasta QR", "Step 11: JobRunner.runAsync executes customRunner actions properly (output: '\(content ?? "")', err: \(String(describing: asyncErr)))")
     } else {
-        assertTest(false, "Step 5: image.qr.read action is registered")
+        assertTest(false, "Step 11: image.qr.read action registered")
+    }
+
+    // 11.2 PDF Reorganize: reverse range (3-1) and range deletion (2-3)
+    let revOut = testTempDir.appendingPathComponent("rev_test.pdf")
+    do {
+        try PDFTools.shared.reorganize(input: threeNumberedPdf, output: revOut, pages: "3-1", rotate: "0", deletePages: "", runner: JobRunner.shared, jobId: UUID())
+        let totalRev = try PDFTools.shared.totalPages(url: revOut)
+        let (extractedText, _) = try JobRunner.shared.executeCapture(invocation: Invocation(toolName: "pdftotext", arguments: [revOut.path, "-"]))
+        let pagesText = extractedText.components(separatedBy: "\u{0C}").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        let isReversed = pagesText.count == 3 && pagesText[0].contains("Page 3") && pagesText[1].contains("Page 2") && pagesText[2].contains("Page 1")
+        assertTest(totalRev == 3 && isReversed, "Step 11: pdf.reorganize with '3-1' produces exact reverse page sequence (P3 -> P2 -> P1)")
+    } catch {
+        assertTest(false, "Step 11: pdf.reorganize reverse range failed: \(error)")
+    }
+
+    let delRangeOut = testTempDir.appendingPathComponent("del_range_test.pdf")
+    do {
+        try PDFTools.shared.reorganize(input: threeNumberedPdf, output: delRangeOut, pages: "1-3", rotate: "0", deletePages: "2-3", runner: JobRunner.shared, jobId: UUID())
+        let totalDel = try PDFTools.shared.totalPages(url: delRangeOut)
+        assertTest(totalDel == 1, "Step 11: pdf.reorganize supports range deletion '2-3' yielding exactly 1 page")
+    } catch {
+        assertTest(false, "Step 11: pdf.reorganize range deletion failed: \(error)")
+    }
+
+    // 11.3 Video frame snapshot to JPG
+    if let snapJpgAction = FormatRegistry.shared.action(for: sampleMp4, actionID: "video.snapshot.jpg") {
+        let snapOut = try? JobRunner.shared.run(
+            action: snapJpgAction,
+            input: sampleMp4,
+            destinationDirectory: testTempDir,
+            parameters: ["time": .number(0.1)]
+        )
+        let snapExists = snapOut != nil && FileManager.default.fileExists(atPath: snapOut!.path) && snapOut!.pathExtension.lowercased() == "jpg"
+        var validJpgMagic = false
+        if let snapOut = snapOut, let handle = try? FileHandle(forReadingFrom: snapOut) {
+            let header = handle.readData(ofLength: 3)
+            try? handle.close()
+            if header.count == 3 && header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF {
+                validJpgMagic = true
+            }
+        }
+        assertTest(snapExists && validJpgMagic, "Step 11: video.snapshot.jpg extracts frame with valid JPEG signature")
+    } else {
+        assertTest(false, "Step 11: video.snapshot.jpg action registered")
+    }
+
+    // 11.4 Two-pass video compression
+    let twoPassOut = testTempDir.appendingPathComponent("twopass_test.mp4")
+    do {
+        try Compressor.shared.compressVideo(
+            input: sampleMp4,
+            output: twoPassOut,
+            parameters: ["mode": .text("targetSize"), "targetSizeMB": .number(0.2)],
+            runner: JobRunner.shared,
+            jobId: UUID()
+        )
+        let twoPassExists = FileManager.default.fileExists(atPath: twoPassOut.path)
+        let passLogs = (try? FileManager.default.contentsOfDirectory(atPath: FileManager.default.currentDirectoryPath))?.filter { $0.contains("ffmpeg2pass") } ?? []
+        assertTest(twoPassExists && passLogs.isEmpty, "Step 11: compressVideo completes two-pass encoding without passlog leaks in workspace")
+    } catch {
+        assertTest(false, "Step 11: compressVideo two-pass failed: \(error)")
+    }
+
+    // 11.5 Audio bleep filter
+    if let bleepAction = FormatRegistry.shared.action(for: sampleWav, actionID: "audio.bleep") {
+        let bleepOut = try? JobRunner.shared.run(
+            action: bleepAction,
+            input: sampleWav,
+            destinationDirectory: testTempDir,
+            parameters: ["ranges": .text("0.1-0.3")]
+        )
+        let bleepExists = bleepOut != nil && FileManager.default.fileExists(atPath: bleepOut!.path)
+        let dur = bleepOut != nil ? Compressor.shared.probeDuration(url: bleepOut!) : 0
+        assertTest(bleepExists && dur > 0, "Step 11: audio.bleep generates valid non-empty audio output")
+    } else {
+        assertTest(false, "Step 11: audio.bleep action registered")
+    }
+
+    // 11.6 Metadata edit strict read-back verification
+    let metaTestFile = testTempDir.appendingPathComponent("meta_test.jpg")
+    try? FileManager.default.copyItem(at: sampleJpg, to: metaTestFile)
+    let metaEditOut = testTempDir.appendingPathComponent("meta_edited.jpg")
+    do {
+        try MetadataTools.shared.editMetadata(
+            input: metaTestFile,
+            output: metaEditOut,
+            tags: ["author": "Reviewer 42"],
+            runner: JobRunner.shared,
+            jobId: UUID()
+        )
+        let readMap = try MetadataTools.shared.readMetadata(from: metaEditOut)
+        let authorMatches = readMap.contains { k, v in
+            k.lowercased() == "author" && String(describing: v).contains("Reviewer 42")
+        }
+        assertTest(authorMatches, "Step 11: metadata.edit accurately writes and verifies metadata tag read-back")
+    } catch {
+        assertTest(false, "Step 11: metadata.edit failed: \(error)")
+    }
+
+    // 11.7 Video join fallback with filter-complex
+    let videoJoinOut = testTempDir.appendingPathComponent("joined_test.mp4")
+    do {
+        try MediaTools.shared.joinVideos(
+            inputs: [sampleMp4, sampleMp4],
+            output: videoJoinOut,
+            runner: JobRunner.shared,
+            jobId: UUID()
+        )
+        let joinExists = FileManager.default.fileExists(atPath: videoJoinOut.path)
+        let joinDur = joinExists ? Compressor.shared.probeDuration(url: videoJoinOut) : 0
+        let origDur = Compressor.shared.probeDuration(url: sampleMp4)
+        assertTest(joinExists && joinDur >= origDur * 1.5, "Step 11: MediaTools.joinVideos successfully combines clips into continuous video (dur: \(joinDur)s >= \(origDur * 1.5)s)")
+    } catch {
+        assertTest(false, "Step 11: MediaTools.joinVideos failed: \(error)")
     }
 }
 
