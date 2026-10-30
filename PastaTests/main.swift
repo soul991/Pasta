@@ -1031,6 +1031,144 @@ do {
     }
 }
 
+// MARK: - 10. Phase 9 Step 5: Metadata, PDF Reorganize, Collage, QR Tests
+print("\n--- 10. Phase 9 Step 5: Metadata, PDF Reorganize, Collage, QR Tests ---")
+do {
+    let fixturesDir = URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent("Fixtures")
+    let testTempDir = try OutputPlanner.makeTempDirectory()
+    defer { try? FileManager.default.removeItem(at: testTempDir) }
+
+    let sampleJpg = fixturesDir.appendingPathComponent("sample.jpg")
+    let samplePng = fixturesDir.appendingPathComponent("sample.png")
+    let sampleQr = fixturesDir.appendingPathComponent("sample_qr.png")
+    let threeNumberedPdf = fixturesDir.appendingPathComponent("three_numbered_pages.pdf")
+
+    // 10.1 Metadata Read
+    if let metaReadAction = FormatRegistry.shared.action(for: sampleJpg, actionID: "metadata.read") {
+        assertTest(true, "Step 5: metadata.read action is registered")
+        let originalHash = fileSHA256(url: sampleJpg)
+        let out = try? JobRunner.shared.run(
+            action: metaReadAction,
+            input: sampleJpg,
+            destinationDirectory: testTempDir,
+            parameters: [:]
+        )
+        let exists = out != nil && FileManager.default.fileExists(atPath: out!.path)
+        let content = out != nil ? (try? String(contentsOf: out!, encoding: .utf8)) ?? "" : ""
+        assertTest(exists && content.contains("JPEG"), "Step 5: metadata.read produces readable metadata text report")
+        assertTest(fileSHA256(url: sampleJpg) == originalHash, "Step 5: metadata.read never modifies source file")
+    } else {
+        assertTest(false, "Step 5: metadata.read action is registered")
+    }
+
+    // 10.2 Metadata Edit & second read-back
+    if let metaEditAction = FormatRegistry.shared.action(for: sampleJpg, actionID: "metadata.edit") {
+        assertTest(true, "Step 5: metadata.edit action is registered")
+        let originalHash = fileSHA256(url: sampleJpg)
+        let out = try? JobRunner.shared.run(
+            action: metaEditAction,
+            input: sampleJpg,
+            destinationDirectory: testTempDir,
+            parameters: ["title": .text("Verified Title"), "author": .text("Test Author")]
+        )
+        let exists = out != nil && FileManager.default.fileExists(atPath: out!.path)
+        assertTest(exists, "Step 5: metadata.edit produces output copy")
+        assertTest(fileSHA256(url: sampleJpg) == originalHash, "Step 5: metadata.edit never writes to source file")
+
+        // Reject invalid tag
+        var rejectedInvalidTag = false
+        do {
+            _ = try JobRunner.shared.run(
+                action: metaEditAction,
+                input: sampleJpg,
+                destinationDirectory: testTempDir,
+                parameters: ["malicious_tag": .text("Bad")]
+            )
+        } catch {
+            rejectedInvalidTag = true
+        }
+        assertTest(rejectedInvalidTag, "Step 5: metadata.edit rejects unallowed tag name")
+    } else {
+        assertTest(false, "Step 5: metadata.edit action is registered")
+    }
+
+    // 10.3 PDF Reorganize & page reordering
+    if let pdfReorderAction = FormatRegistry.shared.action(for: threeNumberedPdf, actionID: "pdf.reorganize") {
+        assertTest(true, "Step 5: pdf.reorganize action is registered")
+        let out = try? JobRunner.shared.run(
+            action: pdfReorderAction,
+            input: threeNumberedPdf,
+            destinationDirectory: testTempDir,
+            parameters: ["pages": .text("3,1,2")]
+        )
+        let exists = out != nil && FileManager.default.fileExists(atPath: out!.path)
+        assertTest(exists, "Step 5: pdf.reorganize produces reordered PDF")
+
+        // Check text of pages using pdftotext
+        if let outPdf = out {
+            let p = Process()
+            p.executableURL = ToolLocator.shared.findTool("pdftotext") ?? URL(fileURLWithPath: "/opt/homebrew/bin/pdftotext")
+            p.arguments = [outPdf.path, "-"]
+            let pipe = Pipe()
+            p.standardOutput = pipe
+            p.standardError = Pipe()
+            try? p.run()
+            p.waitUntilExit()
+            let txt = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            let pages = txt.components(separatedBy: "\u{0c}").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+            let orderCorrect = pages.count >= 3 && pages[0].contains("Page 3") && pages[1].contains("Page 1") && pages[2].contains("Page 2")
+            assertTest(orderCorrect, "Step 5: pdf.reorganize verifies Page 3, Page 1, Page 2 sequence")
+        }
+
+        // Reject out-of-range page number
+        var rejectedOutOfRangePage = false
+        do {
+            _ = try JobRunner.shared.run(
+                action: pdfReorderAction,
+                input: threeNumberedPdf,
+                destinationDirectory: testTempDir,
+                parameters: ["pages": .text("1,5")]
+            )
+        } catch {
+            rejectedOutOfRangePage = true
+        }
+        assertTest(rejectedOutOfRangePage, "Step 5: pdf.reorganize rejects page numbers beyond total page count")
+    } else {
+        assertTest(false, "Step 5: pdf.reorganize action is registered")
+    }
+
+    // 10.4 Image Collage
+    if let collageAction = FormatRegistry.shared.action(for: samplePng, actionID: "image.collage") {
+        assertTest(true, "Step 5: image.collage action is registered")
+        let out = try? JobRunner.shared.runBatch(
+            action: collageAction,
+            inputs: [samplePng, sampleJpg],
+            destinationDirectory: testTempDir,
+            parameters: ["columns": .number(2), "spacing": .number(4)]
+        )
+        let exists = out != nil && FileManager.default.fileExists(atPath: out!.path)
+        assertTest(exists, "Step 5: image.collage combines images into grid")
+    } else {
+        assertTest(false, "Step 5: image.collage action is registered")
+    }
+
+    // 10.5 QR Read
+    if let qrAction = FormatRegistry.shared.action(for: sampleQr, actionID: "image.qr.read") {
+        assertTest(true, "Step 5: image.qr.read action is registered")
+        let out = try? JobRunner.shared.run(
+            action: qrAction,
+            input: sampleQr,
+            destinationDirectory: testTempDir,
+            parameters: [:]
+        )
+        let exists = out != nil && FileManager.default.fileExists(atPath: out!.path)
+        let text = out != nil ? (try? String(contentsOf: out!, encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines) : ""
+        assertTest(exists && text == "Hello Pasta QR", "Step 5: image.qr.read decodes QR fixture correctly to 'Hello Pasta QR' (got '\(text ?? "")')")
+    } else {
+        assertTest(false, "Step 5: image.qr.read action is registered")
+    }
+}
+
 print("\n==================================================")
 print("Test Suite Summary: \(passedTests)/\(totalTests) Passed, \(failedTests) Failed")
 print("==================================================")

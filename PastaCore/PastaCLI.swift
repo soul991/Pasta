@@ -25,11 +25,44 @@ public struct PastaCLI {
                 exit(1)
             }
             runQuickAction(files: Array(args.dropFirst()))
+        case "metadata":
+            runMetadata(args: Array(args.dropFirst()))
         case "--help", "-h", "help":
             printUsage()
             exit(0)
         default:
             fputs("Error: Unknown command '\(command)'. Run 'pasta help' for usage.\n", stderr)
+            exit(1)
+        }
+    }
+
+    private static func runMetadata(args: [String]) {
+        guard let sub = args.first else {
+            fputs("Error: Missing metadata subcommand (read or edit).\nUsage: pasta metadata read <file> [--json]\n", stderr)
+            exit(1)
+        }
+        if sub == "read" {
+            let rest = Array(args.dropFirst())
+            guard let file = rest.first(where: { !$0.hasPrefix("--") }) else {
+                fputs("Error: Missing file path for metadata read.\nUsage: pasta metadata read <file> [--json]\n", stderr)
+                exit(1)
+            }
+            let asJSON = rest.contains("--json")
+            let url = URL(fileURLWithPath: file)
+            guard FileManager.default.fileExists(atPath: url.path) else {
+                fputs("Error: File not found at '\(file)'\n", stderr)
+                exit(1)
+            }
+            do {
+                let out = try MetadataTools.shared.formatMetadata(from: url, asJSON: asJSON)
+                print(out)
+                exit(0)
+            } catch {
+                fputs("Error reading metadata: \(error.localizedDescription)\n", stderr)
+                exit(1)
+            }
+        } else {
+            fputs("Error: Unknown metadata subcommand '\(sub)'. Use 'read'.\n", stderr)
             exit(1)
         }
     }

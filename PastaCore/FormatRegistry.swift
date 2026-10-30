@@ -107,6 +107,56 @@ public final class FormatRegistry {
         )
     ]
 
+    private func metadataActions(for inputExt: String) -> [ConversionAction] {
+        let readAction = ConversionAction(
+            id: "metadata.read",
+            displayName: "Read Metadata",
+            outputExtension: "txt",
+            isAdvanced: true,
+            category: .metadata,
+            iconName: "info.circle",
+            parameters: [
+                ActionParameter(
+                    id: "format",
+                    label: "Output Format",
+                    kind: .choice(options: ["text", "json"]),
+                    defaultValue: .text("text")
+                )
+            ],
+            customRunner: { input, output, params, runner, jobId in
+                let asJSON = (params["format"]?.asString == "json")
+                let report = try MetadataTools.shared.formatMetadata(from: input, asJSON: asJSON)
+                try report.write(to: output, atomically: true, encoding: .utf8)
+            }
+        )
+
+        let editAction = ConversionAction(
+            id: "metadata.edit",
+            displayName: "Edit Metadata",
+            outputExtension: inputExt,
+            isAdvanced: true,
+            category: .metadata,
+            iconName: "pencil.circle",
+            parameters: [
+                ActionParameter(id: "title", label: "Title", kind: .text, defaultValue: .text("")),
+                ActionParameter(id: "author", label: "Author / Artist", kind: .text, defaultValue: .text("")),
+                ActionParameter(id: "comment", label: "Comment", kind: .text, defaultValue: .text("")),
+                ActionParameter(id: "date", label: "Date", kind: .text, defaultValue: .text(""))
+            ],
+            customRunner: { input, output, params, runner, jobId in
+                var tags: [String: String] = [:]
+                for (key, val) in params {
+                    let s = val.asString.trimmingCharacters(in: .whitespaces)
+                    if !s.isEmpty {
+                        tags[key] = s
+                    }
+                }
+                try MetadataTools.shared.editMetadata(input: input, output: output, tags: tags, runner: runner, jobId: jobId)
+            }
+        )
+        return [readAction, editAction]
+    }
+
     public func action(for fileURL: URL, targetExtension: String, preferAdvanced: Bool = false) -> ConversionAction? {
         let ext = targetExtension.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
         let actions = availableActions(for: fileURL).filter { $0.outputExtension.lowercased() == ext }
@@ -378,6 +428,42 @@ public final class FormatRegistry {
                 [Invocation(toolName: "magick", arguments: inputs.map(\.path) + [output.path])]
             }
         ))
+
+        list.append(ConversionAction(
+            id: "image.collage",
+            displayName: "Create Image Collage",
+            outputExtension: "jpg",
+            isAdvanced: true,
+            category: .image,
+            iconName: "square.grid.2x2",
+            parameters: [
+                ActionParameter(id: "columns", label: "Columns", kind: .number, defaultValue: .number(2), minValue: 1.0, maxValue: 20.0),
+                ActionParameter(id: "spacing", label: "Spacing (px)", kind: .number, defaultValue: .number(4), minValue: 0.0, maxValue: 100.0)
+            ],
+            isBatch: true,
+            buildBatchInvocations: { inputs, output, params in
+                let cols = params["columns"]?.asInt ?? 2
+                let spacing = params["spacing"]?.asInt ?? 4
+                return [Invocation(toolName: "magick", arguments: ["montage"] + inputs.map(\.path) + ["-tile", "\(cols)x", "-geometry", "+\(spacing)+\(spacing)", output.path])]
+            }
+        ))
+
+        list.append(ConversionAction(
+            id: "image.qr.read",
+            displayName: "Read QR Code",
+            outputExtension: "txt",
+            isAdvanced: true,
+            category: .image,
+            iconName: "qrcode",
+            customRunner: { input, output, _, runner, jobId in
+                guard let text = try QRReader.readQRCode(from: input) else {
+                    throw PastaError.executionFailed(tool: "vision", exitCode: 1, output: "No QR code found in image")
+                }
+                try text.write(to: output, atomically: true, encoding: .utf8)
+            }
+        ))
+
+        list.append(contentsOf: metadataActions(for: inputExt))
 
         // Standard compress to zip & gzip
         list.append(archiveCreateZipAction())
@@ -752,6 +838,8 @@ public final class FormatRegistry {
             }
         ))
 
+        list.append(contentsOf: metadataActions(for: inputExt))
+
         list.append(archiveCreateZipAction())
         list.append(archiveCreateGzipAction())
         return list
@@ -1015,6 +1103,8 @@ public final class FormatRegistry {
             }
         ))
 
+        list.append(contentsOf: metadataActions(for: inputExt))
+
         list.append(archiveCreateZipAction())
         list.append(archiveCreateGzipAction())
         return list
@@ -1119,6 +1209,26 @@ public final class FormatRegistry {
             ) { inputs, output, _ in
                 [Invocation(toolName: "qpdf", arguments: ["--empty", "--pages"] + inputs.map(\.path) + ["--", output.path])]
             },
+            ConversionAction(
+                id: "pdf.reorganize",
+                displayName: "Reorganize / Rotate Pages",
+                outputExtension: "pdf",
+                isAdvanced: true,
+                category: .pdf,
+                iconName: "arrow.triangle.swap",
+                parameters: [
+                    ActionParameter(id: "pages", label: "Page Sequence (e.g. 3,1,2)", kind: .text, defaultValue: .text("1-z")),
+                    ActionParameter(id: "rotate", label: "Rotate Angle", kind: .choice(options: ["0", "90", "180", "270"]), defaultValue: .text("0")),
+                    ActionParameter(id: "deletePages", label: "Pages to Delete", kind: .text, defaultValue: .text(""))
+                ],
+                customRunner: { input, output, params, runner, jobId in
+                    let pages = params["pages"]?.asString ?? "1-z"
+                    let rot = params["rotate"]?.asString ?? "0"
+                    let del = params["deletePages"]?.asString ?? ""
+                    try PDFTools.shared.reorganize(input: input, output: output, pages: pages, rotate: rot, deletePages: del, runner: runner, jobId: jobId)
+                }
+            )
+        ] + metadataActions(for: "pdf") + [
             archiveCreateZipAction(),
             archiveCreateGzipAction()
         ]
