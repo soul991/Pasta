@@ -227,7 +227,7 @@ public final class DragMonitor {
                 }
             }
 
-        case .open(let openedAt, let files, let loc, let isAdvanced):
+        case .open:
             // Check second shift hold while open
             if isShiftHeld {
                 // Started second hold
