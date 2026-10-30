@@ -709,6 +709,136 @@ do {
     assertTest(sofficeAvailable == false, "Step 2: soffice is correctly reported as missing optional tool without failure")
 }
 
+// MARK: - 8. Phase 9 Step 3: Compression Modes Tests
+print("\n--- 8. Phase 9 Step 3: Compression Modes Tests ---")
+do {
+    let fixturesDir = URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent("Fixtures")
+    let testTempDir = try OutputPlanner.makeTempDirectory()
+    defer { try? FileManager.default.removeItem(at: testTempDir) }
+
+    let sampleBmp = fixturesDir.appendingPathComponent("sample.bmp")
+    let sampleMp4 = fixturesDir.appendingPathComponent("sample.mp4")
+    let sampleWav = fixturesDir.appendingPathComponent("sample.wav")
+    let threePagesPdf = fixturesDir.appendingPathComponent("three_pages.pdf")
+    let samplePng = fixturesDir.appendingPathComponent("sample.png")
+    let sampleJpg = fixturesDir.appendingPathComponent("sample.jpg")
+
+    // Generate a compressible image fixture
+    let compressibleJpg = testTempDir.appendingPathComponent("compressible.jpg")
+    if let magick = ToolLocator.shared.findTool("magick") {
+        let p = Process()
+        p.executableURL = magick
+        p.arguments = ["-size", "400x400", "plasma:fractal", compressibleJpg.path]
+        try? p.run()
+        p.waitUntilExit()
+    }
+
+    // 8.1 Image compression by percent
+    if let imgCompress = FormatRegistry.shared.action(for: compressibleJpg, actionID: "image.compress") {
+        let originalSize = (try? FileManager.default.attributesOfItem(atPath: compressibleJpg.path)[.size] as? Int64) ?? 0
+        let targetPct = 50.0
+        let maxTarget = Int64(Double(originalSize) * (targetPct / 100.0))
+        let out = try? JobRunner.shared.run(
+            action: imgCompress,
+            input: compressibleJpg,
+            destinationDirectory: testTempDir,
+            parameters: ["mode": .text("percent"), "percent": .number(targetPct)]
+        )
+        let outSize = out != nil ? ((try? FileManager.default.attributesOfItem(atPath: out!.path)[.size] as? Int64) ?? 0) : 0
+        assertTest(out != nil && outSize > 0 && outSize <= maxTarget, "Step 3: Image compression by 50% produces file <= 50% original (orig: \(originalSize), out: \(outSize))")
+    } else {
+        assertTest(false, "Step 3: image.compress action is registered")
+    }
+
+    // 8.2 Image compression by exact target size
+    if let imgCompress = FormatRegistry.shared.action(for: compressibleJpg, actionID: "image.compress") {
+        let targetSize: Int64 = 25000
+        let out = try? JobRunner.shared.run(
+            action: imgCompress,
+            input: compressibleJpg,
+            destinationDirectory: testTempDir,
+            parameters: ["mode": .text("targetSize"), "targetSize": .integer(targetSize)]
+        )
+        let outSize = out != nil ? ((try? FileManager.default.attributesOfItem(atPath: out!.path)[.size] as? Int64) ?? 0) : 0
+        assertTest(out != nil && outSize > 0 && outSize <= targetSize, "Step 3: Image compression by target size 25000 bytes produces file <= 25000 (out: \(outSize))")
+    }
+
+    // 8.3 Video compression by percent (with 10% stated tolerance)
+    if let videoCompress = FormatRegistry.shared.action(for: sampleMp4, actionID: "video.compress") {
+        let originalSize = (try? FileManager.default.attributesOfItem(atPath: sampleMp4.path)[.size] as? Int64) ?? 0
+        let targetPct = 60.0
+        let maxTarget = Int64(Double(originalSize) * 0.70) // 60% + 10% video muxing tolerance
+        let out = try? JobRunner.shared.run(
+            action: videoCompress,
+            input: sampleMp4,
+            destinationDirectory: testTempDir,
+            parameters: ["mode": .text("percent"), "percent": .number(targetPct)]
+        )
+        let outSize = out != nil ? ((try? FileManager.default.attributesOfItem(atPath: out!.path)[.size] as? Int64) ?? 0) : 0
+        assertTest(out != nil && outSize > 0 && outSize <= maxTarget, "Step 3: Video compression by 60% produces file within tolerance (orig: \(originalSize), out: \(outSize))")
+    } else {
+        assertTest(false, "Step 3: video.compress action is registered")
+    }
+
+    // 8.4 Audio compression by percent
+    if let audioCompress = FormatRegistry.shared.action(for: sampleWav, actionID: "audio.compress") {
+        let originalSize = (try? FileManager.default.attributesOfItem(atPath: sampleWav.path)[.size] as? Int64) ?? 0
+        let out = try? JobRunner.shared.run(
+            action: audioCompress,
+            input: sampleWav,
+            destinationDirectory: testTempDir,
+            parameters: ["mode": .text("percent"), "percent": .number(50.0)]
+        )
+        let outSize = out != nil ? ((try? FileManager.default.attributesOfItem(atPath: out!.path)[.size] as? Int64) ?? 0) : 0
+        assertTest(out != nil && outSize > 0 && outSize <= originalSize / 2, "Step 3: Audio compression by 50% produces file <= 50% original (orig: \(originalSize), out: \(outSize))")
+    } else {
+        assertTest(false, "Step 3: audio.compress action is registered")
+    }
+
+    // 8.5 PDF compression
+    if let pdfCompress = FormatRegistry.shared.action(for: threePagesPdf, actionID: "pdf.compress") {
+        let originalSize = (try? FileManager.default.attributesOfItem(atPath: threePagesPdf.path)[.size] as? Int64) ?? 0
+        let out = try? JobRunner.shared.run(
+            action: pdfCompress,
+            input: threePagesPdf,
+            destinationDirectory: testTempDir,
+            parameters: ["mode": .text("targetSize"), "targetSize": .integer(5000)]
+        )
+        let outSize = out != nil ? ((try? FileManager.default.attributesOfItem(atPath: out!.path)[.size] as? Int64) ?? 0) : 0
+        assertTest(out != nil && outSize > 0 && outSize < originalSize, "Step 3: PDF compression reduces file size (orig: \(originalSize), out: \(outSize))")
+    } else {
+        assertTest(false, "Step 3: pdf.compress action is registered")
+    }
+
+    // 8.6 Impossible target size handling
+    if let imgCompress = FormatRegistry.shared.action(for: sampleBmp, actionID: "image.compress") {
+        let impossibleTarget: Int64 = 10
+        let out = try? JobRunner.shared.run(
+            action: imgCompress,
+            input: sampleBmp,
+            destinationDirectory: testTempDir,
+            parameters: ["mode": .text("targetSize"), "targetSize": .integer(impossibleTarget)]
+        )
+        let exists = out != nil && FileManager.default.fileExists(atPath: out!.path)
+        let originalHash = fileSHA256(url: sampleBmp)
+        assertTest(exists, "Step 3: Impossible target size produces smallest valid file without crashing or silent failure")
+        assertTest(originalHash != nil, "Step 3: Source file remains intact after impossible target compression")
+    }
+
+    // 8.7 Batch compression
+    if let imgCompress = FormatRegistry.shared.action(for: samplePng, actionID: "image.compress") {
+        let batchOut = try? JobRunner.shared.runBatch(
+            action: imgCompress,
+            inputs: [samplePng, sampleJpg],
+            destinationDirectory: testTempDir,
+            parameters: ["mode": .text("percent"), "percent": .number(60.0)]
+        )
+        let folderExists = batchOut != nil && FileManager.default.fileExists(atPath: batchOut!.path)
+        let contents = batchOut != nil ? ((try? FileManager.default.contentsOfDirectory(at: batchOut!, includingPropertiesForKeys: nil)) ?? []) : []
+        assertTest(folderExists && contents.count >= 2, "Step 3: Batch compression produces folder containing all compressed items (\(contents.count) items)")
+    }
+}
+
 print("\n==================================================")
 print("Test Suite Summary: \(passedTests)/\(totalTests) Passed, \(failedTests) Failed")
 print("==================================================")

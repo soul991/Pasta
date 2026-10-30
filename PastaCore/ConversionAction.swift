@@ -26,8 +26,13 @@ public struct ConversionAction: Identifiable, Equatable {
     public let outputKind: OutputKind
     public let parameters: [ActionParameter]
     public let isBatch: Bool
+    public typealias CustomRunner = (URL, URL, ParameterValues, JobRunner, UUID) throws -> Void
+    public typealias CustomBatchRunner = ([URL], URL, ParameterValues, JobRunner, UUID) throws -> Void
+
     public let buildInvocationsWithParams: (URL, URL, ParameterValues) -> [Invocation]
     public let buildBatchInvocationsWithParams: (([URL], URL, ParameterValues) -> [Invocation])?
+    public let customRunner: CustomRunner?
+    public let customBatchRunner: CustomBatchRunner?
 
     public var buildInvocations: (URL, URL) -> [Invocation] {
         return { input, output in
@@ -60,8 +65,10 @@ public struct ConversionAction: Identifiable, Equatable {
         outputKind: OutputKind = .file,
         parameters: [ActionParameter] = [],
         isBatch: Bool = false,
-        buildInvocations: @escaping (URL, URL, ParameterValues) -> [Invocation],
-        buildBatchInvocations: (([URL], URL, ParameterValues) -> [Invocation])? = nil
+        buildInvocations: @escaping (URL, URL, ParameterValues) -> [Invocation] = { _, _, _ in [] },
+        buildBatchInvocations: (([URL], URL, ParameterValues) -> [Invocation])? = nil,
+        customRunner: CustomRunner? = nil,
+        customBatchRunner: CustomBatchRunner? = nil
     ) {
         self.id = id
         self.displayName = displayName
@@ -77,6 +84,8 @@ public struct ConversionAction: Identifiable, Equatable {
             guard let first = inputs.first else { return [] }
             return buildInvocations(first, out, params)
         }
+        self.customRunner = customRunner
+        self.customBatchRunner = customBatchRunner
     }
 
     public init(

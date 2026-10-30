@@ -50,6 +50,30 @@ public final class FormatRegistry {
         if actionID == "image.resize" {
             return actions.first(where: { $0.id == "image.advanced.resize_50" })
         }
+        if actionID == "image.compress" {
+            return actions.first(where: { $0.id == "image.advanced.compress" || $0.id == "image.compress" })
+        }
+        if actionID == "image.advanced.compress" {
+            return actions.first(where: { $0.id == "image.compress" || $0.id == "image.advanced.compress" })
+        }
+        if actionID == "video.compress" {
+            return actions.first(where: { $0.id == "video.advanced.compress" || $0.id == "video.compress" })
+        }
+        if actionID == "video.advanced.compress" {
+            return actions.first(where: { $0.id == "video.compress" || $0.id == "video.advanced.compress" })
+        }
+        if actionID == "audio.compress" {
+            return actions.first(where: { $0.id == "audio.advanced.compress" || $0.id == "audio.compress" })
+        }
+        if actionID == "audio.advanced.compress" {
+            return actions.first(where: { $0.id == "audio.compress" || $0.id == "audio.advanced.compress" })
+        }
+        if actionID == "pdf.compress" {
+            return actions.first(where: { $0.id == "pdf.advanced.compress" || $0.id == "pdf.compress" })
+        }
+        if actionID == "pdf.advanced.compress" {
+            return actions.first(where: { $0.id == "pdf.compress" || $0.id == "pdf.advanced.compress" })
+        }
         if actionID == "archive.gzip" {
             return actions.first(where: { $0.id == "archive.create.gzip" })
         }
@@ -58,6 +82,30 @@ public final class FormatRegistry {
         }
         return nil
     }
+
+    public static let compressionParameters: [ActionParameter] = [
+        ActionParameter(
+            id: "mode",
+            label: "Compression Mode",
+            kind: .choice(options: ["percent", "targetSize"]),
+            defaultValue: .text("percent")
+        ),
+        ActionParameter(
+            id: "percent",
+            label: "Target Percent",
+            kind: .percent,
+            defaultValue: .number(50.0),
+            minValue: 1.0,
+            maxValue: 100.0
+        ),
+        ActionParameter(
+            id: "targetSize",
+            label: "Target Size in Bytes",
+            kind: .sizeInBytes,
+            defaultValue: .integer(0),
+            minValue: 0.0
+        )
+    ]
 
     public func action(for fileURL: URL, targetExtension: String, preferAdvanced: Bool = false) -> ConversionAction? {
         let ext = targetExtension.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
@@ -229,23 +277,40 @@ public final class FormatRegistry {
         })
 
         list.append(ConversionAction(
+            id: "image.compress",
+            displayName: "Compress Image",
+            outputExtension: inputExt == "svg" ? "png" : inputExt,
+            isAdvanced: true,
+            category: .image,
+            iconName: "arrow.down.circle",
+            parameters: Self.compressionParameters,
+            customRunner: { input, output, params, runner, jobId in
+                try Compressor.shared.compressImage(input: input, output: output, parameters: params, runner: runner, jobId: jobId)
+            },
+            customBatchRunner: { inputs, output, params, runner, jobId in
+                try Compressor.shared.compressBatch(inputs: inputs, outputDir: output, parameters: params, compressItem: { inUrl, outUrl, p, r, j in
+                    try Compressor.shared.compressImage(input: inUrl, output: outUrl, parameters: p, runner: r, jobId: j)
+                }, runner: runner, jobId: jobId)
+            }
+        ))
+
+        list.append(ConversionAction(
             id: "image.advanced.compress",
             displayName: "Compress Image",
             outputExtension: inputExt == "svg" ? "png" : inputExt,
             isAdvanced: true,
             category: .image,
-            iconName: "arrow.down.circle"
-        ) { input, output in
-            if inputExt == "jpg" || inputExt == "jpeg" {
-                return [Invocation(toolName: "sips", arguments: ["-s", "format", "jpeg", "-s", "formatOptions", "60", input.path, "--out", output.path])]
-            } else if inputExt == "png" {
-                return [Invocation(toolName: "magick", arguments: [input.path, "-quality", "80", output.path])]
-            } else if inputExt == "webp" {
-                return [Invocation(toolName: "cwebp", arguments: ["-q", "60", input.path, "-o", output.path])]
-            } else {
-                return [Invocation(toolName: "sips", arguments: ["-s", "format", "jpeg", "-s", "formatOptions", "60", input.path, "--out", output.path])]
+            iconName: "arrow.down.circle",
+            parameters: Self.compressionParameters,
+            customRunner: { input, output, params, runner, jobId in
+                try Compressor.shared.compressImage(input: input, output: output, parameters: params, runner: runner, jobId: jobId)
+            },
+            customBatchRunner: { inputs, output, params, runner, jobId in
+                try Compressor.shared.compressBatch(inputs: inputs, outputDir: output, parameters: params, compressItem: { inUrl, outUrl, p, r, j in
+                    try Compressor.shared.compressImage(input: inUrl, output: outUrl, parameters: p, runner: r, jobId: j)
+                }, runner: runner, jobId: jobId)
             }
-        })
+        ))
 
         let resizeParams = [
             ActionParameter(
@@ -452,17 +517,42 @@ public final class FormatRegistry {
             [Invocation(toolName: "ffmpeg", arguments: ["-nostdin", "-n", "-i", input.path, "-vn", "-c:a", "pcm_s16le", output.path])]
         })
 
+        list.append(ConversionAction(
+            id: "video.compress",
+            displayName: "Compress Video",
+            outputExtension: "mp4",
+            isAdvanced: false,
+            category: .video,
+            iconName: "arrow.down.circle",
+            parameters: Self.compressionParameters,
+            customRunner: { input, output, params, runner, jobId in
+                try Compressor.shared.compressVideo(input: input, output: output, parameters: params, runner: runner, jobId: jobId)
+            },
+            customBatchRunner: { inputs, output, params, runner, jobId in
+                try Compressor.shared.compressBatch(inputs: inputs, outputDir: output, parameters: params, compressItem: { inUrl, outUrl, p, r, j in
+                    try Compressor.shared.compressVideo(input: inUrl, output: outUrl, parameters: p, runner: r, jobId: j)
+                }, runner: runner, jobId: jobId)
+            }
+        ))
+
         // Advanced actions
         list.append(ConversionAction(
             id: "video.advanced.compress",
-            displayName: "Compress Video (CRF 28)",
+            displayName: "Compress Video",
             outputExtension: "mp4",
             isAdvanced: true,
             category: .video,
-            iconName: "arrow.down.circle"
-        ) { input, output in
-            [Invocation(toolName: "ffmpeg", arguments: ["-nostdin", "-n", "-i", input.path, "-c:v", "libx264", "-crf", "28", "-preset", "medium", "-c:a", "aac", "-b:a", "128k", output.path])]
-        })
+            iconName: "arrow.down.circle",
+            parameters: Self.compressionParameters,
+            customRunner: { input, output, params, runner, jobId in
+                try Compressor.shared.compressVideo(input: input, output: output, parameters: params, runner: runner, jobId: jobId)
+            },
+            customBatchRunner: { inputs, output, params, runner, jobId in
+                try Compressor.shared.compressBatch(inputs: inputs, outputDir: output, parameters: params, compressItem: { inUrl, outUrl, p, r, j in
+                    try Compressor.shared.compressVideo(input: inUrl, output: outUrl, parameters: p, runner: r, jobId: j)
+                }, runner: runner, jobId: jobId)
+            }
+        ))
 
         let trimParams = [
             ActionParameter(
@@ -621,17 +711,42 @@ public final class FormatRegistry {
             })
         }
 
+        list.append(ConversionAction(
+            id: "audio.compress",
+            displayName: "Compress Audio",
+            outputExtension: "mp3",
+            isAdvanced: false,
+            category: .audio,
+            iconName: "arrow.down.circle",
+            parameters: Self.compressionParameters,
+            customRunner: { input, output, params, runner, jobId in
+                try Compressor.shared.compressAudio(input: input, output: output, parameters: params, runner: runner, jobId: jobId)
+            },
+            customBatchRunner: { inputs, output, params, runner, jobId in
+                try Compressor.shared.compressBatch(inputs: inputs, outputDir: output, parameters: params, compressItem: { inUrl, outUrl, p, r, j in
+                    try Compressor.shared.compressAudio(input: inUrl, output: outUrl, parameters: p, runner: r, jobId: j)
+                }, runner: runner, jobId: jobId)
+            }
+        ))
+
         // Advanced
         list.append(ConversionAction(
             id: "audio.advanced.compress",
-            displayName: "Compress Audio (96k)",
+            displayName: "Compress Audio",
             outputExtension: "mp3",
             isAdvanced: true,
             category: .audio,
-            iconName: "arrow.down.circle"
-        ) { input, output in
-            [Invocation(toolName: "ffmpeg", arguments: ["-nostdin", "-n", "-i", input.path, "-vn", "-c:a", "libmp3lame", "-b:a", "96k", output.path])]
-        })
+            iconName: "arrow.down.circle",
+            parameters: Self.compressionParameters,
+            customRunner: { input, output, params, runner, jobId in
+                try Compressor.shared.compressAudio(input: input, output: output, parameters: params, runner: runner, jobId: jobId)
+            },
+            customBatchRunner: { inputs, output, params, runner, jobId in
+                try Compressor.shared.compressBatch(inputs: inputs, outputDir: output, parameters: params, compressItem: { inUrl, outUrl, p, r, j in
+                    try Compressor.shared.compressAudio(input: inUrl, output: outUrl, parameters: p, runner: r, jobId: j)
+                }, runner: runner, jobId: jobId)
+            }
+        ))
 
         list.append(ConversionAction(
             id: "audio.advanced.strip_metadata",
@@ -677,24 +792,39 @@ public final class FormatRegistry {
                 return [Invocation(toolName: "pdftoppm", arguments: ["-png", "-r", "150", input.path, prefix])]
             },
             ConversionAction(
+                id: "pdf.compress",
+                displayName: "Compress PDF",
+                outputExtension: "pdf",
+                isAdvanced: false,
+                category: .pdf,
+                iconName: "arrow.down.circle",
+                parameters: Self.compressionParameters,
+                customRunner: { input, output, params, runner, jobId in
+                    try Compressor.shared.compressPDF(input: input, output: output, parameters: params, runner: runner, jobId: jobId)
+                },
+                customBatchRunner: { inputs, output, params, runner, jobId in
+                    try Compressor.shared.compressBatch(inputs: inputs, outputDir: output, parameters: params, compressItem: { inUrl, outUrl, p, r, j in
+                        try Compressor.shared.compressPDF(input: inUrl, output: outUrl, parameters: p, runner: r, jobId: j)
+                    }, runner: runner, jobId: jobId)
+                }
+            ),
+            ConversionAction(
                 id: "pdf.advanced.compress",
-                displayName: "Compress PDF (eBook)",
+                displayName: "Compress PDF",
                 outputExtension: "pdf",
                 isAdvanced: true,
                 category: .pdf,
-                iconName: "arrow.down.circle"
-            ) { input, output in
-                [Invocation(toolName: "gs", arguments: [
-                    "-sDEVICE=pdfwrite",
-                    "-dCompatibilityLevel=1.4",
-                    "-dPDFSETTINGS=/ebook",
-                    "-dNOPAUSE",
-                    "-dQUIET",
-                    "-dBATCH",
-                    "-sOutputFile=\(output.path)",
-                    input.path
-                ])]
-            },
+                iconName: "arrow.down.circle",
+                parameters: Self.compressionParameters,
+                customRunner: { input, output, params, runner, jobId in
+                    try Compressor.shared.compressPDF(input: input, output: output, parameters: params, runner: runner, jobId: jobId)
+                },
+                customBatchRunner: { inputs, output, params, runner, jobId in
+                    try Compressor.shared.compressBatch(inputs: inputs, outputDir: output, parameters: params, compressItem: { inUrl, outUrl, p, r, j in
+                        try Compressor.shared.compressPDF(input: inUrl, output: outUrl, parameters: p, runner: r, jobId: j)
+                    }, runner: runner, jobId: jobId)
+                }
+            ),
             ConversionAction(
                 id: "pdf.advanced.strip_metadata",
                 displayName: "Remove Metadata",

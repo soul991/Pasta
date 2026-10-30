@@ -87,8 +87,8 @@ public struct InputValidator {
                     throw PastaError.invalidInput("Parameter '\(key)' value \(num) exceeds maximum \(max)")
                 }
             case .sizeInBytes:
-                guard let bytes = val.asInt64, bytes > 0 else {
-                    throw PastaError.invalidInput("Parameter '\(key)' must be a positive byte count")
+                guard let bytes = val.asInt64, bytes >= 0 else {
+                    throw PastaError.invalidInput("Parameter '\(key)' must be a non-negative byte count")
                 }
             case .timeRange:
                 switch val {

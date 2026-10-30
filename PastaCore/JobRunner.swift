@@ -135,14 +135,18 @@ public final class JobRunner {
             tempWorkingOutputURL = tempDir.appendingPathComponent("output_result.\(ext)")
         }
 
-        let invocations = action.buildInvocationsWithParams(input, tempWorkingOutputURL, effectiveParams)
-        guard !invocations.isEmpty else {
-            throw PastaError.executionFailed(tool: "engine", exitCode: 1, output: "No invocations built for action \(action.id)")
-        }
+        if let custom = action.customRunner {
+            try custom(input, tempWorkingOutputURL, effectiveParams, self, jobId)
+        } else {
+            let invocations = action.buildInvocationsWithParams(input, tempWorkingOutputURL, effectiveParams)
+            guard !invocations.isEmpty else {
+                throw PastaError.executionFailed(tool: "engine", exitCode: 1, output: "No invocations built for action \(action.id)")
+            }
 
-        // Run each invocation in sequence
-        for inv in invocations {
-            try execute(invocation: inv, timeoutSeconds: timeoutSeconds, jobId: jobId)
+            // Run each invocation in sequence
+            for inv in invocations {
+                try execute(invocation: inv, timeoutSeconds: timeoutSeconds, jobId: jobId)
+            }
         }
 
         // Verify and move output to final destination
@@ -217,12 +221,17 @@ public final class JobRunner {
         let firstInput = inputs[0]
         let effectiveDest = destinationDirectory ?? PreferencesManager.shared.effectiveDestination(for: firstInput)
 
+        let isCompressBatch = action.id.contains("compress") && inputs.count > 1
         let finalDestinationURL: URL
-        switch action.outputKind {
-        case .folder(let suffix):
-            finalDestinationURL = OutputPlanner.planOutputDirectory(for: firstInput, suffix: suffix, destinationDirectory: effectiveDest)
-        case .file:
-            finalDestinationURL = OutputPlanner.planOutput(for: firstInput, targetExtension: action.outputExtension, destinationDirectory: effectiveDest)
+        if isCompressBatch {
+            finalDestinationURL = OutputPlanner.planOutputDirectory(for: firstInput, suffix: "compressed", destinationDirectory: effectiveDest)
+        } else {
+            switch action.outputKind {
+            case .folder(let suffix):
+                finalDestinationURL = OutputPlanner.planOutputDirectory(for: firstInput, suffix: suffix, destinationDirectory: effectiveDest)
+            case .file:
+                finalDestinationURL = OutputPlanner.planOutput(for: firstInput, targetExtension: action.outputExtension, destinationDirectory: effectiveDest)
+            }
         }
 
         PastaLogger.shared.info("Starting batch action \(action.id) on \(inputs.count) files -> '\(finalDestinationURL.lastPathComponent)'")
@@ -234,26 +243,46 @@ public final class JobRunner {
         }
 
         let tempWorkingOutputURL: URL
-        switch action.outputKind {
-        case .folder:
+        if isCompressBatch {
             tempWorkingOutputURL = tempDir.appendingPathComponent("output_items")
             try fm.createDirectory(at: tempWorkingOutputURL, withIntermediateDirectories: true)
-        case .file:
-            let ext = action.outputExtension.isEmpty ? "out" : action.outputExtension
-            tempWorkingOutputURL = tempDir.appendingPathComponent("output_result.\(ext)")
+        } else {
+            switch action.outputKind {
+            case .folder:
+                tempWorkingOutputURL = tempDir.appendingPathComponent("output_items")
+                try fm.createDirectory(at: tempWorkingOutputURL, withIntermediateDirectories: true)
+            case .file:
+                let ext = action.outputExtension.isEmpty ? "out" : action.outputExtension
+                tempWorkingOutputURL = tempDir.appendingPathComponent("output_result.\(ext)")
+            }
         }
 
-        let invocations = (action.buildBatchInvocationsWithParams ?? { ins, out, params in
-            guard let first = ins.first else { return [] }
-            return action.buildInvocationsWithParams(first, out, params)
-        })(inputs, tempWorkingOutputURL, effectiveParams)
+        if let customBatch = action.customBatchRunner {
+            try customBatch(inputs, tempWorkingOutputURL, effectiveParams, self, jobId)
+        } else if let custom = action.customRunner, isCompressBatch {
+            for inp in inputs {
+                let dest = tempWorkingOutputURL.appendingPathComponent(inp.lastPathComponent)
+                try custom(inp, dest, effectiveParams, self, jobId)
+            }
+        } else {
+            let invocations = (action.buildBatchInvocationsWithParams ?? { ins, out, params in
+                guard let first = ins.first else { return [] }
+                return action.buildInvocationsWithParams(first, out, params)
+            })(inputs, tempWorkingOutputURL, effectiveParams)
 
-        guard !invocations.isEmpty else {
-            throw PastaError.executionFailed(tool: "engine", exitCode: 1, output: "No invocations built for batch action \(action.id)")
+            guard !invocations.isEmpty else {
+                throw PastaError.executionFailed(tool: "engine", exitCode: 1, output: "No invocations built for batch action \(action.id)")
+            }
+
+            for inv in invocations {
+                try execute(invocation: inv, timeoutSeconds: timeoutSeconds, jobId: jobId)
+            }
         }
 
-        for inv in invocations {
-            try execute(invocation: inv, timeoutSeconds: timeoutSeconds, jobId: jobId)
+        if isCompressBatch {
+            try fm.moveItem(at: tempWorkingOutputURL, to: finalDestinationURL)
+            PastaLogger.shared.info("Successfully completed batch \(action.id) -> '\(finalDestinationURL.path)'")
+            return finalDestinationURL
         }
 
         switch action.outputKind {
