@@ -1,0 +1,51 @@
+name: macOS CI
+
+on:
+  push:
+    branches: [ "**" ]
+  pull_request:
+    branches: [ "**" ]
+  workflow_dispatch:
+
+jobs:
+  macos-build-and-test:
+    name: Build & Verify on macOS
+    runs-on: macos-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies via Homebrew
+        run: |
+          brew update --quiet
+          brew install ffmpeg imagemagick qpdf ghostscript poppler pandoc exiftool webp unar sevenzip
+
+      - name: Environment Diagnostics
+        run: |
+          swift --version
+          sw_vers
+
+      - name: Swift Build
+        run: swift build
+
+      - name: Run PastaTests
+        run: swift run PastaTests
+
+      - name: Run Section 8 Hardening Tests
+        run: ./scripts/run_section8_tests.sh
+
+      - name: Build and Sign Pasta.app
+        run: |
+          ./scripts/build_app.sh
+          codesign --verify --deep --strict Pasta.app
+
+      - name: Verify Bundle Contents
+        run: |
+          echo "=== Pasta.app Contents ==="
+          ls -laR Pasta.app
+          echo "=== Pasta.app Resources ==="
+          ls -la Pasta.app/Contents/Resources
+          test -f Pasta.app/Contents/Resources/AppIcon.icns && echo "✓ Found AppIcon.icns in bundle"
+          test -f Pasta.app/Contents/Resources/MenuBarIcon.pdf && echo "✓ Found MenuBarIcon.pdf in bundle"
+          test -f Pasta.app/Contents/Resources/theme_tokens.json && echo "✓ Found theme_tokens.json in bundle"

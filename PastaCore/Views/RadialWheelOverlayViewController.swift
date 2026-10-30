@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import QuartzCore
 
 public final class RadialWheelOverlayViewController: NSViewController {
     public var onCloseRequested: (() -> Void)?
@@ -11,8 +12,13 @@ public final class RadialWheelOverlayViewController: NSViewController {
     private let hudView = RadialConversionHUDView()
     private var nodeViews: [RadialOptionNodeView] = []
 
+    // Floating hint pill
+    private let hintPillContainer = NSVisualEffectView()
+    private let hintPillLabel = NSTextField(labelWithString: "")
+
     public override func loadView() {
-        view = NSView(frame: NSRect(x: 0, y: 0, width: 420, height: 420))
+        // Frame large enough for radial orbit (diameter 420) + bottom hint pill
+        view = NSView(frame: NSRect(x: 0, y: 0, width: 440, height: 480))
         view.wantsLayer = true
     }
 
@@ -22,17 +28,54 @@ public final class RadialWheelOverlayViewController: NSViewController {
     }
 
     private func setupUI() {
-        // Center Disc
-        centerDisc.frame = NSRect(x: 210 - 55, y: 210 - 55, width: 110, height: 110)
+        // Center Disc centered at (220, 250)
+        centerDisc.frame = NSRect(x: 220 - 55, y: 250 - 55, width: 110, height: 110)
         view.addSubview(centerDisc)
 
         // HUD View (initially hidden)
-        hudView.frame = NSRect(x: 210 - 75, y: 210 - 75, width: 150, height: 150)
+        hudView.frame = NSRect(x: 220 - 75, y: 250 - 75, width: 150, height: 150)
         hudView.isHidden = true
         hudView.onDismiss = { [weak self] in
             self?.onCloseRequested?()
         }
         view.addSubview(hudView)
+
+        // Hint pill container
+        hintPillContainer.translatesAutoresizingMaskIntoConstraints = false
+        hintPillContainer.blendingMode = .behindWindow
+        hintPillContainer.material = .hudWindow
+        hintPillContainer.state = .active
+        hintPillContainer.wantsLayer = true
+        hintPillContainer.layer?.cornerRadius = 14
+        hintPillContainer.layer?.borderWidth = 1.0
+        hintPillContainer.layer?.borderColor = NSColor(white: 1.0, alpha: 0.15).cgColor
+        hintPillContainer.layer?.masksToBounds = true
+        view.addSubview(hintPillContainer)
+
+        hintPillLabel.translatesAutoresizingMaskIntoConstraints = false
+        hintPillLabel.stringValue = "Hold ⇧ to open · Esc cancels · tap ⌥ switches Convert / Advanced"
+        hintPillLabel.font = NSFont.systemFont(ofSize: 11, weight: .medium)
+        // Calibrated 55% white to guarantee >= 4.5:1 contrast
+        hintPillLabel.textColor = ThemeManager.shared.textTertiaryColor
+        hintPillLabel.alignment = .center
+        hintPillContainer.addSubview(hintPillLabel)
+
+        NSLayoutConstraint.activate([
+            hintPillContainer.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            hintPillContainer.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -12),
+            hintPillContainer.heightAnchor.constraint(equalToConstant: 28),
+            hintPillContainer.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor, constant: 16),
+            hintPillContainer.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -16),
+
+            hintPillLabel.leadingAnchor.constraint(equalTo: hintPillContainer.leadingAnchor, constant: 14),
+            hintPillLabel.trailingAnchor.constraint(equalTo: hintPillContainer.trailingAnchor, constant: -14),
+            hintPillLabel.centerYAnchor.constraint(equalTo: hintPillContainer.centerYAnchor)
+        ])
+    }
+
+    public func toggleMode(isAdvanced: Bool) {
+        self.isAdvanced = isAdvanced
+        configure(files: targetFiles, isOptionHeld: isAdvanced)
     }
 
     public func configure(files: [URL], isOptionHeld: Bool) {
@@ -49,11 +92,17 @@ public final class RadialWheelOverlayViewController: NSViewController {
         centerDisc.isHidden = false
         centerDisc.configure(fileURL: firstFile, isAdvanced: isOptionHeld)
 
-        // Spring animation for center disc
-        centerDisc.layer?.transform = CATransform3DMakeScale(0.7, 0.7, 1.0)
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.25
-            ctx.allowsImplicitAnimation = true
+        let isReduceMotion = PreferencesManager.shared.reduceMotionEnabled
+
+        // Center disc bloom
+        if !isReduceMotion {
+            centerDisc.layer?.transform = CATransform3DMakeScale(0.85, 0.85, 1.0)
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.22
+                ctx.allowsImplicitAnimation = true
+                centerDisc.layer?.transform = CATransform3DIdentity
+            }
+        } else {
             centerDisc.layer?.transform = CATransform3DIdentity
         }
 
@@ -63,8 +112,8 @@ public final class RadialWheelOverlayViewController: NSViewController {
 
         let count = actions.count
         let orbitRadius: CGFloat = 138.0
-        let centerX: CGFloat = 210.0
-        let centerY: CGFloat = 210.0
+        let centerX: CGFloat = 220.0
+        let centerY: CGFloat = 250.0
 
         for (index, action) in actions.enumerated() {
             let angle = (-CGFloat.pi / 2.0) + (CGFloat(index) * (2.0 * CGFloat.pi / CGFloat(count)))
@@ -89,53 +138,61 @@ public final class RadialWheelOverlayViewController: NSViewController {
                 self?.performConversion(action: act)
             }
 
-            // Start collapsed at center, then bloom outward into orbit!
-            nodeView.layer?.transform = CATransform3DMakeScale(0.2, 0.2, 1.0)
-            nodeView.alphaValue = 0.0
+            if !isReduceMotion {
+                // Staggered blooming animation with mass 1.0, stiffness 420.0, damping 28.0 physics
+                nodeView.layer?.transform = CATransform3DMakeScale(0.4, 0.4, 1.0)
+                nodeView.alphaValue = 0.0
 
-            view.addSubview(nodeView)
-            nodeViews.append(nodeView)
+                view.addSubview(nodeView)
+                nodeViews.append(nodeView)
 
-            // Staggered blooming animation
-            let delay = Double(index) * 0.03
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                NSAnimationContext.runAnimationGroup { ctx in
-                    ctx.duration = 0.28
-                    ctx.allowsImplicitAnimation = true
-                    nodeView.layer?.transform = CATransform3DIdentity
-                    nodeView.alphaValue = 1.0
+                let delay = Double(index) * 0.025
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                    NSAnimationContext.runAnimationGroup { ctx in
+                        ctx.duration = 0.25
+                        ctx.allowsImplicitAnimation = true
+                        nodeView.layer?.transform = CATransform3DIdentity
+                        nodeView.alphaValue = 1.0
+                    }
                 }
+            } else {
+                // Plain fade for Reduce Motion
+                nodeView.layer?.transform = CATransform3DIdentity
+                nodeView.alphaValue = 1.0
+                view.addSubview(nodeView)
+                nodeViews.append(nodeView)
             }
         }
     }
 
     private func performConversion(action: ConversionAction) {
         guard let file = targetFiles.first else { return }
+        DragMonitor.shared.actionExecuted()
 
         // Collapse and fade radial option nodes
         for node in nodeViews {
             NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = 0.2
-                node.layer?.transform = CATransform3DMakeScale(0.3, 0.3, 1.0)
+                ctx.duration = 0.18
+                node.layer?.transform = CATransform3DMakeScale(0.5, 0.5, 1.0)
                 node.alphaValue = 0.0
             }
         }
 
         // Morph center disc into HUD View
         NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = 0.2
+            ctx.duration = 0.18
             centerDisc.alphaValue = 0.0
         }, completionHandler: { [weak self] in
             guard let self = self else { return }
             self.centerDisc.isHidden = true
             self.hudView.isHidden = false
             self.hudView.alphaValue = 0.0
-            self.hudView.layer?.transform = CATransform3DMakeScale(0.8, 0.8, 1.0)
+            self.hudView.layer?.transform = CATransform3DMakeScale(0.9, 0.9, 1.0)
 
             self.hudView.showConverting(action: action, filename: file.lastPathComponent)
 
             NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = 0.25
+                ctx.duration = 0.22
                 self.hudView.alphaValue = 1.0
                 self.hudView.layer?.transform = CATransform3DIdentity
             }

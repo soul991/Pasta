@@ -1315,6 +1315,151 @@ do {
     }
 }
 
+
+// MARK: - 12. DragMonitor Shift-Hold State Machine Tests
+print("\n--- 12. DragMonitor Shift-Hold State Machine Tests ---")
+do {
+    let mockClock = MockDragMonitorClock(initialTime: 1000.0)
+    let mockPasteboard = MockDragPasteboardReader(urls: [URL(fileURLWithPath: "/tmp/test.png")])
+    let prefs = PreferencesManager()
+    prefs.shiftHoldDurationMs = 450.0
+    prefs.stayOpenAfterRelease = true
+    prefs.showChargingRing = true
+    prefs.reduceMotionEnabled = false
+
+    let monitor = DragMonitor(clock: mockClock, pasteboardReader: mockPasteboard, preferences: prefs)
+
+    var wheelOpened = false
+    var wheelClosed = false
+    var lastProgress = 0.0
+    var modeToggled = false
+    var currentIsAdvanced = false
+
+    monitor.onWheelOpen = { files, isAdv, loc in
+        wheelOpened = true
+        currentIsAdvanced = isAdv
+    }
+    monitor.onWheelClose = {
+        wheelClosed = true
+    }
+    monitor.onChargingProgress = { prog, loc in
+        lastProgress = prog
+    }
+    monitor.onModeToggle = { isAdv in
+        modeToggled = true
+        currentIsAdvanced = isAdv
+    }
+
+    // 12.1 Hold 449 ms: no wheel
+    monitor.processMouseDragged(modifiers: [.shift], location: NSPoint(x: 100, y: 100), timestamp: 1000.000)
+    assertTest(monitor.state == .armed(startedAt: 1000.000, files: mockPasteboard.mockURLs, location: NSPoint(x: 100, y: 100)), "12.1 Shift down initiates Armed state at t=1000.0")
+
+    // Advance to 1000.449 (449 ms elapsed)
+    monitor.processMouseDragged(modifiers: [.shift], location: NSPoint(x: 100, y: 100), timestamp: 1000.449)
+    assertTest(!wheelOpened, "12.1 Hold 449 ms: wheel does NOT open")
+    if case .charging = monitor.state {
+        assertTest(true, "12.1 State is Charging after 120ms threshold")
+    } else {
+        assertTest(false, "12.1 Expected Charging state at 449 ms")
+    }
+
+    // 12.2 Hold 450 ms: wheel opens
+    monitor.processMouseDragged(modifiers: [.shift], location: NSPoint(x: 100, y: 100), timestamp: 1000.450)
+    assertTest(wheelOpened, "12.2 Hold 450 ms: wheel opens successfully")
+    if case .open = monitor.state {
+        assertTest(true, "12.2 State transitions to Open at exactly 450 ms")
+    } else {
+        assertTest(false, "12.2 Expected Open state at 450 ms")
+    }
+
+    // 12.3 Release after open: wheel stays (latches)
+    wheelClosed = false
+    monitor.processFlagsChanged(modifiers: [], timestamp: 1000.550)
+    assertTest(!wheelClosed, "12.3 Releasing Shift after open does not close wheel (latches)")
+    if case .open = monitor.state {
+        assertTest(true, "12.3 Wheel remains in Open state after Shift released")
+    } else {
+        assertTest(false, "12.3 Expected Open state preserved after Shift release")
+    }
+
+    // 12.4 Esc closes wheel
+    monitor.processKeyDown(keyCode: 53, timestamp: 1000.600)
+    assertTest(wheelClosed && monitor.state == .idle, "12.4 Esc key press closes the open wheel")
+
+    // 12.5 Hold then other key cancels
+    wheelOpened = false
+    var chargingCancelled = false
+    monitor.onChargingCancel = { chargingCancelled = true }
+    monitor.processMouseDragged(modifiers: [.shift], location: NSPoint(x: 100, y: 100), timestamp: 1100.000)
+    monitor.processMouseDragged(modifiers: [.shift], location: NSPoint(x: 100, y: 100), timestamp: 1100.200)
+    monitor.processKeyDown(keyCode: 12, timestamp: 1100.250) // 'q' or other key
+    assertTest(!wheelOpened && monitor.state == .idle && chargingCancelled, "12.5 Any key press during charging cancels progress and returns to Idle")
+
+    // 12.6 No drag session: Shift does nothing
+    mockPasteboard.mockURLs = []
+    wheelOpened = false
+    monitor.processMouseDragged(modifiers: [.shift], location: NSPoint(x: 100, y: 100), timestamp: 1200.000)
+    monitor.processMouseDragged(modifiers: [.shift], location: NSPoint(x: 100, y: 100), timestamp: 1200.500)
+    assertTest(!wheelOpened && monitor.state == .idle, "12.6 No drag session: Shift press does nothing")
+
+    // 12.7 Text drag (no file URLs): does nothing
+    mockPasteboard.mockURLs = [] // Empty file list (pure text drag)
+    wheelOpened = false
+    monitor.processMouseDragged(modifiers: [.shift], location: NSPoint(x: 100, y: 100), timestamp: 1300.000)
+    monitor.processMouseDragged(modifiers: [.shift], location: NSPoint(x: 100, y: 100), timestamp: 1300.600)
+    assertTest(!wheelOpened && monitor.state == .idle, "12.7 Text drag without file URLs does nothing")
+
+    // 12.8 Second hold closes wheel
+    mockPasteboard.mockURLs = [URL(fileURLWithPath: "/tmp/sample.png")]
+    wheelOpened = false
+    wheelClosed = false
+    monitor.processMouseDragged(modifiers: [.shift], location: NSPoint(x: 100, y: 100), timestamp: 1400.000)
+    monitor.processMouseDragged(modifiers: [.shift], location: NSPoint(x: 100, y: 100), timestamp: 1400.450)
+    assertTest(wheelOpened, "14.8 Wheel opened for second hold test")
+    monitor.processFlagsChanged(modifiers: [], timestamp: 1400.500) // release shift
+
+    // Second shift press down
+    monitor.processFlagsChanged(modifiers: [.shift], timestamp: 1400.600)
+    // Hold second shift for 450 ms -> 1401.050
+    monitor.processMouseDragged(modifiers: [.shift], location: NSPoint(x: 100, y: 100), timestamp: 1401.050)
+    assertTest(wheelClosed && monitor.state == .idle, "12.8 Second Shift hold closes the open wheel")
+
+    // 12.9 Option tap toggles mode
+    wheelOpened = false
+    modeToggled = false
+    currentIsAdvanced = false
+    monitor.processMouseDragged(modifiers: [.shift], location: NSPoint(x: 100, y: 100), timestamp: 1500.000)
+    monitor.processMouseDragged(modifiers: [.shift], location: NSPoint(x: 100, y: 100), timestamp: 1500.450)
+    monitor.processFlagsChanged(modifiers: [], timestamp: 1500.500)
+
+    // Quick option tap (<250 ms): down at 1500.600, up at 1500.750 (150 ms)
+    monitor.processFlagsChanged(modifiers: [.option], timestamp: 1500.600)
+    monitor.processFlagsChanged(modifiers: [], timestamp: 1500.750)
+    assertTest(modeToggled && currentIsAdvanced == true, "12.9 Quick Option tap (<250 ms) toggles Convert to Advanced mode")
+
+    // Second quick option tap toggles back
+    modeToggled = false
+    monitor.processFlagsChanged(modifiers: [.option], timestamp: 1500.800)
+    monitor.processFlagsChanged(modifiers: [], timestamp: 1500.900)
+    assertTest(modeToggled && currentIsAdvanced == false, "12.9 Second Option tap toggles Advanced back to Convert mode")
+
+    // 12.10 Option hold (>250 ms) does NOT toggle
+    modeToggled = false
+    monitor.processFlagsChanged(modifiers: [.option], timestamp: 1501.000)
+    monitor.processFlagsChanged(modifiers: [], timestamp: 1501.300) // 300 ms hold
+    assertTest(!modeToggled, "12.10 Option hold exceeding 250 ms does not toggle mode (requires a quick tap)")
+
+    // 12.11 Configurable hold duration
+    prefs.shiftHoldDurationMs = 600.0
+    monitor.closeWheel()
+    wheelOpened = false
+    monitor.processMouseDragged(modifiers: [.shift], location: NSPoint(x: 100, y: 100), timestamp: 1600.000)
+    monitor.processMouseDragged(modifiers: [.shift], location: NSPoint(x: 100, y: 100), timestamp: 1600.450)
+    assertTest(!wheelOpened, "12.11 Configured 600 ms duration: not opened at 450 ms")
+    monitor.processMouseDragged(modifiers: [.shift], location: NSPoint(x: 100, y: 100), timestamp: 1600.600)
+    assertTest(wheelOpened, "12.11 Configured 600 ms duration: opens at 600 ms")
+}
+
 print("\n==================================================")
 print("Test Suite Summary: \(passedTests)/\(totalTests) Passed, \(failedTests) Failed")
 print("==================================================")

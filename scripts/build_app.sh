@@ -18,6 +18,22 @@ mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
 cp .build/release/Pasta "$MACOS_DIR/Pasta"
 chmod +x "$MACOS_DIR/Pasta"
 
+# Copy Icon and theme resources if present
+if [ -f "assets/AppIcon.icns" ]; then
+    echo "Copying AppIcon.icns to Resources..."
+    cp assets/AppIcon.icns "$RESOURCES_DIR/AppIcon.icns"
+fi
+
+if [ -f "assets/MenuBarIcon.pdf" ]; then
+    echo "Copying MenuBarIcon to Resources..."
+    cp assets/MenuBarIcon.pdf "$RESOURCES_DIR/MenuBarIcon.pdf"
+fi
+
+if [ -f "PastaCore/Resources/theme_tokens.json" ]; then
+    echo "Copying theme_tokens.json to Resources..."
+    cp PastaCore/Resources/theme_tokens.json "$RESOURCES_DIR/theme_tokens.json"
+fi
+
 echo "Generating Info.plist..."
 cat << 'EOF' > "$CONTENTS_DIR/Info.plist"
 <?xml version="1.0" encoding="UTF-8"?>
@@ -38,6 +54,8 @@ cat << 'EOF' > "$CONTENTS_DIR/Info.plist"
     <string>1.0</string>
     <key>CFBundleVersion</key>
     <string>1</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>LSMinimumSystemVersion</key>
     <string>13.0</string>
     <key>LSUIElement</key>

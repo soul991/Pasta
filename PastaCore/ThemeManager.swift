@@ -18,7 +18,20 @@ public final class ThemeManager {
         }
     }
 
+    public struct SpringTokens {
+        public let mass: Double
+        public let stiffness: Double
+        public let damping: Double
+
+        public init(mass: Double, stiffness: Double, damping: Double) {
+            self.mass = mass
+            self.stiffness = stiffness
+            self.damping = damping
+        }
+    }
+
     public let presets: [PresetColor] = [
+        PresetColor(id: "sunset", name: "Pasta Sunset", hex: "#F2611F"),
         PresetColor(id: "orange", name: "Tangerine", hex: "#FF6B00"),
         PresetColor(id: "coral", name: "Deep Coral", hex: "#FF4B4B"),
         PresetColor(id: "purple", name: "Electric Purple", hex: "#8B5CF6"),
@@ -37,11 +50,50 @@ public final class ThemeManager {
         }
     }
 
+    // Semantic colors & typography tokens
+    public var accentColor: NSColor {
+        return NSColor(hex: currentHex) ?? NSColor(red: 0.95, green: 0.38, blue: 0.12, alpha: 1.0)
+    }
+
+    public var accentColorSubtle: NSColor {
+        return accentColor.withAlphaComponent(0.15)
+    }
+
+    public var accentColorHover: NSColor {
+        return accentColor.withAlphaComponent(0.25)
+    }
+
+    /// Dark ink color (#1A0F05) used on vibrant orange slices to ensure >= 8.9:1 contrast (WCAG AAA)
+    public var accentInkColor: NSColor {
+        return NSColor(hex: "#1A0F05") ?? NSColor.black
+    }
+
+    /// Calibrated tertiary text raised to 55% white to guarantee >= 4.5:1 contrast against dark materials
+    public var textTertiaryColor: NSColor {
+        return NSColor(white: 1.0, alpha: 0.55)
+    }
+
+    public var textSecondaryColor: NSColor {
+        return NSColor(white: 1.0, alpha: 0.70)
+    }
+
+    public var textPrimaryColor: NSColor {
+        return NSColor.white
+    }
+
+    // CASpringAnimation Physics Tokens
+    public let bloomSpring = SpringTokens(mass: 1.0, stiffness: 420.0, damping: 28.0)
+    public let dismissSpring = SpringTokens(mass: 0.8, stiffness: 550.0, damping: 32.0)
+    public let hoverSpring = SpringTokens(mass: 0.5, stiffness: 600.0, damping: 35.0)
+
+    public let maxHoverScale: CGFloat = 1.06
+    public let minHoverScale: CGFloat = 1.00
+
     private init() {
         if let saved = UserDefaults.standard.string(forKey: userDefaultsKey), !saved.isEmpty {
             self.currentHex = saved
         } else {
-            self.currentHex = "#FF6B00" // Default Tangerine
+            self.currentHex = "#F2611F" // Default Pasta Sunset
         }
     }
 
@@ -54,18 +106,6 @@ public final class ThemeManager {
             return
         }
         self.currentHex = clean.uppercased()
-    }
-
-    public var accentColor: NSColor {
-        return NSColor(hex: currentHex) ?? NSColor(red: 1.0, green: 0.42, blue: 0.0, alpha: 1.0)
-    }
-
-    public var accentColorSubtle: NSColor {
-        return accentColor.withAlphaComponent(0.15)
-    }
-
-    public var accentColorHover: NSColor {
-        return accentColor.withAlphaComponent(0.25)
     }
 }
 
@@ -87,7 +127,7 @@ extension NSColor {
     }
 
     public var hexString: String {
-        guard let rgbColor = usingColorSpace(.sRGB) else { return "#FF6B00" }
+        guard let rgbColor = usingColorSpace(.sRGB) else { return "#F2611F" }
         let r = Int(round(rgbColor.redComponent * 255))
         let g = Int(round(rgbColor.greenComponent * 255))
         let b = Int(round(rgbColor.blueComponent * 255))

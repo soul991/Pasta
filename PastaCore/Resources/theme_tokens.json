@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "name": "Pasta Design Tokens",
+  "version": "2.0.0",
+  "description": "Semantic design tokens for Pasta file converter macOS AppKit and Figma integration",
+  "tokens": {
+    "colors": {
+      "accent-primary": {
+        "value": "#F2611F",
+        "description": "Primary brand accent (deep sunset stop), used for active rings, progress highlights, and buttons",
+        "variants": {
+          "vibrant": "#FF9E33",
+          "light": "#FF8C00",
+          "highContrast": "#E04F0D"
+        }
+      },
+      "accent-gradient": {
+        "start": "#FFB347",
+        "end": "#F2611F",
+        "angle": 135,
+        "description": "Pasta signature sunset linear gradient"
+      },
+      "accent-ink": {
+        "value": "#1A0F05",
+        "description": "Dark ink typography used on vibrant orange surfaces (#FF9E33) to guarantee 8.9:1 contrast (WCAG AAA)"
+      },
+      "text-primary": {
+        "value": "#FFFFFF",
+        "systemMapping": "NSColor.labelColor",
+        "alpha": 1.0,
+        "description": "Primary readable text on dark macOS materials"
+      },
+      "text-secondary": {
+        "value": "rgba(255, 255, 255, 0.70)",
+        "systemMapping": "NSColor.secondaryLabelColor",
+        "alpha": 0.70,
+        "description": "Secondary descriptive labels and metadata"
+      },
+      "text-tertiary": {
+        "value": "rgba(255, 255, 255, 0.55)",
+        "systemMapping": "NSColor.tertiaryLabelColor",
+        "alpha": 0.55,
+        "description": "Calibrated tertiary hint text; raised to 55% white to ensure at least 4.5:1 contrast against dark obsidian surfaces"
+      },
+      "surface-obsidian-top": {
+        "value": "#2B2233",
+        "description": "Top stop of obsidian squircle background"
+      },
+      "surface-obsidian-bottom": {
+        "value": "#120D18",
+        "description": "Bottom stop of obsidian squircle background"
+      },
+      "border-subtle": {
+        "value": "rgba(255, 255, 255, 0.12)",
+        "description": "Subtle border around inactive slices and card boundaries"
+      },
+      "border-strong": {
+        "value": "rgba(255, 255, 255, 0.35)",
+        "description": "Focused and prominent boundary stroke"
+      }
+    },
+    "materials": {
+      "surface-wheel": {
+        "macosMaterial": "NSVisualEffectView.Material.hudWindow",
+        "blendingMode": "NSVisualEffectView.BlendingMode.behindWindow",
+        "description": "Translucent HUD window material for center disc and radial node backing"
+      },
+      "surface-popover": {
+        "macosMaterial": "NSVisualEffectView.Material.popover",
+        "blendingMode": "NSVisualEffectView.BlendingMode.behindWindow",
+        "description": "Native macOS NSPopover surface for status bar drop window"
+      },
+      "surface-sidebar": {
+        "macosMaterial": "NSVisualEffectView.Material.sidebar",
+        "blendingMode": "NSVisualEffectView.BlendingMode.behindWindow",
+        "description": "Sidebar vibrancy material for list and settings panels"
+      },
+      "surface-selection": {
+        "macosMaterial": "NSVisualEffectView.Material.selection",
+        "blendingMode": "NSVisualEffectView.BlendingMode.withinWindow",
+        "description": "Native highlight selection material"
+      }
+    },
+    "springs": {
+      "spatial-bloom": {
+        "mass": 1.0,
+        "stiffness": 420.0,
+        "damping": 28.0,
+        "initialVelocity": 0.0,
+        "description": "CASpringAnimation values for radial node staggered opening and blooming from center"
+      },
+      "spatial-dismiss": {
+        "mass": 0.8,
+        "stiffness": 550.0,
+        "damping": 32.0,
+        "initialVelocity": 0.0,
+        "description": "CASpringAnimation values for rapid, non-distracting node collapse and dismissal"
+      },
+      "hover-scale": {
+        "mass": 0.5,
+        "stiffness": 600.0,
+        "damping": 35.0,
+        "minScale": 1.0,
+        "maxScale": 1.06,
+        "description": "Micro-interaction spring for node hover and drag-over, strictly clamped between 1.0 and 1.06"
+      }
+    },
+    "interaction": {
+      "shiftHoldDurationMs": {
+        "default": 450,
+        "min": 300,
+        "max": 1000,
+        "description": "Threshold duration required to hold Shift while dragging a file to open wheel"
+      },
+      "chargingRingDelayMs": {
+        "value": 120,
+        "description": "Delay before cursor charging progress ring appears"
+      },
+      "optionTapMaxDurationMs": {
+        "value": 250,
+        "description": "Maximum duration of Option key press to qualify as a tap mode toggle"
+      },
+      "hintPillText": "Hold ⇧ to open · Esc cancels · tap ⌥ switches Convert / Advanced"
+    },
+    "typography": {
+      "headline": {
+        "fontSize": 14,
+        "fontWeight": "bold",
+        "lineHeight": 18,
+        "letterSpacing": -0.2
+      },
+      "body": {
+        "fontSize": 12,
+        "fontWeight": "medium",
+        "lineHeight": 16,
+        "letterSpacing": 0.0
+      },
+      "badge": {
+        "fontSize": 9,
+        "fontWeight": "black",
+        "lineHeight": 12,
+        "letterSpacing": 0.4
+      },
+      "hint": {
+        "fontSize": 11,
+        "fontWeight": "regular",
+        "lineHeight": 14,
+        "letterSpacing": 0.0
+      }
+    }
+  }
+}

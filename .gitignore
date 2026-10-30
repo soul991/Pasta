@@ -1,4 +1,6 @@
 .build/
 .DS_Store
+Pasta.app
 *.app/
+test_outputs_phase2/
 test_outputs*/

@@ -11,7 +11,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     public func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
 
-        // Initialize Popover
+        // Initialize Native NSPopover
         popover = NSPopover()
         popover.contentSize = NSSize(width: 440, height: 520)
         popover.behavior = .transient
@@ -21,25 +21,48 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         // Initialize Radial Wheel Overlay Panel
         wheelPanel = RadialWheelOverlayPanel()
 
-        // Setup DragMonitor
-        DragMonitor.shared.onDragStart = { [weak self] files, isOptionHeld, mouseLocation in
+        // Setup DragMonitor with Shift-Hold state machine & Charging Ring
+        DragMonitor.shared.onChargingProgress = { progress, location in
             DispatchQueue.main.async {
-                self?.wheelPanel.showCenteredAt(point: mouseLocation, files: files, isOptionHeld: isOptionHeld)
+                ChargingProgressRingPanel.shared.show(at: location, progress: progress)
             }
         }
 
-        DragMonitor.shared.onDragEnd = { [weak self] in
+        DragMonitor.shared.onChargingCancel = {
             DispatchQueue.main.async {
+                ChargingProgressRingPanel.shared.dismiss()
+            }
+        }
+
+        DragMonitor.shared.onWheelOpen = { [weak self] files, isAdvanced, mouseLocation in
+            DispatchQueue.main.async {
+                ChargingProgressRingPanel.shared.dismiss()
+                self?.wheelPanel.showCenteredAt(point: mouseLocation, files: files, isOptionHeld: isAdvanced)
+            }
+        }
+
+        DragMonitor.shared.onWheelClose = { [weak self] in
+            DispatchQueue.main.async {
+                ChargingProgressRingPanel.shared.dismiss()
                 self?.wheelPanel.dismiss()
+            }
+        }
+
+        DragMonitor.shared.onModeToggle = { [weak self] isAdvanced in
+            DispatchQueue.main.async {
+                self?.wheelPanel.toggleMode(isAdvanced: isAdvanced)
             }
         }
 
         DragMonitor.shared.startMonitoring()
 
-        // Initialize Status Item
+        // Initialize Status Item with Farfalle Bowtie icon
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusItem.button {
-            if let img = NSImage(systemSymbolName: "circle.circle", accessibilityDescription: "Pasta") {
+            if let customIcon = NSImage(named: "MenuBarIcon") {
+                customIcon.isTemplate = true
+                button.image = customIcon
+            } else if let img = NSImage(systemSymbolName: "circle.circle", accessibilityDescription: "Pasta") {
                 img.isTemplate = true
                 button.image = img
             } else {
@@ -92,7 +115,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func showAbout() {
         let alert = NSAlert()
         alert.messageText = "Pasta File Converter"
-        alert.informativeText = "Version 1.0\nA fast, offline macOS file converter with dynamic theme accents."
+        alert.informativeText = "Version 1.0\nA fast, offline macOS file converter with dynamic radial wheel."
         alert.alertStyle = .informational
         alert.runModal()
     }

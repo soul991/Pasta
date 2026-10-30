@@ -116,7 +116,19 @@ public final class JobStatusRowView: NSView {
                 self.statusIcon.isHidden = false
                 self.statusIcon.image = NSImage(systemSymbolName: "checkmark.circle.fill", accessibilityDescription: nil)
                 self.statusIcon.contentTintColor = .systemGreen
-                self.statusLabel.stringValue = "Done: \(url.lastPathComponent)"
+
+                let inSize = (try? FileManager.default.attributesOfItem(atPath: self.inputURL.path)[.size] as? Int64) ?? 0
+                let outSize = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? 0
+
+                if inSize > 0 && outSize > 0 && outSize < inSize {
+                    let savedPct = Int(round((1.0 - Double(outSize) / Double(inSize)) * 100.0))
+                    let inMB = String(format: "%.1f MB", Double(inSize) / 1_048_576.0)
+                    let outMB = String(format: "%.1f MB", Double(outSize) / 1_048_576.0)
+                    self.statusLabel.stringValue = "Done · Saved \(savedPct)% (\(inMB) → \(outMB))"
+                } else {
+                    self.statusLabel.stringValue = "Done: \(url.lastPathComponent)"
+                }
+
                 self.statusLabel.textColor = .labelColor
                 self.actionButton.title = "Reveal"
                 self.actionButton.isHidden = false

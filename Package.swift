@@ -14,7 +14,10 @@ let package = Package(
     targets: [
         .target(
             name: "PastaCore",
-            path: "PastaCore"
+            path: "PastaCore",
+            resources: [
+                .process("Resources")
+            ]
         ),
         .executableTarget(
             name: "Pasta",

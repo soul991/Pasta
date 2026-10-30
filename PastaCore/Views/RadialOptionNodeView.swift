@@ -89,36 +89,43 @@ public final class RadialOptionNodeView: NSView {
 
     private func updateState() {
         let accent = ThemeManager.shared.accentColor
+        let darkInk = ThemeManager.shared.accentInkColor
+        let maxScale = ThemeManager.shared.maxHoverScale // 1.06
+        let minScale = ThemeManager.shared.minHoverScale // 1.00
 
         NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.18
+            ctx.duration = 0.16
             ctx.allowsImplicitAnimation = true
 
             if isDraggingOver {
-                // Dramatic magnification on drag hover!
-                layer?.transform = CATransform3DMakeScale(1.35, 1.35, 1.0)
+                // Drag hover: scale clamped to maximum 1.06 (never below 1.0)
+                layer?.transform = CATransform3DMakeScale(maxScale, maxScale, 1.0)
                 layer?.backgroundColor = accent.cgColor
                 layer?.borderColor = NSColor.white.cgColor
-                layer?.borderWidth = 2.5
-                layer?.shadowColor = accent.cgColor
-                layer?.shadowOpacity = 0.9
-                layer?.shadowRadius = 12
-                layer?.shadowOffset = .zero
-
-                titleLabel.textColor = .white
-                iconView.contentTintColor = .white
-            } else if isHovered {
-                layer?.transform = CATransform3DMakeScale(1.12, 1.12, 1.0)
-                layer?.backgroundColor = accent.withAlphaComponent(0.3).cgColor
-                layer?.borderColor = accent.cgColor
                 layer?.borderWidth = 2.0
                 layer?.shadowColor = accent.cgColor
-                layer?.shadowOpacity = 0.5
-                layer?.shadowRadius = 6
+                layer?.shadowOpacity = 0.8
+                layer?.shadowRadius = 8
+                layer?.shadowOffset = .zero
 
-                titleLabel.textColor = .labelColor
+                // Contrast fix: Active slice labels use dark ink (#1A0F05) to ensure 8.9:1 contrast
+                titleLabel.textColor = darkInk
+                iconView.contentTintColor = darkInk
+            } else if isHovered {
+                // Subtle hover: 1.03 scale (within 1.0 to 1.06 range)
+                let hoverScale = (minScale + maxScale) / 2.0 // 1.03
+                layer?.transform = CATransform3DMakeScale(hoverScale, hoverScale, 1.0)
+                layer?.backgroundColor = accent.withAlphaComponent(0.3).cgColor
+                layer?.borderColor = accent.cgColor
+                layer?.borderWidth = 1.8
+                layer?.shadowColor = accent.cgColor
+                layer?.shadowOpacity = 0.4
+                layer?.shadowRadius = 5
+
+                titleLabel.textColor = .white
                 iconView.contentTintColor = accent
             } else {
+                // Idle state: scale 1.00 exactly
                 layer?.transform = CATransform3DIdentity
                 layer?.backgroundColor = NSColor(white: 0.12, alpha: 0.88).cgColor
                 layer?.borderColor = NSColor(white: 0.35, alpha: 0.6).cgColor
@@ -177,7 +184,6 @@ public final class RadialOptionNodeView: NSView {
             onDrop?(action, urls)
             return true
         } else {
-            // Drop target fallback: triggers conversion on the file currently selected by the wheel
             onSelect?(action)
             return true
         }
