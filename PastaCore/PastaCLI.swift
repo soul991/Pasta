@@ -55,6 +55,7 @@ public struct PastaCLI {
 
         print("Pasta Environment & Engine Doctor:")
         print("--------------------------------------------------")
+        print("Required Engine Tools:")
         var allOk = true
         for tool in tools {
             if let url = ToolLocator.shared.findTool(tool) {
@@ -62,6 +63,15 @@ public struct PastaCLI {
             } else {
                 print("  [MISSING] \(tool.padding(toLength: 14, withPad: " ", startingAt: 0)) (NOT FOUND)")
                 allOk = false
+            }
+        }
+        print("\nOptional Engine Tools:")
+        let optionalTools = ["soffice"]
+        for tool in optionalTools {
+            if let url = ToolLocator.shared.findOptionalTool(tool) {
+                print("  [OK (OPTIONAL)]  \(tool.padding(toLength: 14, withPad: " ", startingAt: 0)) -> \(url.path)")
+            } else {
+                print("  [OPTIONAL MISSING] \(tool.padding(toLength: 14, withPad: " ", startingAt: 0)) (LibreOffice not installed, Office conversions disabled)")
             }
         }
         print("--------------------------------------------------")
@@ -138,15 +148,48 @@ public struct PastaCLI {
             exit(1)
         }
 
+        let fileURLs = files.map { URL(fileURLWithPath: $0) }
+        for u in fileURLs {
+            guard FileManager.default.fileExists(atPath: u.path) else {
+                fputs("Error: File does not exist at '\(u.path)'\n", stderr)
+                exit(1)
+            }
+        }
+
+        let firstURL = fileURLs[0]
+        let candidateAction: ConversionAction?
+        if let aid = actionId {
+            candidateAction = FormatRegistry.shared.action(for: firstURL, actionID: aid)
+        } else if let tf = targetFormat {
+            candidateAction = FormatRegistry.shared.action(for: firstURL, targetExtension: tf)
+        } else {
+            fputs("Error: Must specify either --action <action_id> or --to <extension>.\n", stderr)
+            exit(1)
+        }
+
+        if let act = candidateAction, act.isBatch || (fileURLs.count > 1 && act.buildBatchInvocationsWithParams != nil) {
+            var effectiveParams: ParameterValues = [:]
+            for (k, v) in rawParams {
+                if let declared = act.parameters.first(where: { $0.id == k }) {
+                    effectiveParams[k] = ActionParameter.parseCLIValue(v, for: declared.kind)
+                } else {
+                    effectiveParams[k] = .text(v)
+                }
+            }
+            do {
+                let output = try JobRunner.shared.runBatch(action: act, inputs: fileURLs, parameters: effectiveParams)
+                print("OK: \(output.path)")
+                return
+            } catch {
+                fputs("Failed batch action '\(act.id)': \(error.localizedDescription)\n", stderr)
+                exit(1)
+            }
+        }
+
         var anyFailed = false
 
         for file in files {
             let url = URL(fileURLWithPath: file)
-            guard FileManager.default.fileExists(atPath: url.path) else {
-                fputs("Error: File does not exist at '\(file)'\n", stderr)
-                anyFailed = true
-                continue
-            }
 
             let action: ConversionAction?
             if let aid = actionId {

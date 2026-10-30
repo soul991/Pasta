@@ -102,6 +102,16 @@
 /opt/homebrew/bin/ffmpeg -nostdin -n -i IN -c:v libvpx-vp9 -crf 32 -b:v 0 -c:a libopus OUT
 ```
 
+### Video to AVI
+```bash
+/opt/homebrew/bin/ffmpeg -nostdin -n -i IN -c:v mpeg4 -c:a mp3 OUT.avi
+```
+
+### Video to WMV
+```bash
+/opt/homebrew/bin/ffmpeg -nostdin -n -i IN -c:v wmv2 -b:v 1000k -c:a wmav2 -b:a 128k OUT.wmv
+```
+
 ### Video to Animated GIF
 ```bash
 /opt/homebrew/bin/ffmpeg -nostdin -n -i IN -vf "fps=12,scale=480:-1:flags=lanczos,split[a][b];[a]palettegen[p];[b][p]paletteuse" OUT
@@ -129,6 +139,8 @@
 - **To FLAC**: `/opt/homebrew/bin/ffmpeg -nostdin -n -i IN -vn -c:a flac OUT`
 - **To Opus**: `/opt/homebrew/bin/ffmpeg -nostdin -n -i IN -vn -c:a libopus -b:a 128k OUT`
 - **To WAV**: `/opt/homebrew/bin/ffmpeg -nostdin -n -i IN -vn -c:a pcm_s16le OUT`
+- **To OGG (Vorbis)**: `/opt/homebrew/bin/ffmpeg -nostdin -n -i IN -vn -c:a vorbis -strict -2 -ac 2 -b:a 128k OUT`
+- **To AIFF**: `/opt/homebrew/bin/ffmpeg -nostdin -n -i IN -vn -c:a pcm_s16be OUT`
 
 ### Subtitle Conversions
 ```bash
@@ -165,19 +177,41 @@
 /opt/homebrew/bin/qpdf IN --split-pages OUT_PATTERN_%d.pdf
 ```
 
+### Image to PDF (Single or Batch)
+```bash
+/opt/homebrew/bin/magick IN1 IN2 ... OUT.pdf
+```
+
 ---
 
 ## 4. Documents
 
-### DOCX to TXT, Markdown, HTML
+### DOCX to TXT, Markdown, HTML, EPUB
 ```bash
 /opt/homebrew/bin/pandoc IN -o OUT
 ```
 
-### Markdown to DOCX, HTML
+### Markdown to DOCX, HTML, EPUB
 ```bash
 /opt/homebrew/bin/pandoc IN -o OUT
 ```
+
+### HTML to DOCX, Markdown, EPUB
+```bash
+/opt/homebrew/bin/pandoc IN -o OUT
+```
+
+### EPUB to DOCX, Markdown, HTML, Plain Text
+```bash
+/opt/homebrew/bin/pandoc IN -o OUT.docx
+/opt/homebrew/bin/pandoc IN -o OUT.md
+/opt/homebrew/bin/pandoc -s IN -o OUT.html
+/opt/homebrew/bin/pandoc IN -t plain -o OUT.txt
+```
+
+### LibreOffice (soffice) & Apple Pages Status
+- **LibreOffice (`soffice`)**: Optional tool. When installed at `/Applications/LibreOffice.app`, enables headless conversions (`soffice --headless --convert-to pdf/docx/pptx/xlsx`). Reported as optional in `pasta doctor`.
+- **Apple Pages**: No verified offline route exists without driving the GUI application through AppleScript, which requires the app to be open and prompts for Automation privileges. Therefore Pages is excluded from headless offline conversion.
 
 ---
 
@@ -208,6 +242,16 @@ rm -f TEMP_COPY
 ### Extract ZIP
 ```bash
 /usr/bin/ditto -x -k IN OUT_DIR
+```
+
+### Create Single GZIP (.gz)
+```bash
+/usr/bin/gzip -c IN > OUT.gz
+```
+
+### Extract GZIP (.gz)
+```bash
+/opt/homebrew/bin/7zz x -y IN -oOUT_DIR
 ```
 
 ### Create & Extract TAR.GZ

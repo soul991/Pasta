@@ -25,11 +25,20 @@ public struct ConversionAction: Identifiable, Equatable {
     public let iconName: String
     public let outputKind: OutputKind
     public let parameters: [ActionParameter]
+    public let isBatch: Bool
     public let buildInvocationsWithParams: (URL, URL, ParameterValues) -> [Invocation]
+    public let buildBatchInvocationsWithParams: (([URL], URL, ParameterValues) -> [Invocation])?
 
     public var buildInvocations: (URL, URL) -> [Invocation] {
         return { input, output in
             self.buildInvocationsWithParams(input, output, self.defaultParameterValues)
+        }
+    }
+
+    public var buildBatchInvocations: (([URL], URL) -> [Invocation])? {
+        guard let builder = buildBatchInvocationsWithParams else { return nil }
+        return { inputs, output in
+            builder(inputs, output, self.defaultParameterValues)
         }
     }
 
@@ -50,7 +59,9 @@ public struct ConversionAction: Identifiable, Equatable {
         iconName: String = "gearshape",
         outputKind: OutputKind = .file,
         parameters: [ActionParameter] = [],
-        buildInvocations: @escaping (URL, URL, ParameterValues) -> [Invocation]
+        isBatch: Bool = false,
+        buildInvocations: @escaping (URL, URL, ParameterValues) -> [Invocation],
+        buildBatchInvocations: (([URL], URL, ParameterValues) -> [Invocation])? = nil
     ) {
         self.id = id
         self.displayName = displayName
@@ -60,7 +71,38 @@ public struct ConversionAction: Identifiable, Equatable {
         self.iconName = iconName
         self.outputKind = outputKind
         self.parameters = parameters
+        self.isBatch = isBatch
         self.buildInvocationsWithParams = buildInvocations
+        self.buildBatchInvocationsWithParams = buildBatchInvocations ?? { inputs, out, params in
+            guard let first = inputs.first else { return [] }
+            return buildInvocations(first, out, params)
+        }
+    }
+
+    public init(
+        batchId id: String,
+        displayName: String,
+        outputExtension: String,
+        isAdvanced: Bool = false,
+        category: ActionCategory,
+        iconName: String = "gearshape",
+        outputKind: OutputKind = .file,
+        parameters: [ActionParameter] = [],
+        buildBatchInvocations: @escaping ([URL], URL, ParameterValues) -> [Invocation]
+    ) {
+        self.init(
+            id: id,
+            displayName: displayName,
+            outputExtension: outputExtension,
+            isAdvanced: isAdvanced,
+            category: category,
+            iconName: iconName,
+            outputKind: outputKind,
+            parameters: parameters,
+            isBatch: true,
+            buildInvocations: { input, out, params in buildBatchInvocations([input], out, params) },
+            buildBatchInvocations: buildBatchInvocations
+        )
     }
 
     public init(
@@ -82,6 +124,7 @@ public struct ConversionAction: Identifiable, Equatable {
             iconName: iconName,
             outputKind: outputKind,
             parameters: [],
+            isBatch: false,
             buildInvocations: { input, output, _ in buildInvocations(input, output) }
         )
     }

@@ -50,6 +50,12 @@ public final class FormatRegistry {
         if actionID == "image.resize" {
             return actions.first(where: { $0.id == "image.advanced.resize_50" })
         }
+        if actionID == "archive.gzip" {
+            return actions.first(where: { $0.id == "archive.create.gzip" })
+        }
+        if actionID == "archive.create.gzip" {
+            return actions.first(where: { $0.id == "archive.create.gzip" || $0.id == "archive.gzip" })
+        }
         return nil
     }
 
@@ -72,14 +78,18 @@ public final class FormatRegistry {
         switch ext {
         case "png", "jpg", "jpeg", "webp", "heic", "tiff", "tif", "bmp", "gif", "avif", "svg":
             return imageActions(for: fileURL, inputExt: ext)
-        case "mp4", "mov", "mkv", "webm", "avi", "m4v", "flv":
+        case "mp4", "mov", "mkv", "webm", "avi", "wmv", "m4v", "flv":
             return videoActions(for: fileURL, inputExt: ext)
-        case "mp3", "m4a", "wav", "flac", "aac", "ogg", "opus":
+        case "mp3", "m4a", "wav", "flac", "aac", "ogg", "opus", "aiff", "aif":
             return audioActions(for: fileURL, inputExt: ext)
         case "pdf":
             return pdfActions(for: fileURL)
         case "docx":
             return docxActions(for: fileURL)
+        case "doc", "ppt", "pptx", "xls", "xlsx":
+            return officeActions(for: fileURL, inputExt: ext)
+        case "epub":
+            return epubActions(for: fileURL)
         case "md", "markdown":
             return markdownActions(for: fileURL)
         case "txt":
@@ -288,8 +298,25 @@ public final class FormatRegistry {
             buildInvocations: resizeBuilder
         ))
 
-        // Standard compress to zip
+        list.append(ConversionAction(
+            id: "image.to.pdf",
+            displayName: "Convert to PDF",
+            outputExtension: "pdf",
+            isAdvanced: false,
+            category: .document,
+            iconName: "doc.richtext",
+            isBatch: true,
+            buildInvocations: { input, output, _ in
+                [Invocation(toolName: "magick", arguments: [input.path, output.path])]
+            },
+            buildBatchInvocations: { inputs, output, _ in
+                [Invocation(toolName: "magick", arguments: inputs.map(\.path) + [output.path])]
+            }
+        ))
+
+        // Standard compress to zip & gzip
         list.append(archiveCreateZipAction())
+        list.append(archiveCreateGzipAction())
 
         return list
     }
@@ -347,6 +374,32 @@ public final class FormatRegistry {
                 iconName: "film"
             ) { input, output in
                 [Invocation(toolName: "ffmpeg", arguments: ["-nostdin", "-n", "-i", input.path, "-c", "copy", output.path])]
+            })
+        }
+
+        if inputExt != "avi" {
+            list.append(ConversionAction(
+                id: "video.to.avi",
+                displayName: "Convert to AVI",
+                outputExtension: "avi",
+                isAdvanced: false,
+                category: .video,
+                iconName: "film"
+            ) { input, output in
+                [Invocation(toolName: "ffmpeg", arguments: ["-nostdin", "-n", "-i", input.path, "-c:v", "mpeg4", "-c:a", "mp3", output.path])]
+            })
+        }
+
+        if inputExt != "wmv" {
+            list.append(ConversionAction(
+                id: "video.to.wmv",
+                displayName: "Convert to WMV",
+                outputExtension: "wmv",
+                isAdvanced: false,
+                category: .video,
+                iconName: "film"
+            ) { input, output in
+                [Invocation(toolName: "ffmpeg", arguments: ["-nostdin", "-n", "-i", input.path, "-c:v", "wmv2", "-b:v", "1000k", "-c:a", "wmav2", "-b:a", "128k", output.path])]
             })
         }
 
@@ -469,6 +522,7 @@ public final class FormatRegistry {
         })
 
         list.append(archiveCreateZipAction())
+        list.append(archiveCreateGzipAction())
         return list
     }
 
@@ -541,6 +595,32 @@ public final class FormatRegistry {
             })
         }
 
+        if inputExt != "ogg" {
+            list.append(ConversionAction(
+                id: "audio.to.ogg",
+                displayName: "Convert to OGG",
+                outputExtension: "ogg",
+                isAdvanced: false,
+                category: .audio,
+                iconName: "waveform"
+            ) { input, output in
+                [Invocation(toolName: "ffmpeg", arguments: ["-nostdin", "-n", "-i", input.path, "-vn", "-c:a", "vorbis", "-strict", "-2", "-ac", "2", "-b:a", "128k", output.path])]
+            })
+        }
+
+        if inputExt != "aiff" && inputExt != "aif" {
+            list.append(ConversionAction(
+                id: "audio.to.aiff",
+                displayName: "Convert to AIFF",
+                outputExtension: "aiff",
+                isAdvanced: false,
+                category: .audio,
+                iconName: "waveform"
+            ) { input, output in
+                [Invocation(toolName: "ffmpeg", arguments: ["-nostdin", "-n", "-i", input.path, "-vn", "-c:a", "pcm_s16be", output.path])]
+            })
+        }
+
         // Advanced
         list.append(ConversionAction(
             id: "audio.advanced.compress",
@@ -565,6 +645,7 @@ public final class FormatRegistry {
         })
 
         list.append(archiveCreateZipAction())
+        list.append(archiveCreateGzipAction())
         return list
     }
 
@@ -642,7 +723,18 @@ public final class FormatRegistry {
                 let pattern = output.appendingPathComponent("page-%d.pdf").path
                 return [Invocation(toolName: "qpdf", arguments: [input.path, "--split-pages", pattern])]
             },
-            archiveCreateZipAction()
+            ConversionAction(
+                batchId: "pdf.merge",
+                displayName: "Merge PDFs",
+                outputExtension: "pdf",
+                isAdvanced: false,
+                category: .pdf,
+                iconName: "doc.on.doc"
+            ) { inputs, output, _ in
+                [Invocation(toolName: "qpdf", arguments: ["--empty", "--pages"] + inputs.map(\.path) + ["--", output.path])]
+            },
+            archiveCreateZipAction(),
+            archiveCreateGzipAction()
         ]
     }
 
@@ -679,7 +771,18 @@ public final class FormatRegistry {
             ) { input, output in
                 [Invocation(toolName: "pandoc", arguments: ["-o", output.path, input.path])]
             },
-            archiveCreateZipAction()
+            ConversionAction(
+                id: "docx.to.epub",
+                displayName: "Convert to EPUB",
+                outputExtension: "epub",
+                isAdvanced: false,
+                category: .document,
+                iconName: "book"
+            ) { input, output in
+                [Invocation(toolName: "pandoc", arguments: ["-o", output.path, input.path])]
+            },
+            archiveCreateZipAction(),
+            archiveCreateGzipAction()
         ]
     }
 
@@ -715,7 +818,18 @@ public final class FormatRegistry {
             ) { input, output in
                 [Invocation(toolName: "pandoc", arguments: ["-o", output.path, input.path])]
             },
-            archiveCreateZipAction()
+            ConversionAction(
+                id: "md.to.epub",
+                displayName: "Convert to EPUB",
+                outputExtension: "epub",
+                isAdvanced: false,
+                category: .document,
+                iconName: "book"
+            ) { input, output in
+                [Invocation(toolName: "pandoc", arguments: ["-o", output.path, input.path])]
+            },
+            archiveCreateZipAction(),
+            archiveCreateGzipAction()
         ]
     }
 
@@ -751,7 +865,8 @@ public final class FormatRegistry {
             ) { input, output in
                 [Invocation(toolName: "pandoc", arguments: ["-s", "-o", output.path, input.path])]
             },
-            archiveCreateZipAction()
+            archiveCreateZipAction(),
+            archiveCreateGzipAction()
         ]
     }
 
@@ -787,8 +902,86 @@ public final class FormatRegistry {
             ) { input, output in
                 [Invocation(toolName: "pandoc", arguments: ["-o", output.path, input.path])]
             },
-            archiveCreateZipAction()
+            ConversionAction(
+                id: "html.to.epub",
+                displayName: "Convert to EPUB",
+                outputExtension: "epub",
+                isAdvanced: false,
+                category: .document,
+                iconName: "book"
+            ) { input, output in
+                [Invocation(toolName: "pandoc", arguments: ["-o", output.path, input.path])]
+            },
+            archiveCreateZipAction(),
+            archiveCreateGzipAction()
         ]
+    }
+
+    private func epubActions(for url: URL) -> [ConversionAction] {
+        return [
+            ConversionAction(
+                id: "epub.to.docx",
+                displayName: "Convert to DOCX",
+                outputExtension: "docx",
+                isAdvanced: false,
+                category: .document,
+                iconName: "doc.text"
+            ) { input, output in
+                [Invocation(toolName: "pandoc", arguments: ["-o", output.path, input.path])]
+            },
+            ConversionAction(
+                id: "epub.to.md",
+                displayName: "Convert to Markdown",
+                outputExtension: "md",
+                isAdvanced: false,
+                category: .document,
+                iconName: "doc.text"
+            ) { input, output in
+                [Invocation(toolName: "pandoc", arguments: ["-o", output.path, input.path])]
+            },
+            ConversionAction(
+                id: "epub.to.html",
+                displayName: "Convert to HTML",
+                outputExtension: "html",
+                isAdvanced: false,
+                category: .document,
+                iconName: "globe"
+            ) { input, output in
+                [Invocation(toolName: "pandoc", arguments: ["-s", "-o", output.path, input.path])]
+            },
+            ConversionAction(
+                id: "epub.to.txt",
+                displayName: "Convert to Plain Text",
+                outputExtension: "txt",
+                isAdvanced: false,
+                category: .document,
+                iconName: "doc.text"
+            ) { input, output in
+                [Invocation(toolName: "pandoc", arguments: ["-t", "plain", "-o", output.path, input.path])]
+            },
+            archiveCreateZipAction(),
+            archiveCreateGzipAction()
+        ]
+    }
+
+    private func officeActions(for url: URL, inputExt: String) -> [ConversionAction] {
+        var list: [ConversionAction] = []
+        if ToolLocator.shared.isOptionalToolAvailable("soffice") {
+            list.append(ConversionAction(
+                id: "office.to.pdf",
+                displayName: "Convert to PDF",
+                outputExtension: "pdf",
+                isAdvanced: false,
+                category: .document,
+                iconName: "doc.richtext"
+            ) { input, output in
+                let outDir = output.deletingLastPathComponent().path
+                return [Invocation(toolName: "soffice", arguments: ["--headless", "--convert-to", "pdf", input.path, "--outdir", outDir])]
+            })
+        }
+        list.append(archiveCreateZipAction())
+        list.append(archiveCreateGzipAction())
+        return list
     }
 
     // MARK: - Subtitles
@@ -804,7 +997,8 @@ public final class FormatRegistry {
             ) { input, output in
                 [Invocation(toolName: "ffmpeg", arguments: ["-nostdin", "-n", "-i", input.path, output.path])]
             },
-            archiveCreateZipAction()
+            archiveCreateZipAction(),
+            archiveCreateGzipAction()
         ]
     }
 
@@ -820,7 +1014,8 @@ public final class FormatRegistry {
             ) { input, output in
                 [Invocation(toolName: "ffmpeg", arguments: ["-nostdin", "-n", "-i", input.path, output.path])]
             },
-            archiveCreateZipAction()
+            archiveCreateZipAction(),
+            archiveCreateGzipAction()
         ]
     }
 
@@ -838,7 +1033,9 @@ public final class FormatRegistry {
             ) { input, output in
                 if inputExt == "zip" {
                     return [Invocation(toolName: "ditto", arguments: ["-x", "-k", input.path, output.path])]
-                } else if ["tar", "gz", "tgz"].contains(inputExt) {
+                } else if inputExt == "gz" {
+                    return [Invocation(toolName: "7zz", arguments: ["x", "-y", input.path, "-o\(output.path)"])]
+                } else if ["tar", "tgz"].contains(inputExt) {
                     return [Invocation(toolName: "tar", arguments: ["-xf", input.path, "-C", output.path])]
                 } else if inputExt == "rar" {
                     return [Invocation(toolName: "unar", arguments: ["-o", output.path, input.path])]
@@ -872,7 +1069,8 @@ public final class FormatRegistry {
                 let parentDir = input.deletingLastPathComponent().path
                 let name = input.lastPathComponent
                 return [Invocation(toolName: "tar", arguments: ["-czf", output.path, "-C", parentDir, name])]
-            }
+            },
+            archiveCreateGzipAction()
         ]
     }
 
@@ -919,6 +1117,7 @@ public final class FormatRegistry {
                 [Invocation(toolName: "cupsfilter", arguments: [input.path], redirectStdoutTo: output.path)]
             },
             archiveCreateZipAction(),
+            archiveCreateGzipAction(),
             ConversionAction(
                 id: "archive.create.targz",
                 displayName: "Compress to TAR.GZ",
@@ -957,6 +1156,7 @@ public final class FormatRegistry {
                 [Invocation(toolName: "cupsfilter", arguments: [input.path], redirectStdoutTo: output.path)]
             },
             archiveCreateZipAction(),
+            archiveCreateGzipAction(),
             ConversionAction(
                 id: "archive.create.targz",
                 displayName: "Compress to TAR.GZ",
@@ -982,6 +1182,19 @@ public final class FormatRegistry {
             iconName: "archivebox"
         ) { input, output in
             [Invocation(toolName: "ditto", arguments: ["-c", "-k", "--sequesterRsrc", input.path, output.path])]
+        }
+    }
+
+    private func archiveCreateGzipAction() -> ConversionAction {
+        return ConversionAction(
+            id: "archive.create.gzip",
+            displayName: "Compress to GZIP",
+            outputExtension: "gz",
+            isAdvanced: false,
+            category: .archive,
+            iconName: "archivebox"
+        ) { input, output in
+            [Invocation(toolName: "7zz", arguments: ["a", "-tgzip", output.path, input.path])]
         }
     }
 }

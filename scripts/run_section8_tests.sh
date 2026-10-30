@@ -45,7 +45,11 @@ for f in "sample with spaces.png" "user's document.jpg" "-weird.mp4" "SAMPLE_PHO
     HASH_BEFORE=$(shasum -a 256 "$FIXTURE" | awk '{print $1}')
     
     # Run conversion
-    if "$PASTA_BIN" convert "$FIXTURE" --to jpg > /dev/null 2>&1 || "$PASTA_BIN" convert "$FIXTURE" --to mp3 > /dev/null 2>&1 || "$PASTA_BIN" convert "$FIXTURE" --to webp > /dev/null 2>&1; then
+    if "$PASTA_BIN" convert "$FIXTURE" --to jpg > /dev/null 2>&1 || \
+       "$PASTA_BIN" convert "$FIXTURE" --to pdf > /dev/null 2>&1 || \
+       "$PASTA_BIN" convert "$FIXTURE" --to avi > /dev/null 2>&1 || \
+       "$PASTA_BIN" convert "$FIXTURE" --to mp3 > /dev/null 2>&1 || \
+       "$PASTA_BIN" convert "$FIXTURE" --to webp > /dev/null 2>&1; then
         HASH_AFTER=$(shasum -a 256 "$FIXTURE" | awk '{print $1}')
         if [ "$HASH_BEFORE" = "$HASH_AFTER" ]; then
             pass "Nasty filename converted safely: $f"
@@ -58,7 +62,7 @@ for f in "sample with spaces.png" "user's document.jpg" "-weird.mp4" "SAMPLE_PHO
 done
 
 # Clean up any generated output files next to fixtures
-rm -f "Fixtures/-weird.mp3" "Fixtures/sample with spaces.jpg" "Fixtures/very_long_file_name_that_exceeds_normal_lengths_for_boundary_testing_in_peel_converter_1234567890_abcdefghijklmnopqrstuvwxyz.jpg" Fixtures/*নমুনা*.jpg Fixtures/*" 1".* Fixtures/*" 2".* Fixtures/SAMPLE_PHOTO.webp Fixtures/photo_🎉_cool.png
+rm -f "Fixtures/-weird.mp3" "Fixtures/-weird.avi" "Fixtures/sample with spaces.jpg" "Fixtures/sample with spaces.pdf" "Fixtures/very_long_file_name_that_exceeds_normal_lengths_for_boundary_testing_in_peel_converter_1234567890_abcdefghijklmnopqrstuvwxyz.jpg" Fixtures/*নমুনা*.jpg Fixtures/*নমুনা*.pdf Fixtures/*" 1".* Fixtures/*" 2".* Fixtures/SAMPLE_PHOTO.webp Fixtures/photo_🎉_cool.png Fixtures/photo_🎉_cool.pdf
 
 # 2. Corrupt and 0-byte error handling tests
 echo -e "\n--- 2. Error Reporting Tests ---"

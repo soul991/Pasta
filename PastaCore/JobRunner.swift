@@ -176,6 +176,114 @@ public final class JobRunner {
         PastaLogger.shared.info("Successfully completed \(action.id) -> '\(finalDestinationURL.path)'")
         return finalDestinationURL
     }
+
+    @discardableResult
+    public func runBatch(
+        action: ConversionAction,
+        inputs: [URL],
+        destinationDirectory: URL? = nil,
+        parameters: ParameterValues = [:],
+        timeoutSeconds: TimeInterval? = nil,
+        jobId: UUID = UUID()
+    ) throws -> URL {
+        processLock.lock()
+        if cancelledJobIds.contains(jobId) {
+            processLock.unlock()
+            throw PastaError.cancelled
+        }
+        processLock.unlock()
+        let fm = FileManager.default
+
+        guard !inputs.isEmpty else {
+            throw PastaError.invalidInput("Batch action requires at least one input file")
+        }
+
+        // Validate inputs
+        if action.id == "pdf.merge" {
+            try InputValidator.validatePDFMerge(files: inputs)
+        } else {
+            for inp in inputs {
+                try InputValidator.validateInputFile(inp)
+            }
+        }
+
+        // Validate parameters
+        var effectiveParams = action.defaultParameterValues
+        for (k, v) in parameters {
+            effectiveParams[k] = v
+        }
+        try InputValidator.validateParameters(declared: action.parameters, values: effectiveParams)
+
+        let firstInput = inputs[0]
+        let effectiveDest = destinationDirectory ?? PreferencesManager.shared.effectiveDestination(for: firstInput)
+
+        let finalDestinationURL: URL
+        switch action.outputKind {
+        case .folder(let suffix):
+            finalDestinationURL = OutputPlanner.planOutputDirectory(for: firstInput, suffix: suffix, destinationDirectory: effectiveDest)
+        case .file:
+            finalDestinationURL = OutputPlanner.planOutput(for: firstInput, targetExtension: action.outputExtension, destinationDirectory: effectiveDest)
+        }
+
+        PastaLogger.shared.info("Starting batch action \(action.id) on \(inputs.count) files -> '\(finalDestinationURL.lastPathComponent)'")
+
+        let tempDir = try OutputPlanner.makeTempDirectory()
+        defer {
+            // Safe to swallow: best-effort temporary scratch directory removal on scope exit
+            try? fm.removeItem(at: tempDir)
+        }
+
+        let tempWorkingOutputURL: URL
+        switch action.outputKind {
+        case .folder:
+            tempWorkingOutputURL = tempDir.appendingPathComponent("output_items")
+            try fm.createDirectory(at: tempWorkingOutputURL, withIntermediateDirectories: true)
+        case .file:
+            let ext = action.outputExtension.isEmpty ? "out" : action.outputExtension
+            tempWorkingOutputURL = tempDir.appendingPathComponent("output_result.\(ext)")
+        }
+
+        let invocations = (action.buildBatchInvocationsWithParams ?? { ins, out, params in
+            guard let first = ins.first else { return [] }
+            return action.buildInvocationsWithParams(first, out, params)
+        })(inputs, tempWorkingOutputURL, effectiveParams)
+
+        guard !invocations.isEmpty else {
+            throw PastaError.executionFailed(tool: "engine", exitCode: 1, output: "No invocations built for batch action \(action.id)")
+        }
+
+        for inv in invocations {
+            try execute(invocation: inv, timeoutSeconds: timeoutSeconds, jobId: jobId)
+        }
+
+        switch action.outputKind {
+        case .folder:
+            let contents = (try? fm.contentsOfDirectory(at: tempWorkingOutputURL, includingPropertiesForKeys: nil)) ?? []
+            if contents.isEmpty {
+                let allTemp = (try? fm.contentsOfDirectory(at: tempDir, includingPropertiesForKeys: nil)) ?? []
+                let looseItems = allTemp.filter { $0.lastPathComponent != "output_items" }
+                if looseItems.isEmpty {
+                    throw PastaError.outputNotFound(finalDestinationURL.path)
+                }
+                for item in looseItems {
+                    let destFile = tempWorkingOutputURL.appendingPathComponent(item.lastPathComponent)
+                    try fm.moveItem(at: item, to: destFile)
+                }
+            }
+            try fm.moveItem(at: tempWorkingOutputURL, to: finalDestinationURL)
+            return finalDestinationURL
+        case .file:
+            guard fm.fileExists(atPath: tempWorkingOutputURL.path) else {
+                throw PastaError.outputNotFound(finalDestinationURL.path)
+            }
+            if fm.fileExists(atPath: finalDestinationURL.path) {
+                try fm.removeItem(at: finalDestinationURL)
+            }
+            try fm.moveItem(at: tempWorkingOutputURL, to: finalDestinationURL)
+            PastaLogger.shared.info("Successfully completed batch \(action.id) -> '\(finalDestinationURL.path)'")
+            return finalDestinationURL
+        }
+    }
 }
 
 private final class PipeCollector {

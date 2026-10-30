@@ -57,4 +57,27 @@ public final class ToolLocator {
         }
         return url
     }
+
+    public func findOptionalTool(_ name: String) -> URL? {
+        if name == "soffice" {
+            lock.lock()
+            let overridden = overrides["soffice"]
+            lock.unlock()
+            if let overridden = overridden {
+                if FileManager.default.isExecutableFile(atPath: overridden.path) {
+                    return overridden
+                }
+            }
+            let defaultAppPath = "/Applications/LibreOffice.app/Contents/MacOS/soffice"
+            if FileManager.default.isExecutableFile(atPath: defaultAppPath) {
+                return URL(fileURLWithPath: defaultAppPath)
+            }
+            return nil
+        }
+        return findTool(name)
+    }
+
+    public func isOptionalToolAvailable(_ name: String) -> Bool {
+        return findOptionalTool(name) != nil
+    }
 }

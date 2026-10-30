@@ -567,6 +567,148 @@ do {
     }
 }
 
+// MARK: - 7. Phase 9 Step 2: Formats Still Missing Tests
+print("\n--- 7. Phase 9 Step 2: Formats Still Missing Tests ---")
+do {
+    let fixturesDir = URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent("Fixtures")
+    let testTempDir = try OutputPlanner.makeTempDirectory()
+    defer { try? FileManager.default.removeItem(at: testTempDir) }
+
+    let sampleMp4 = fixturesDir.appendingPathComponent("sample.mp4")
+    let sampleMp3 = fixturesDir.appendingPathComponent("sample.mp3")
+    let samplePng = fixturesDir.appendingPathComponent("sample.png")
+    let sampleJpg = fixturesDir.appendingPathComponent("sample.jpg")
+    let samplePdf = fixturesDir.appendingPathComponent("sample.pdf")
+    let threePagesPdf = fixturesDir.appendingPathComponent("three_pages.pdf")
+    let sampleDocx = fixturesDir.appendingPathComponent("sample.docx")
+    let sampleMd = fixturesDir.appendingPathComponent("sample.md")
+    let sampleHtml = fixturesDir.appendingPathComponent("sample.html")
+    let sampleTxt = fixturesDir.appendingPathComponent("sample.txt")
+
+    // 7.1 Video outputs: AVI and WMV
+    let aviAction = FormatRegistry.shared.action(for: sampleMp4, actionID: "video.to.avi")
+    assertTest(aviAction != nil, "Step 2: video.to.avi action is registered")
+    if let aviAction = aviAction {
+        let hashBefore = fileSHA256(url: sampleMp4)
+        let out = try? JobRunner.shared.run(action: aviAction, input: sampleMp4, destinationDirectory: testTempDir)
+        let exists = out != nil && FileManager.default.fileExists(atPath: out!.path)
+        let hashAfter = fileSHA256(url: sampleMp4)
+        assertTest(exists && hashBefore == hashAfter, "Step 2: Convert sample.mp4 -> video.to.avi produces file and preserves source")
+    }
+
+    let wmvAction = FormatRegistry.shared.action(for: sampleMp4, actionID: "video.to.wmv")
+    assertTest(wmvAction != nil, "Step 2: video.to.wmv action is registered")
+    if let wmvAction = wmvAction {
+        let hashBefore = fileSHA256(url: sampleMp4)
+        let out = try? JobRunner.shared.run(action: wmvAction, input: sampleMp4, destinationDirectory: testTempDir)
+        let exists = out != nil && FileManager.default.fileExists(atPath: out!.path)
+        let hashAfter = fileSHA256(url: sampleMp4)
+        assertTest(exists && hashBefore == hashAfter, "Step 2: Convert sample.mp4 -> video.to.wmv produces file and preserves source")
+    }
+
+    // 7.2 Audio outputs: OGG and AIFF
+    let oggAction = FormatRegistry.shared.action(for: sampleMp3, actionID: "audio.to.ogg")
+    assertTest(oggAction != nil, "Step 2: audio.to.ogg action is registered")
+    if let oggAction = oggAction {
+        let hashBefore = fileSHA256(url: sampleMp3)
+        let out = try? JobRunner.shared.run(action: oggAction, input: sampleMp3, destinationDirectory: testTempDir)
+        let exists = out != nil && FileManager.default.fileExists(atPath: out!.path)
+        let hashAfter = fileSHA256(url: sampleMp3)
+        assertTest(exists && hashBefore == hashAfter, "Step 2: Convert sample.mp3 -> audio.to.ogg produces file and preserves source")
+    }
+
+    let aiffAction = FormatRegistry.shared.action(for: sampleMp3, actionID: "audio.to.aiff")
+    assertTest(aiffAction != nil, "Step 2: audio.to.aiff action is registered")
+    if let aiffAction = aiffAction {
+        let hashBefore = fileSHA256(url: sampleMp3)
+        let out = try? JobRunner.shared.run(action: aiffAction, input: sampleMp3, destinationDirectory: testTempDir)
+        let exists = out != nil && FileManager.default.fileExists(atPath: out!.path)
+        let hashAfter = fileSHA256(url: sampleMp3)
+        assertTest(exists && hashBefore == hashAfter, "Step 2: Convert sample.mp3 -> audio.to.aiff produces file and preserves source")
+    }
+
+    // 7.3 Archives: GZIP single file and .gz extraction
+    let gzipAction = FormatRegistry.shared.action(for: sampleTxt, actionID: "archive.create.gzip")
+    assertTest(gzipAction != nil, "Step 2: archive.create.gzip action is registered")
+    if let gzipAction = gzipAction {
+        let outGz = try? JobRunner.shared.run(action: gzipAction, input: sampleTxt, destinationDirectory: testTempDir)
+        let exists = outGz != nil && FileManager.default.fileExists(atPath: outGz!.path)
+        assertTest(exists, "Step 2: GZIP of single file produces .gz archive")
+
+        if let outGz = outGz {
+            let extractAction = FormatRegistry.shared.action(for: outGz, actionID: "archive.extract")
+            assertTest(extractAction != nil, "Step 2: archive.extract available for .gz input")
+            if let extractAction = extractAction {
+                let outDir = try? JobRunner.shared.run(action: extractAction, input: outGz, destinationDirectory: testTempDir)
+                let extractedFiles = (try? FileManager.default.contentsOfDirectory(at: outDir!, includingPropertiesForKeys: nil)) ?? []
+                assertTest(!extractedFiles.isEmpty, "Step 2: Extraction of .gz archive produces uncompressed file")
+            }
+        }
+    }
+
+    // 7.4 Image to PDF: single and batch
+    let imgToPdfAction = FormatRegistry.shared.action(for: samplePng, actionID: "image.to.pdf")
+    assertTest(imgToPdfAction != nil, "Step 2: image.to.pdf action is registered")
+    if let imgToPdfAction = imgToPdfAction {
+        let outPdf = try? JobRunner.shared.run(action: imgToPdfAction, input: samplePng, destinationDirectory: testTempDir)
+        assertTest(outPdf != nil && FileManager.default.fileExists(atPath: outPdf!.path), "Step 2: Single image to PDF produces PDF")
+
+        let batchPdf = try? JobRunner.shared.runBatch(action: imgToPdfAction, inputs: [samplePng, sampleJpg], destinationDirectory: testTempDir)
+        assertTest(batchPdf != nil && FileManager.default.fileExists(atPath: batchPdf!.path), "Step 2: Batch images to PDF produces merged PDF")
+    }
+
+    // 7.5 PDF merge
+    let pdfMergeAction = FormatRegistry.shared.action(for: samplePdf, actionID: "pdf.merge")
+    assertTest(pdfMergeAction != nil, "Step 2: pdf.merge action is registered")
+    if let pdfMergeAction = pdfMergeAction {
+        let merged = try? JobRunner.shared.runBatch(action: pdfMergeAction, inputs: [samplePdf, threePagesPdf], destinationDirectory: testTempDir)
+        assertTest(merged != nil && FileManager.default.fileExists(atPath: merged!.path), "Step 2: pdf.merge produces combined PDF")
+    }
+
+    // 7.6 EPUB conversions
+    let docxToEpub = FormatRegistry.shared.action(for: sampleDocx, actionID: "docx.to.epub")
+    assertTest(docxToEpub != nil, "Step 2: docx.to.epub action is registered")
+    if let docxToEpub = docxToEpub {
+        let epubOut = try? JobRunner.shared.run(action: docxToEpub, input: sampleDocx, destinationDirectory: testTempDir)
+        assertTest(epubOut != nil && FileManager.default.fileExists(atPath: epubOut!.path), "Step 2: Convert docx -> epub produces valid file")
+
+        if let epubOut = epubOut {
+            let epubToDocx = FormatRegistry.shared.action(for: epubOut, actionID: "epub.to.docx")
+            let epubToMd = FormatRegistry.shared.action(for: epubOut, actionID: "epub.to.md")
+            let epubToHtml = FormatRegistry.shared.action(for: epubOut, actionID: "epub.to.html")
+            let epubToTxt = FormatRegistry.shared.action(for: epubOut, actionID: "epub.to.txt")
+            assertTest(epubToDocx != nil && epubToMd != nil && epubToHtml != nil && epubToTxt != nil, "Step 2: epub conversions to docx, md, html, txt are registered")
+        }
+
+        let mdToEpub = FormatRegistry.shared.action(for: sampleMd, actionID: "md.to.epub")
+        assertTest(mdToEpub != nil, "Step 2: md.to.epub action is registered")
+
+        let htmlToEpub = FormatRegistry.shared.action(for: sampleHtml, actionID: "html.to.epub")
+        assertTest(htmlToEpub != nil, "Step 2: html.to.epub action is registered")
+    }
+
+    // 7.7 Hostile filename variants for new formats
+    let weirdMp4 = fixturesDir.appendingPathComponent("-weird.mp4")
+    if let aviAct = FormatRegistry.shared.action(for: weirdMp4, actionID: "video.to.avi") {
+        let hashBefore = fileSHA256(url: weirdMp4)
+        let out = try? JobRunner.shared.run(action: aviAct, input: weirdMp4, destinationDirectory: testTempDir)
+        let hashAfter = fileSHA256(url: weirdMp4)
+        assertTest(out != nil && FileManager.default.fileExists(atPath: out!.path) && hashBefore == hashAfter, "Step 2: Hostile filename -weird.mp4 converts to AVI safely")
+    }
+
+    let spacesPng = fixturesDir.appendingPathComponent("sample with spaces.png")
+    if let pdfAct = FormatRegistry.shared.action(for: spacesPng, actionID: "image.to.pdf") {
+        let hashBefore = fileSHA256(url: spacesPng)
+        let out = try? JobRunner.shared.run(action: pdfAct, input: spacesPng, destinationDirectory: testTempDir)
+        let hashAfter = fileSHA256(url: spacesPng)
+        assertTest(out != nil && FileManager.default.fileExists(atPath: out!.path) && hashBefore == hashAfter, "Step 2: Hostile filename 'sample with spaces.png' converts to PDF safely")
+    }
+
+    // 7.8 Optional LibreOffice detection & Doctor
+    let sofficeAvailable = ToolLocator.shared.isOptionalToolAvailable("soffice")
+    assertTest(sofficeAvailable == false, "Step 2: soffice is correctly reported as missing optional tool without failure")
+}
+
 print("\n==================================================")
 print("Test Suite Summary: \(passedTests)/\(totalTests) Passed, \(failedTests) Failed")
 print("==================================================")
