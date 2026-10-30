@@ -153,9 +153,16 @@ public struct PastaCLI {
         var files: [String] = []
 
         var i = 0
+        var endOfOptions = false
         while i < args.count {
             let arg = args[i]
-            if arg == "--action" && i + 1 < args.count {
+            if endOfOptions {
+                files.append(arg)
+                i += 1
+            } else if arg == "--" {
+                endOfOptions = true
+                i += 1
+            } else if arg == "--action" && i + 1 < args.count {
                 actionId = args[i + 1]
                 i += 2
             } else if arg == "--to" && i + 1 < args.count {
@@ -168,7 +175,7 @@ public struct PastaCLI {
                     rawParams[parts[0]] = parts[1]
                 }
                 i += 2
-            } else if !arg.hasPrefix("-") {
+            } else if !arg.hasPrefix("-") || FileManager.default.fileExists(atPath: arg) {
                 files.append(arg)
                 i += 1
             } else {

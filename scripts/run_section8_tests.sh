@@ -115,8 +115,160 @@ else
     fail "Orphan processes" "Found ffmpeg processes: $ORPHANS"
 fi
 
-# 6. Network verification
-echo -e "\n--- 5. 100% Offline Network Verification ---"
+# 6. Phase 9 Actions Hostile Filename Tests
+echo -e "\n--- 5. Phase 9 Actions Hostile Filename Tests ---"
+
+# video.speed
+cp "Fixtures/-weird.mp4" "$OUT_DIR/-speedy clip.mp4"
+H_BEFORE=$(shasum -a 256 "$OUT_DIR/-speedy clip.mp4" | awk '{print $1}')
+if "$PASTA_BIN" convert "$OUT_DIR/-speedy clip.mp4" --action video.speed --param factor=1.5 > /dev/null 2>&1 && [ -f "$OUT_DIR/-speedy clip 1.mp4" ]; then
+    H_AFTER=$(shasum -a 256 "$OUT_DIR/-speedy clip.mp4" | awk '{print $1}')
+    if [ "$H_BEFORE" = "$H_AFTER" ]; then
+        pass "video.speed handled hostile filename '-speedy clip.mp4' safely"
+    else
+        fail "video.speed hostile filename" "Source modified"
+    fi
+else
+    fail "video.speed hostile filename" "Failed to produce output"
+fi
+
+# video.crop
+cp "Fixtures/-weird.mp4" "$OUT_DIR/crop's -test.mp4"
+if "$PASTA_BIN" convert "$OUT_DIR/crop's -test.mp4" --action video.crop --param rectangle=160:120:0:0 > /dev/null 2>&1 && [ -f "$OUT_DIR/crop's -test 1.mp4" ]; then
+    pass "video.crop handled hostile filename \"crop's -test.mp4\" safely"
+else
+    fail "video.crop hostile filename" "Failed to produce output"
+fi
+
+# video.snapshot
+cp "Fixtures/-weird.mp4" "$OUT_DIR/snap shot -clip.mp4"
+if "$PASTA_BIN" convert "$OUT_DIR/snap shot -clip.mp4" --action video.snapshot --param time=0.5 > /dev/null 2>&1 && [ -f "$OUT_DIR/snap shot -clip.png" ]; then
+    pass "video.snapshot handled hostile filename 'snap shot -clip.mp4' safely"
+else
+    fail "video.snapshot hostile filename" "Failed to produce output"
+fi
+
+# video.split
+cp "Fixtures/-weird.mp4" "$OUT_DIR/split -clip.mp4"
+if "$PASTA_BIN" convert "$OUT_DIR/split -clip.mp4" --action video.split --param times=1.0 > /dev/null 2>&1 && [ -d "$OUT_DIR/split -clip split" ]; then
+    pass "video.split handled hostile filename 'split -clip.mp4' safely into folder"
+else
+    fail "video.split hostile filename" "Failed to produce split folder"
+fi
+
+# video.compress
+cp "Fixtures/-weird.mp4" "$OUT_DIR/-compress video.mp4"
+if "$PASTA_BIN" convert "$OUT_DIR/-compress video.mp4" --action video.compress --param percent=50 > /dev/null 2>&1 && [ -f "$OUT_DIR/-compress video 1.mp4" ]; then
+    pass "video.compress handled hostile filename '-compress video.mp4' safely"
+else
+    fail "video.compress hostile filename" "Failed to produce output"
+fi
+
+# audio.normalize
+cp "Fixtures/sample.wav" "$OUT_DIR/audio with spaces & 'quotes'.wav"
+if "$PASTA_BIN" convert "$OUT_DIR/audio with spaces & 'quotes'.wav" --action audio.normalize > /dev/null 2>&1 && [ -f "$OUT_DIR/audio with spaces & 'quotes' 1.wav" ]; then
+    pass "audio.normalize handled hostile filename \"audio with spaces & 'quotes'.wav\" safely"
+else
+    fail "audio.normalize hostile filename" "Failed to produce output"
+fi
+
+# audio.channels
+cp "Fixtures/sample.mp3" "$OUT_DIR/-weird audio.mp3"
+if "$PASTA_BIN" convert "$OUT_DIR/-weird audio.mp3" --action audio.channels --param channels=mono > /dev/null 2>&1 && [ -f "$OUT_DIR/-weird audio 1.mp3" ]; then
+    pass "audio.channels handled hostile filename '-weird audio.mp3' safely"
+else
+    fail "audio.channels hostile filename" "Failed to produce output"
+fi
+
+# audio.trim
+cp "Fixtures/sample.mp3" "$OUT_DIR/user's trim -song.mp3"
+if "$PASTA_BIN" convert "$OUT_DIR/user's trim -song.mp3" --action audio.trim --param start=0 --param end=1 > /dev/null 2>&1 && [ -f "$OUT_DIR/user's trim -song 1.mp3" ]; then
+    pass "audio.trim handled hostile filename \"user's trim -song.mp3\" safely"
+else
+    fail "audio.trim hostile filename" "Failed to produce output"
+fi
+
+# audio.compress
+cp "Fixtures/sample.mp3" "$OUT_DIR/-compress audio.mp3"
+if "$PASTA_BIN" convert "$OUT_DIR/-compress audio.mp3" --action audio.compress --param percent=50 > /dev/null 2>&1 && [ -f "$OUT_DIR/-compress audio 1.mp3" ]; then
+    pass "audio.compress handled hostile filename '-compress audio.mp3' safely"
+else
+    fail "audio.compress hostile filename" "Failed to produce output"
+fi
+
+# metadata.read
+META_OUT=$("$PASTA_BIN" metadata read "Fixtures/user's document.jpg" --json 2>&1 || true)
+if echo "$META_OUT" | grep -q "ImageSize"; then
+    pass "metadata.read extracted JSON safely from hostile \"user's document.jpg\""
+else
+    fail "metadata.read hostile filename" "Failed to read metadata: $META_OUT"
+fi
+
+# metadata.edit
+cp "Fixtures/sample with spaces.png" "$OUT_DIR/photo with 'quotes' & spaces.png"
+if "$PASTA_BIN" convert "$OUT_DIR/photo with 'quotes' & spaces.png" --action metadata.edit --param title="Hostile Safe" > /dev/null 2>&1 && [ -f "$OUT_DIR/photo with 'quotes' & spaces 1.png" ]; then
+    pass "metadata.edit handled hostile filename \"photo with 'quotes' & spaces.png\" safely"
+else
+    fail "metadata.edit hostile filename" "Failed to produce edited copy"
+fi
+
+# image.qr.read
+cp "Fixtures/sample_qr.png" "$OUT_DIR/qr code with 'quotes' & -dash.png"
+if "$PASTA_BIN" convert "$OUT_DIR/qr code with 'quotes' & -dash.png" --action image.qr.read > /dev/null 2>&1 && [ -f "$OUT_DIR/qr code with 'quotes' & -dash.txt" ]; then
+    QR_TEXT=$(cat "$OUT_DIR/qr code with 'quotes' & -dash.txt")
+    if [ "$QR_TEXT" = "Hello Pasta QR" ]; then
+        pass "image.qr.read decoded hostile filename QR correctly: '$QR_TEXT'"
+    else
+        fail "image.qr.read decoded text" "Expected 'Hello Pasta QR', got '$QR_TEXT'"
+    fi
+else
+    fail "image.qr.read hostile filename" "Failed to produce qr text file"
+fi
+
+# pdf.reorganize
+cp "Fixtures/three_numbered_pages.pdf" "$OUT_DIR/user's 3-page doc.pdf"
+if "$PASTA_BIN" convert "$OUT_DIR/user's 3-page doc.pdf" --action pdf.reorganize --param pages=3,1,2 > /dev/null 2>&1 && [ -f "$OUT_DIR/user's 3-page doc 1.pdf" ]; then
+    pass "pdf.reorganize handled hostile filename \"user's 3-page doc.pdf\" safely"
+else
+    fail "pdf.reorganize hostile filename" "Failed to produce output"
+fi
+
+# pdf.compress
+cp "Fixtures/sample.pdf" "$OUT_DIR/-weird pdf.pdf"
+if "$PASTA_BIN" convert "$OUT_DIR/-weird pdf.pdf" --action pdf.compress --param percent=50 > /dev/null 2>&1 && [ -f "$OUT_DIR/-weird pdf 1.pdf" ]; then
+    pass "pdf.compress handled hostile filename '-weird pdf.pdf' safely"
+else
+    fail "pdf.compress hostile filename" "Failed to produce output"
+fi
+
+# pdf.merge
+cp "Fixtures/sample.pdf" "$OUT_DIR/doc 1 with spaces.pdf"
+cp "Fixtures/sample.pdf" "$OUT_DIR/doc 2 with 'quotes'.pdf"
+if "$PASTA_BIN" convert "$OUT_DIR/doc 1 with spaces.pdf" "$OUT_DIR/doc 2 with 'quotes'.pdf" --action pdf.merge > /dev/null 2>&1 && [ -f "$OUT_DIR/doc 1 with spaces 1.pdf" ]; then
+    pass "pdf.merge combined multiple hostile filename PDFs safely"
+else
+    fail "pdf.merge hostile filename" "Failed to merge PDFs"
+fi
+
+# image.collage
+cp "Fixtures/sample.png" "$OUT_DIR/img 1 with spaces.png"
+cp "Fixtures/sample.png" "$OUT_DIR/img 2 with 'quotes'.png"
+if "$PASTA_BIN" convert "$OUT_DIR/img 1 with spaces.png" "$OUT_DIR/img 2 with 'quotes'.png" --action image.collage --param columns=2 > /dev/null 2>&1 && [ -f "$OUT_DIR/img 1 with spaces.jpg" ]; then
+    pass "image.collage combined multiple hostile filename images safely"
+else
+    fail "image.collage hostile filename" "Failed to create collage"
+fi
+
+# image.compress
+cp "Fixtures/sample with spaces.png" "$OUT_DIR/sample with spaces copy.png"
+if "$PASTA_BIN" convert "$OUT_DIR/sample with spaces copy.png" --action image.compress --param percent=50 > /dev/null 2>&1 && [ -f "$OUT_DIR/sample with spaces copy 1.png" ]; then
+    pass "image.compress handled hostile filename 'sample with spaces copy.png' safely"
+else
+    fail "image.compress hostile filename" "Failed to compress image"
+fi
+
+# 7. Network verification
+echo -e "\n--- 6. 100% Offline Network Verification ---"
 NETWORK_STRINGS=$(strings "$PASTA_BIN" | grep -Ei "https?://|URLSession|Socket|connect\(" | grep -v "http://www.apple.com" | grep -v "http://www.w3.org" | head -n 5 || true)
 if [ -z "$NETWORK_STRINGS" ]; then
     pass "Binary contains zero network requests, tracking, or telemetry"

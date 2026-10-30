@@ -265,3 +265,139 @@ rm -f TEMP_COPY
 /opt/homebrew/bin/unar -o OUT_DIR IN
 /opt/homebrew/bin/7zz x -y IN -oOUT_DIR
 ```
+
+---
+
+## 7. Compression Modes (Phase 9 Step 3)
+
+### Image Compression (Binary Search Quality & Color Quantization)
+- **JPEG / WebP / HEIC / TIFF**: Bounded binary search (up to 8 iterations) adjusting `-quality` (1 to 100):
+  ```bash
+  /opt/homebrew/bin/magick IN -quality <Q> OUT
+  ```
+- **BMP (Uncompressed Bitmaps)**: BMP does not support DCT quality quantization; color reduction achieves the target byte budget:
+  ```bash
+  /opt/homebrew/bin/magick IN -colors <N> OUT
+  ```
+
+### Video Compression (Target Bitrate & Two-Pass Encoding)
+- Compute video target bitrate: `VBitrate = (targetBytes * 8 / durationSeconds) - ABitrate`
+- Two-Pass H.264 encode:
+  ```bash
+  /opt/homebrew/bin/ffmpeg -nostdin -y -i IN -c:v libx264 -b:v <VBitrate> -pass 1 -an -f null /dev/null
+  /opt/homebrew/bin/ffmpeg -nostdin -y -i IN -c:v libx264 -b:v <VBitrate> -pass 2 -c:a aac -b:a 96k -movflags +faststart OUT
+  ```
+
+### Audio Compression (Bitrate Throttling)
+- Target bitrate: `ABitrate = targetBytes * 8 / durationSeconds`
+  ```bash
+  /opt/homebrew/bin/ffmpeg -nostdin -y -i IN -b:a <ABitrate> OUT
+  ```
+
+### PDF Compression (Ghostscript Multi-Preset Search)
+- Try progressive presets from high quality to high compression: `/printer` (300 dpi), `/ebook` (150 dpi), `/screen` (72 dpi):
+  ```bash
+  /opt/homebrew/bin/gs -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=<preset> -dNOPAUSE -dQUIET -dBATCH -sOutputFile=OUT IN
+  ```
+
+---
+
+## 8. Video & Audio Tools (Phase 9 Step 4)
+
+### Video Speed Adjustment (0.25x to 4.0x)
+- Video presentation timestamp scaled via `setpts=1/FACTOR*PTS`
+- Audio tempo matched via chained `atempo` (each clamped between 0.5 and 2.0):
+  ```bash
+  /opt/homebrew/bin/ffmpeg -nostdin -y -i IN -filter_complex "[0:v]setpts=0.5*PTS[v];[0:a]atempo=2.0[a]" -map "[v]" -map "[a]" -c:v libx264 -c:a aac OUT
+  ```
+
+### Video Crop
+- Validated against probe dimensions; uses ffmpeg `crop=w:h:x:y`:
+  ```bash
+  /opt/homebrew/bin/ffmpeg -nostdin -y -i IN -filter_complex "crop=160:120:0:0" -c:v libx264 -c:a copy OUT
+  ```
+
+### Video Snapshot (Single Frame Extraction)
+- Extract frame at exact timestamp to PNG or JPG:
+  ```bash
+  /opt/homebrew/bin/ffmpeg -nostdin -y -ss 00:00:01.000 -i IN -vframes 1 OUT.png
+  ```
+
+### Video Split & Join
+- **Split**: Segments cut at time stamps into an output directory:
+  ```bash
+  /opt/homebrew/bin/ffmpeg -nostdin -y -ss START -to END -i IN -c copy OUT_SEGMENT
+  ```
+- **Join**: Fast stream copy with concat demuxer, falling back to re-encoding if stream parameters differ:
+  ```bash
+  /opt/homebrew/bin/ffmpeg -nostdin -y -f concat -safe 0 -i concat_manifest.txt -c copy OUT
+  ```
+
+### Audio Normalization (EBU R128 Two-Pass Loudnorm)
+- Pass 1: Measure integrated loudness, loudness range, and true peak:
+  ```bash
+  /opt/homebrew/bin/ffmpeg -nostdin -y -i IN -af loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json -f null -
+  ```
+- Pass 2: Apply linear normalization with measured parameters:
+  ```bash
+  /opt/homebrew/bin/ffmpeg -nostdin -y -i IN -af loudnorm=I=-16:TP=-1.5:LRA=11:measured_I=<I>:measured_TP=<TP>:measured_LRA=<LRA>:measured_thresh=<thresh>:offset=<offset>:linear=true OUT
+  ```
+
+### Audio Channel Remapping
+- Downmix to mono or upmix to stereo:
+  ```bash
+  /opt/homebrew/bin/ffmpeg -nostdin -y -i IN -ac 1 OUT
+  /opt/homebrew/bin/ffmpeg -nostdin -y -i IN -ac 2 OUT
+  ```
+
+### Audio Bleep (Tone Insertion)
+- Overlays a 1 kHz sine tone over specified time ranges while muting original audio:
+  ```bash
+  /opt/homebrew/bin/ffmpeg -nostdin -y -i IN -filter_complex "sine=frequency=1000:duration=DUR[tone];[0:a]volume=enable='between(t,START,END)':volume=0[muted];[muted][tone]amix=inputs=2:weights=1 1[out]" -map "[out]" OUT
+  ```
+
+---
+
+## 9. Metadata, PDF Tools, Montage & Vision (Phase 9 Step 5)
+
+### Read-Only Metadata Inspection
+- Images and PDF via ExifTool:
+  ```bash
+  /opt/homebrew/bin/exiftool -j IN
+  ```
+- Video and Audio via FFprobe:
+  ```bash
+  /opt/homebrew/bin/ffprobe -v quiet -print_format json -show_format -show_streams IN
+  ```
+
+### Metadata Editing (Non-Destructive Copy with Read-Back Verification)
+- Writes whitelisted tags (`Title`, `Author`, `Artist`, `Comment`, `Description`, `Date`, `Year`, `CreateDate`) directly to output copy:
+  ```bash
+  /opt/homebrew/bin/exiftool -Title="My Title" -o OUT IN
+  ```
+
+### PDF Reorganize & Rotate
+- Reorder pages via qpdf:
+  ```bash
+  /opt/homebrew/bin/qpdf IN --pages IN 3,1,2 -- OUT
+  ```
+- Rotate pages (e.g. +90 degrees):
+  ```bash
+  /opt/homebrew/bin/qpdf IN --rotate=+90:1-z --pages IN 1-z -- OUT
+  ```
+
+### PDF Merge
+- Combine multiple PDFs into one document:
+  ```bash
+  /opt/homebrew/bin/qpdf --empty --pages IN1 IN2 IN3 -- OUT
+  ```
+
+### Image Montage / Collage
+- Combine multiple images into a grid layout:
+  ```bash
+  /opt/homebrew/bin/magick montage IN1 IN2 IN3 -geometry +8+8 -tile 2x OUT.jpg
+  ```
+
+### Offline QR Barcode Reading
+- Native Apple Vision framework via `VNDetectBarcodesRequest` using `.qr` symbology on `CGImageSource`. Completely offline with zero network lookups or automatic URL opening.
+
