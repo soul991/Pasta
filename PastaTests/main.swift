@@ -2260,8 +2260,8 @@ do {
         category: .video,
         iconName: "scissors",
         parameters: [
-            ActionParameter(id: "start", label: "Start Time", kind: .number(unit: "s"), defaultValue: .number(0.0)),
-            ActionParameter(id: "end", label: "End Time", kind: .number(unit: "s"), defaultValue: .number(10.0))
+            ActionParameter(id: "start", label: "Start Time", kind: .number, defaultValue: .number(0.0)),
+            ActionParameter(id: "end", label: "End Time", kind: .number, defaultValue: .number(10.0))
         ],
         buildInvocations: { inUrl, outUrl, _ in
             return [Invocation(toolName: "ffmpeg", arguments: [inUrl.path, outUrl.path])]
@@ -2279,22 +2279,22 @@ do {
     assertTest(batchCropModel.batchCount == 3, "20.1 ParameterFormModel batchCount is 3")
 
     // Set 1:1 crop ratio intent
-    batchCropModel.cropIntent = .ratio(width: 1, height: 1)
+    batchCropModel.cropIntent = CropIntent.ratio(width: 1, height: 1)
 
     let resCrop1 = try? batchCropModel.resolveParameters(for: file1, probe: fakeProbe)
     let resCrop2 = try? batchCropModel.resolveParameters(for: file2, probe: fakeProbe)
     let resCrop3 = try? batchCropModel.resolveParameters(for: file3, probe: fakeProbe)
 
     // 1280x720 -> 720x720 at x=280, y=0
-    assertTest(resCrop1?["rectangle"] == .rectangle(x: 280, y: 0, width: 720, height: 720),
+    assertTest(resCrop1?["rectangle"] == ParameterValue.rectangle(x: 280, y: 0, width: 720, height: 720),
                "20.1 1280x720 with 1:1 ratio crop gives 720x720 at x=280,y=0")
 
     // 1920x1080 -> 1080x1080 at x=420, y=0
-    assertTest(resCrop2?["rectangle"] == .rectangle(x: 420, y: 0, width: 1080, height: 1080),
+    assertTest(resCrop2?["rectangle"] == ParameterValue.rectangle(x: 420, y: 0, width: 1080, height: 1080),
                "20.1 1920x1080 with 1:1 ratio crop gives 1080x1080 at x=420,y=0")
 
     // 1080x1920 -> 1080x1080 at x=0, y=420
-    assertTest(resCrop3?["rectangle"] == .rectangle(x: 0, y: 420, width: 1080, height: 1080),
+    assertTest(resCrop3?["rectangle"] == ParameterValue.rectangle(x: 0, y: 420, width: 1080, height: 1080),
                "20.1 1080x1920 with 1:1 ratio crop gives 1080x1080 at x=0,y=420")
 
     // 20.2 Test 2: Trim to end uses each file's own duration
@@ -2304,15 +2304,15 @@ do {
         inputFiles: [file1, file2, file3],
         probe: fakeProbe
     )
-    batchTrimModel.trimEndIntent = .endOfFile
+    batchTrimModel.trimEndIntent = TrimEndIntent.endOfFile
 
     let resTrim1 = try? batchTrimModel.resolveParameters(for: file1, probe: fakeProbe)
     let resTrim2 = try? batchTrimModel.resolveParameters(for: file2, probe: fakeProbe)
     let resTrim3 = try? batchTrimModel.resolveParameters(for: file3, probe: fakeProbe)
 
-    assertTest(resTrim1?["end"] == .number(15.5), "20.2 File 1 trim to end uses probed duration (15.5s)")
-    assertTest(resTrim2?["end"] == .number(42.0), "20.2 File 2 trim to end uses probed duration (42.0s)")
-    assertTest(resTrim3?["end"] == .number(120.0), "20.2 File 3 trim to end uses probed duration (120.0s)")
+    assertTest(resTrim1?["end"] == ParameterValue.number(15.5), "20.2 File 1 trim to end uses probed duration (15.5s)")
+    assertTest(resTrim2?["end"] == ParameterValue.number(42.0), "20.2 File 2 trim to end uses probed duration (42.0s)")
+    assertTest(resTrim3?["end"] == ParameterValue.number(120.0), "20.2 File 3 trim to end uses probed duration (120.0s)")
 
     // 20.3 Batch mode UI displays 'Applies to N files' without single-file dimensions
     let batchPanel = ParameterPanelView(model: batchCropModel, action: cropAction)
