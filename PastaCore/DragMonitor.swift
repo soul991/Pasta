@@ -199,6 +199,9 @@ public final class DragMonitor {
 
             if elapsed >= duration - 0.0005 {
                 // Open wheel! Latches open.
+                if preferences.showChargingRing && !preferences.reduceMotionEnabled {
+                    onChargingProgress?(1.0, location)
+                }
                 openWheel(openedAt: timestamp, files: files, location: location, isAdvanced: false)
             } else if elapsed >= 0.120 {
                 // After 120 ms delay, transition to charging and emit progress
@@ -219,6 +222,9 @@ public final class DragMonitor {
             let duration = holdDurationSeconds
 
             if elapsed >= duration - 0.0005 {
+                if preferences.showChargingRing && !preferences.reduceMotionEnabled {
+                    onChargingProgress?(1.0, location)
+                }
                 openWheel(openedAt: timestamp, files: files, location: location, isAdvanced: false)
             } else {
                 let ringProgress = min(max(elapsed / duration, 0.0), 1.0)
