@@ -48,6 +48,12 @@ public final class RadialWheelCenterDiscView: NSView {
         visualEffect.layer?.masksToBounds = true
         addSubview(visualEffect)
 
+        // Accessibility attributes
+        setAccessibilityElement(true)
+        setAccessibilityRole(.group)
+        setAccessibilityLabel("Wheel Center Hub")
+        setAccessibilityHelp("Shows selected file preview and information")
+
         // Thumbnail / App Icon
         iconImageView.translatesAutoresizingMaskIntoConstraints = false
         iconImageView.imageScaling = .scaleProportionallyUpOrDown
@@ -121,11 +127,26 @@ public final class RadialWheelCenterDiscView: NSView {
 
     private func updateBorder() {
         let accent = ThemeManager.shared.accentColor
-        layer?.borderWidth = 1.5
-        layer?.borderColor = accent.withAlphaComponent(0.6).cgColor
-        layer?.shadowColor = accent.cgColor
-        layer?.shadowOpacity = 0.35
-        layer?.shadowRadius = 8
+        let isReduceTransparency = ThemeManager.shared.isReduceTransparency
+        let isIncreaseContrast = ThemeManager.shared.isIncreaseContrast
+        let isReduceMotion = ThemeManager.shared.isReduceMotion
+
+        if isReduceTransparency {
+            visualEffect.isHidden = true
+            layer?.backgroundColor = ThemeManager.shared.reduceTransparencyBackground.cgColor
+        } else {
+            visualEffect.isHidden = false
+            layer?.backgroundColor = NSColor.clear.cgColor
+        }
+
+        layer?.borderWidth = isIncreaseContrast ? ThemeManager.shared.increaseContrastBorderWidth : 1.5
+        layer?.borderColor = isIncreaseContrast ?
+            ThemeManager.shared.increaseContrastBorderColor.cgColor :
+            accent.withAlphaComponent(0.6).cgColor
+
+        layer?.shadowColor = isReduceMotion ? nil : accent.cgColor
+        layer?.shadowOpacity = isReduceMotion ? 0.0 : 0.35
+        layer?.shadowRadius = isReduceMotion ? 0 : 8
         layer?.shadowOffset = .zero
         detailLabel.textColor = accent
         countBadge.layer?.backgroundColor = accent.cgColor

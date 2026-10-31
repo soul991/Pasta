@@ -3134,6 +3134,130 @@ do {
             assertTest(false, "23.9 Slot \(i) should be action")
         }
     }
+
+    // ==================================================
+    // Section 24: Phase 10B Step 4: Liquid Glass, Wallpaper Adaptivity, Contrast & Accessibility
+    // ==================================================
+    print("\n--- 24. Phase 10B Step 4: Liquid Glass, Wallpaper Adaptivity & Accessibility Tests ---")
+
+    // 24.1 Wallpaper Adaptivity & Computed Contrast across diverse wallpapers
+    let testWallpapers: [(name: String, color: NSColor)] = [
+        ("Vibrant Red F1 Wallpaper (#E10600)", NSColor(hex: "#E10600")!),
+        ("Pure White Wallpaper (#FFFFFF)", NSColor.white),
+        ("Dark Studio Wallpaper (#1E1E1E)", NSColor(hex: "#1E1E1E")!),
+        ("Neutral Gray Wallpaper (#808080)", NSColor(hex: "#808080")!)
+    ]
+
+    let scrimAlpha = ThemeManager.shared.adaptiveScrimAlpha // 0.28
+    assertTest(scrimAlpha <= 0.35, "24.1 Adaptive scrim alpha (\(scrimAlpha)) is <= 0.35")
+
+    for wp in testWallpapers {
+        guard let srgb = wp.color.usingColorSpace(.sRGB) else { continue }
+        // Compute effective background color after blending with 0.28 black scrim
+        let blendedR = srgb.redComponent * (1.0 - scrimAlpha)
+        let blendedG = srgb.greenComponent * (1.0 - scrimAlpha)
+        let blendedB = srgb.blueComponent * (1.0 - scrimAlpha)
+        let blendedBackground = NSColor(srgbRed: blendedR, green: blendedG, blue: blendedB, alpha: 1.0)
+
+        // White label contrast against scrim-protected background
+        let whiteContrast = WCAGContrast.contrastRatio(foreground: .white, background: blendedBackground)
+        // Dark ink contrast
+        let darkInk = NSColor(hex: "#1A0F05")!
+        let darkContrast = WCAGContrast.contrastRatio(foreground: darkInk, background: blendedBackground)
+
+        let bestContrast = max(whiteContrast, darkContrast)
+        assertTest(bestContrast >= 4.5,
+                   "24.1 Legibility over \(wp.name): contrast (\(String(format: "%.2f", bestContrast)):1) >= 4.5:1")
+    }
+
+    // 24.2 Accessibility: Reduce Transparency produces opaque surface
+    let origTrans = PreferencesManager.shared.reduceTransparencyEnabled
+    PreferencesManager.shared.reduceTransparencyEnabled = true
+    assertTest(ThemeManager.shared.isReduceTransparency == true, "24.2 Reduce Transparency detected as active")
+
+    let nodeRT = RadialOptionNodeView(slotKind: .more)
+    assertTest(nodeRT.layer?.backgroundColor == ThemeManager.shared.reduceTransparencyBackground.cgColor,
+               "24.2 RadialOptionNodeView renders opaque dark background in Reduce Transparency mode")
+
+    let centerDiscRT = RadialWheelCenterDiscView()
+    assertTest(centerDiscRT.layer?.backgroundColor == ThemeManager.shared.reduceTransparencyBackground.cgColor,
+               "24.2 RadialWheelCenterDiscView renders opaque dark background in Reduce Transparency mode")
+    PreferencesManager.shared.reduceTransparencyEnabled = origTrans
+
+    // 24.3 Accessibility: Increase Contrast strengthens strokes to >= 2.0 pt
+    let origContrast = PreferencesManager.shared.increaseContrastEnabled
+    PreferencesManager.shared.increaseContrastEnabled = true
+    assertTest(ThemeManager.shared.isIncreaseContrast == true, "24.3 Increase Contrast detected as active")
+
+    let nodeIC = RadialOptionNodeView(slotKind: .more)
+    assertTest(nodeIC.layer?.borderWidth == ThemeManager.shared.increaseContrastBorderWidth,
+               "24.3 RadialOptionNodeView strengthens border to 2.0pt in Increase Contrast mode")
+    PreferencesManager.shared.increaseContrastEnabled = origContrast
+
+    // 24.4 Accessibility: Reduce Motion disables spring animation
+    let origMotion = PreferencesManager.shared.reduceMotionEnabled
+    PreferencesManager.shared.reduceMotionEnabled = true
+    assertTest(ThemeManager.shared.isReduceMotion == true, "24.4 Reduce Motion detected as active")
+    PreferencesManager.shared.reduceMotionEnabled = origMotion
+
+    // 24.5 Accessibility: VoiceOver attributes on nodes, hub, and close button
+    let sampleVideoFile = URL(fileURLWithPath: "sample.mp4")
+    let testSlots = WheelLayoutModel.shared.slots(for: sampleVideoFile, isAdvanced: false)
+    for (i, slot) in testSlots.enumerated() {
+        let nodeView = RadialOptionNodeView(slotKind: slot.kind)
+        assertTest(nodeView.isAccessibilityElement(), "24.5 Slot \(i) is an accessibility element")
+        assertTest(nodeView.accessibilityRole() == .button, "24.5 Slot \(i) has button accessibility role")
+        assertTest(!(nodeView.accessibilityLabel()?.isEmpty ?? true), "24.5 Slot \(i) has non-empty accessibility label")
+        assertTest(!(nodeView.accessibilityHelp()?.isEmpty ?? true), "24.5 Slot \(i) has non-empty accessibility help")
+    }
+
+    let centerHub = RadialWheelCenterDiscView()
+    assertTest(centerHub.isAccessibilityElement(), "24.5 Center hub is an accessibility element")
+    assertTest(centerHub.accessibilityRole() == .group, "24.5 Center hub has group accessibility role")
+
+    // 24.6 Keyboard Navigation: Arrow keys cycle nodes 0..<8, Return executes
+    let keyboardVC = RadialWheelOverlayViewController()
+    keyboardVC.loadView()
+    keyboardVC.viewDidLoad()
+    keyboardVC.configure(files: [sampleVideoFile], isOptionHeld: false)
+
+    assertTest(keyboardVC.focusedSlotIndex == nil, "24.6 Initial focusedSlotIndex is nil")
+
+    // Right Arrow (keyCode 124) -> moves focus clockwise to slot 0
+    _ = keyboardVC.handleKeyDown(keyCode: 124)
+    assertTest(keyboardVC.focusedSlotIndex == 0, "24.6 Right arrow moves focus to slot 0")
+
+    // Right Arrow again -> slot 1
+    _ = keyboardVC.handleKeyDown(keyCode: 124)
+    assertTest(keyboardVC.focusedSlotIndex == 1, "24.6 Right arrow moves focus to slot 1")
+
+    // Left Arrow (keyCode 123) -> slot 0
+    _ = keyboardVC.handleKeyDown(keyCode: 123)
+    assertTest(keyboardVC.focusedSlotIndex == 0, "24.6 Left arrow moves focus back to slot 0")
+
+    // Left Arrow again -> slot 7 (wraps around)
+    _ = keyboardVC.handleKeyDown(keyCode: 123)
+    assertTest(keyboardVC.focusedSlotIndex == 7, "24.6 Left arrow wraps around to slot 7 (Customize)")
+
+    // Tab (keyCode 48) -> slot 0 (wraps around)
+    _ = keyboardVC.handleKeyDown(keyCode: 48)
+    assertTest(keyboardVC.focusedSlotIndex == 0, "24.6 Tab cycles focus to slot 0")
+
+    // 24.7 Liquid Glass design tokens validation
+    let tokens = ThemeManager.shared.loadTokens()
+    assertTest(tokens != nil, "24.7 theme_tokens.json loaded successfully")
+    if let t = tokens?["tokens"] as? [String: Any],
+       let glass = t["glass"] as? [String: Any],
+       let liquidGlass = glass["liquidGlass"] as? [String: Any] {
+        assertTest(liquidGlass["specularStrokeTopLeft"] as? String == "rgba(255, 255, 255, 0.45)",
+                   "24.7 Liquid glass specular stroke top-left token is white 0.45")
+        assertTest(liquidGlass["adaptiveScrimAlpha"] as? Double == 0.28,
+                   "24.7 Liquid glass adaptive scrim alpha token is 0.28")
+        assertTest(liquidGlass["increaseContrastStrokeWidth"] as? Double == 2.0,
+                   "24.7 Liquid glass increase contrast stroke token is 2.0")
+    } else {
+        assertTest(false, "24.7 Missing liquidGlass tokens structure")
+    }
 }
 
 print("\n==================================================")

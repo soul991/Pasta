@@ -177,10 +177,17 @@ public final class RadialWheelOverlayViewController: NSViewController {
         closeBtn.contentTintColor = .white
         closeBtn.target = self
         closeBtn.action = #selector(closeButtonClicked)
+        closeBtn.setAccessibilityElement(true)
+        closeBtn.setAccessibilityRole(.button)
+        closeBtn.setAccessibilityLabel("Close wheel")
+        closeBtn.setAccessibilityHelp("Closes the radial wheel overlay")
         view.addSubview(closeBtn)
 
         DragMonitor.shared.onEscIntercepted = { [weak self] in
             return self?.handleEscKey() ?? false
+        }
+        DragMonitor.shared.onKeyDownIntercepted = { [weak self] keyCode in
+            return self?.handleKeyDown(keyCode: keyCode) ?? false
         }
     }
 
@@ -427,6 +434,87 @@ public final class RadialWheelOverlayViewController: NSViewController {
             panel.removeFromSuperview()
             restoreBackground()
         }
+    }
+
+    public override var acceptsFirstResponder: Bool { return true }
+
+    public private(set) var focusedSlotIndex: Int? = nil {
+        didSet {
+            for (idx, node) in nodeViews.enumerated() {
+                node.isKeyFocused = (idx == focusedSlotIndex)
+            }
+            backplateView.hoveredSlotIndex = focusedSlotIndex
+        }
+    }
+
+    public func handleKeyDown(keyCode: UInt16) -> Bool {
+        // If Customize sheet is open, let it handle Esc or close
+        if customizeSheet != nil && customizeSheet?.superview != nil {
+            if keyCode == 53 {
+                dismissCustomizeSheet()
+                return true
+            }
+            return false
+        }
+
+        // If More view is open, let it handle Esc or close
+        if moreView != nil && moreView?.superview != nil {
+            if keyCode == 53 {
+                dismissMoreView()
+                return true
+            }
+            return false
+        }
+
+        // Arrow keys move between nodes (0..<8) cyclically
+        switch keyCode {
+        case 123, 125: // Left, Down -> move counter-clockwise
+            guard !nodeViews.isEmpty else { return false }
+            if let current = focusedSlotIndex {
+                focusedSlotIndex = (current - 1 + nodeViews.count) % nodeViews.count
+            } else {
+                focusedSlotIndex = 0
+            }
+            return true
+
+        case 124, 126: // Right, Up -> move clockwise
+            guard !nodeViews.isEmpty else { return false }
+            if let current = focusedSlotIndex {
+                focusedSlotIndex = (current + 1) % nodeViews.count
+            } else {
+                focusedSlotIndex = 0
+            }
+            return true
+
+        case 36, 49: // Return or Space -> executes focused node
+            if let idx = focusedSlotIndex, idx >= 0 && idx < nodeViews.count {
+                nodeViews[idx].performSelect()
+                return true
+            }
+            return false
+
+        case 48: // Tab -> cycle focus through nodes
+            guard !nodeViews.isEmpty else { return false }
+            if let current = focusedSlotIndex {
+                focusedSlotIndex = (current + 1) % nodeViews.count
+            } else {
+                focusedSlotIndex = 0
+            }
+            return true
+
+        case 53: // Esc
+            return handleEscKey()
+
+        default:
+            return false
+        }
+    }
+
+    public override func keyDown(with event: NSEvent) {
+        if handleKeyDown(keyCode: event.keyCode) {
+            return
+        }
+        super.keyDown(with: event)
     }
 
     public func handleEscKey() -> Bool {

@@ -19,6 +19,7 @@
 | **Phase 10B Step 1** | Sticky Wheel, Sticky File Context, Logging, Real Event Sequences | **Complete** | 355/355 Unit/Integration tests passed; 33/33 Section 8 tests passed; 0 leaks, 0 network |
 | **Phase 10B Step 2** | Fix Clipped Node & Rectangular Glow Boundary, Screen Edge Repositioning, Geometry Tests | **Complete** | 402/402 Unit/Integration tests passed; 33/33 Section 8 tests passed; 0 leaks, 0 network |
 | **Phase 10B Step 3** | Wheel Redesign (Circular Backplate, 8 Slots, 64pt Glass Nodes, Hub, More Section, Customize Sheet, WheelLayoutModel) | **Complete** | 453/453 Unit/Integration tests passed; 33/33 Section 8 tests passed; 0 leaks, 0 network |
+| **Phase 10B Step 4** | Liquid Glass Rendering, Wallpaper Scrim, High-Contrast Modes, VoiceOver & Keyboard Nav | **Complete** | 508/508 Unit/Integration tests passed; 33/33 Section 8 tests passed; 0 leaks, 0 network |
 
 ---
 
@@ -89,7 +90,8 @@
 | **Section 20** | Batch review fixes: Fix A (per-file relative crop/trim), Fix B/C (concurrency limit 2, queue, cancel, cleanup), Fix D (async probe off main thread) | `966e8e6` | 324/324 Unit, 33/33 Sec8 | **Complete** |
 | **Section 21** | Phase 10B Step 1: Sticky wheel, latching, sticky file context, logging to ~/Library/Logs/Pasta/pasta.log, close control (×), empty hub | `11fc0dc` | 355/355 Unit, 33/33 Sec8 | **Complete** |
 | **Section 22** | Phase 10B Step 2: Anti-clipping, 520x560 panel, WheelGeometry, 18pt glow, screen edge repositioning for all 4 edges & corners | `233e400` | 402/402 Unit, 33/33 Sec8 | **Complete** |
-| **Section 23** | Phase 10B Step 3: Circular backplate (400pt/128pt), 8 slots, 64pt nodes, hub, More paged search, Customize sheet, WheelLayoutModel | In Progress (Step 3) | 453/453 Unit, 33/33 Sec8 | **Complete** |
+| **Section 23** | Phase 10B Step 3: Circular backplate (400pt/128pt), 8 slots, 64pt nodes, hub, More paged search, Customize sheet, WheelLayoutModel | `5d42c0b` | 453/453 Unit, 33/33 Sec8 | **Complete** |
+| **Section 24** | Phase 10B Step 4: Liquid Glass rendering, wallpaper adaptivity scrim, accessibility modes, VoiceOver, keyboard nav | In Progress (Step 4) | 508/508 Unit, 33/33 Sec8 | **Complete** |
 
 ---
 
@@ -167,6 +169,22 @@
 | WheelGeometry layout & metrics (520x560 panel, 148pt orbit, center at 260,310) | Phase 10B Step 2 | Geometry | **DONE** | `22.1 Headless geometry: 8 slots >= 8pt margin at 1.06 scale with 18pt glow` |
 | Screen edge repositioning (keeps full panel on screen, clears menu bar & dock) | Phase 10B Step 2 | Window Manager | **DONE** | `22.2 Screen-edge repositioning for 4 edges and 4 corners` |
 | Disabled masksToBounds on all glow ancestor layers (`panel.contentView`, `view`, `node`) | Phase 10B Step 2 | Anti-Clipping | **DONE** | `22.3 Ancestor masksToBounds disabled` |
+| Circular glass backplate annulus (400pt outer / 128pt inner, 0.12 connecting radial wedge) | Phase 10B Step 3 | Wheel Redesign | **DONE** | `23.1 Backplate annulus path and connecting wedge` |
+| 64pt circular glass node buttons (1.00–1.06 hover scale, no clipping, theme ink) | Phase 10B Step 3 | Wheel Redesign | **DONE** | `23.2 Circular button node views and hover scale` |
+| Center hub (64pt single file thumbnail, middle truncation, multi-file stacked badge, idle rigatoni) | Phase 10B Step 3 | Hub Redesign | **DONE** | `23.3 Center disc single, multi-file stacked, and idle states` |
+| More section (560pt paged arc, search filter, page dots, Esc closes More first) | Phase 10B Step 3 | More Ring | **DONE** | `23.4 More section paged arc and real-time search filter` |
+| Customize glass sheet (Appearance, Primary Tools reorder/hide/reset, Behavior, live apply) | Phase 10B Step 3 | Customize Sheet | **DONE** | `23.5 Customize sheet sections and live preferences persistence` |
+| WheelLayoutModel headless model (defaults, pinned 6, More all minus pinned, unavailable excluded) | Phase 10B Step 3 | Model / Architecture | **DONE** | `23.6–23.7 WheelLayoutModel headless unit tests` |
+| WCAG contrast >= 4.5:1 for every theme palette (Sunset, Ocean, Emerald, Violet, Rose, Graphite, System) | Phase 10B Step 3 | Contrast Verification | **DONE** | `23.8 WCAG contrast ratio calculation >= 4.5:1` |
+| 8-slot wheel composition (Slots 0–5 primary tools, Slot 6 More ellipsis, Slot 7 Customize gear) | Phase 10B Step 3 | Layout Model | **DONE** | `23.9 8-slot wheel composition layout` |
+| Wallpaper adaptivity scrim (<= 0.35 alpha) & WCAG contrast >= 4.5:1 over Red, White, Dark, Gray | Phase 10B Step 4 | Visual Quality | **DONE** | `24.1 Wallpaper adaptivity scrim and multi-background contrast` |
+| Reduce Transparency accessible rendering (opaque dark background #242426) | Phase 10B Step 4 | Accessibility | **DONE** | `24.2 Reduce Transparency opaque surface rendering` |
+| Increase Contrast accessible rendering (2.0pt border, high contrast stroke) | Phase 10B Step 4 | Accessibility | **DONE** | `24.3 Increase Contrast strengthened border rendering` |
+| Reduce Motion accessible behavior (instant alpha crossfade, zero spring, no pulsing glows) | Phase 10B Step 4 | Accessibility | **DONE** | `24.4 Reduce Motion crossfade animation behavior` |
+| VoiceOver accessibility (button roles, descriptive labels and help on all 8 slots, group on hub) | Phase 10B Step 4 | Accessibility | **DONE** | `24.5 Full VoiceOver accessibility coverage on wheel slots and hub` |
+| Full keyboard navigation (Arrow keys cyclic navigation, Tab cycle, Return/Space execute, Esc hierarchy) | Phase 10B Step 4 | Keyboard Nav | **DONE** | `24.6 Keyboard navigation cyclic focus, execution, and dismissal` |
+| Liquid glass design tokens in theme_tokens.json (specular stroke, sheen, inner shadow, scrim) | Phase 10B Step 4 | Design Tokens | **DONE** | `24.7 Liquid glass design tokens validation` |
+
 
 
 

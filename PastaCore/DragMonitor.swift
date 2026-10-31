@@ -108,6 +108,7 @@ public final class DragMonitor {
     public var onModeToggle: ((Bool) -> Void)?
     public var onFilesReplaced: (([URL]) -> Void)?
     public var onEscIntercepted: (() -> Bool)?
+    public var onKeyDownIntercepted: ((UInt16) -> Bool)?
 
     // Backward-compatibility callbacks
     public var onDragStart: (([URL], Bool, NSPoint) -> Void)? {
@@ -391,6 +392,9 @@ public final class DragMonitor {
             cancelCharging(reason: "Key pressed during charging (code: \(keyCode))")
 
         case .open, .secondHoldArmed:
+            if let keyInterceptor = onKeyDownIntercepted, keyInterceptor(keyCode) {
+                return
+            }
             if keyCode == 53 { // ESC key
                 if let interceptor = onEscIntercepted, interceptor() {
                     return

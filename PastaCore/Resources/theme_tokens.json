@@ -81,6 +81,45 @@
         "description": "Native highlight selection material"
       }
     },
+    "themes": {
+      "sunset": { "id": "sunset", "name": "Sunset", "hex": "#F2611F", "contrastInk": "#1A0F05" },
+      "ocean": { "id": "ocean", "name": "Ocean", "hex": "#0EA5E9", "contrastInk": "#1A0F05" },
+      "emerald": { "id": "emerald", "name": "Emerald", "hex": "#10B981", "contrastInk": "#1A0F05" },
+      "violet": { "id": "violet", "name": "Violet", "hex": "#7C3AED", "contrastInk": "#FFFFFF" },
+      "rose": { "id": "rose", "name": "Rose", "hex": "#F43F5E", "contrastInk": "#FFFFFF" },
+      "graphite": { "id": "graphite", "name": "Graphite", "hex": "#475569", "contrastInk": "#FFFFFF" },
+      "system": { "id": "system", "name": "Match System", "hex": "#007AFF", "contrastInk": "#FFFFFF" }
+    },
+    "glass": {
+      "strengths": {
+        "clear": 0.50,
+        "regular": 0.80,
+        "tinted": 0.95
+      },
+      "sizes": {
+        "compact": { "backplate": 340, "orbit": 126, "hub": 108 },
+        "standard": { "backplate": 400, "orbit": 148, "hub": 128 },
+        "large": { "backplate": 460, "orbit": 170, "hub": 144 }
+      },
+      "liquidGlass": {
+        "specularStrokeTopLeft": "rgba(255, 255, 255, 0.45)",
+        "specularStrokeBottomRight": "rgba(255, 255, 255, 0.08)",
+        "sheenGradientTop": "rgba(255, 255, 255, 0.12)",
+        "innerShadowBlur": 6.0,
+        "innerShadowOpacity": 0.20,
+        "adaptiveScrimAlpha": 0.28,
+        "maxAdaptiveScrimAlpha": 0.35,
+        "reduceTransparencyColor": "#242426",
+        "increaseContrastStrokeWidth": 2.0,
+        "increaseContrastStrokeAlpha": 0.75
+      },
+      "radii": {
+        "node": 32.0,
+        "hub": 64.0,
+        "glow": 18.0,
+        "shadow": 10.0
+      }
+    },
     "springs": {
       "spatial-bloom": {
         "mass": 1.0,

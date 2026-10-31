@@ -137,6 +137,40 @@ CI tests verify the mathematical state machine against simulated clock timestamp
 
 ---
 
+## 4.3 Liquid Glass Rendering, Wallpaper Adaptivity & Accessibility (Phase 10B Step 4)
+
+- [ ] **Wallpaper Legibility & Adaptive Scrim (Owner's Red F1 Wallpaper)**:
+  - Set desktop wallpaper to the vibrant red F1 wallpaper from the owner's screenshot (`#E10600`) or any bright red background.
+  - Open the wheel.
+  - **Expected:** Node labels, glyphs, and hub text remain crisp and immediately readable. The subtle adaptive scrim (alpha <= 0.35) prevents background bleed-through, maintaining well over 4.5:1 WCAG AA contrast (measured 8.22:1).
+- [ ] **Legibility on Pure White & Photographic Wallpapers**:
+  - Open wheel over a pure white wallpaper (`#FFFFFF`) and a complex photo.
+  - **Expected:** Specular highlights and text remain distinct; contrast over white exceeds 9.4:1.
+- [ ] **Liquid Glass Visual Quality**:
+  - Inspect the backplate and node buttons.
+  - **Expected:** Translucent glass surface, top-left specular edge highlight, faint sheen gradient, and soft inner shadow provide tangible depth without visual clutter or private APIs.
+- [ ] **Reduce Transparency (System Accessibility)**:
+  - Enable **System Settings > Accessibility > Display > Reduce transparency**.
+  - Open the wheel.
+  - **Expected:** Translucent glass effect is replaced with an opaque dark surface (`#242426`) with identical 8-slot layout and controls.
+- [ ] **Increase Contrast (System Accessibility)**:
+  - Enable **System Settings > Accessibility > Display > Increase contrast**.
+  - Open the wheel.
+  - **Expected:** Outer borders and node outlines strengthen to a prominent 2.0 pt high-contrast stroke.
+- [ ] **VoiceOver Navigation**:
+  - Enable VoiceOver (<kbd>⌘</kbd> + <kbd>F5</kbd>).
+  - Open the wheel and navigate with VoiceOver cursor.
+  - **Expected:** Every slot announces its action name, button role, and descriptive help tooltip. The hub announces file count, name, and size as a cohesive group.
+- [ ] **Full Keyboard Navigation**:
+  - Open the wheel.
+  - Press <kbd>→</kbd> / <kbd>↓</kbd>: focus advances cyclically through slots 0 to 7.
+  - Press <kbd>←</kbd> / <kbd>↑</kbd>: focus steps backward and wraps around from slot 0 to slot 7 (Customize).
+  - Press <kbd>Tab</kbd>: cycles focus through interactive controls.
+  - Press <kbd>Return</kbd> or <kbd>Space</kbd>: executes the focused slot action.
+  - Press <kbd>Esc</kbd>: closes open sub-panels (More or Customize) first before dismissing the wheel.
+
+---
+
 ## 5. Mode Toggling: Convert vs. Advanced Mode (<kbd>⌥</kbd>)
 
 - [ ] **Quick Option Tap (< 250 ms)**:

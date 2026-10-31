@@ -89,6 +89,49 @@ public final class ThemeManager {
     public let maxHoverScale: CGFloat = 1.06
     public let minHoverScale: CGFloat = 1.00
 
+    // Liquid Glass Tokens (Phase 10B Step 4)
+    public let adaptiveScrimAlpha: CGFloat = 0.28
+    public let maxAdaptiveScrimAlpha: CGFloat = 0.35
+    public let specularTopLeftColor = NSColor(white: 1.0, alpha: 0.45)
+    public let specularBottomRightColor = NSColor(white: 1.0, alpha: 0.08)
+    public let sheenTopColor = NSColor(white: 1.0, alpha: 0.12)
+    public let reduceTransparencyBackground = NSColor(hex: "#242426") ?? NSColor(white: 0.14, alpha: 1.0)
+    public let increaseContrastBorderWidth: CGFloat = 2.0
+    public let increaseContrastBorderColor = NSColor(white: 1.0, alpha: 0.75)
+
+    // Dynamic Accessibility Queries
+    public var isReduceTransparency: Bool {
+        return NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency || PreferencesManager.shared.reduceTransparencyEnabled
+    }
+
+    public var isIncreaseContrast: Bool {
+        return NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast || PreferencesManager.shared.increaseContrastEnabled
+    }
+
+    public var isReduceMotion: Bool {
+        return NSWorkspace.shared.accessibilityDisplayShouldReduceMotion || PreferencesManager.shared.reduceMotionEnabled
+    }
+
+    /// Loads and parses theme_tokens.json from bundle resources or local source
+    public func loadTokens() -> [String: Any]? {
+        let candidates: [URL?] = [
+            Bundle.module.url(forResource: "theme_tokens", withExtension: "json"),
+            Bundle(for: ThemeManager.self).url(forResource: "theme_tokens", withExtension: "json"),
+            Bundle.main.url(forResource: "theme_tokens", withExtension: "json"),
+            URL(fileURLWithPath: "PastaCore/Resources/theme_tokens.json"),
+            URL(fileURLWithPath: "Pasta.app/Contents/Resources/theme_tokens.json")
+        ]
+        for candidate in candidates {
+            if let url = candidate,
+               FileManager.default.fileExists(atPath: url.path),
+               let data = try? Data(contentsOf: url),
+               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                return json
+            }
+        }
+        return nil
+    }
+
     private init() {
         if let saved = UserDefaults.standard.string(forKey: userDefaultsKey), !saved.isEmpty {
             self.currentHex = saved

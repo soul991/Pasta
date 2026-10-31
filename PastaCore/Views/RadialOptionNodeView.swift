@@ -21,6 +21,19 @@ public final class RadialOptionNodeView: NSView {
     private let visualEffect = NSVisualEffectView()
     private let titleLabel = NSTextField(labelWithString: "")
     private let iconView = NSImageView()
+    private let scrimView = NSView()
+
+    public var isKeyFocused: Bool = false {
+        didSet {
+            if oldValue != isKeyFocused {
+                updateState()
+            }
+        }
+    }
+
+    public func performSelect() {
+        onSelect?(slotKind)
+    }
 
     public init(slotKind: WheelSlotKind) {
         self.slotKind = slotKind
@@ -102,7 +115,30 @@ public final class RadialOptionNodeView: NSView {
         titleLabel.textColor = .white
         titleLabel.alignment = .center
         titleLabel.lineBreakMode = .byTruncatingTail
+
+        // Subtle adaptive scrim behind label for legibility over bright/red wallpapers
+        scrimView.translatesAutoresizingMaskIntoConstraints = false
+        scrimView.wantsLayer = true
+        scrimView.layer?.cornerRadius = 4
+        scrimView.layer?.masksToBounds = true
+        scrimView.layer?.backgroundColor = NSColor(white: 0.0, alpha: ThemeManager.shared.adaptiveScrimAlpha).cgColor
+        addSubview(scrimView)
         addSubview(titleLabel)
+
+        // Accessibility attributes for VoiceOver
+        setAccessibilityElement(true)
+        setAccessibilityRole(.button)
+        switch slotKind {
+        case .action(let act):
+            setAccessibilityLabel(act.displayName)
+            setAccessibilityHelp("Convert file to \(act.outputExtension.uppercased())")
+        case .more:
+            setAccessibilityLabel("More conversion tools")
+            setAccessibilityHelp("Opens additional conversion options")
+        case .customize:
+            setAccessibilityLabel("Customize wheel")
+            setAccessibilityHelp("Opens appearance and tool customization sheet")
+        }
 
         NSLayoutConstraint.activate([
             visualEffect.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -118,7 +154,12 @@ public final class RadialOptionNodeView: NSView {
             titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
             titleLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
             titleLabel.topAnchor.constraint(equalTo: iconView.bottomAnchor, constant: 2),
-            titleLabel.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor, constant: -6)
+            titleLabel.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor, constant: -6),
+
+            scrimView.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor, constant: -2),
+            scrimView.trailingAnchor.constraint(equalTo: titleLabel.trailingAnchor, constant: 2),
+            scrimView.topAnchor.constraint(equalTo: titleLabel.topAnchor, constant: -1),
+            scrimView.bottomAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 1)
         ])
 
         updateState()
@@ -141,25 +182,43 @@ public final class RadialOptionNodeView: NSView {
         let maxScale = ThemeManager.shared.maxHoverScale // 1.06
         let minScale = ThemeManager.shared.minHoverScale // 1.00
 
+        let isReduceMotion = ThemeManager.shared.isReduceMotion
+        let isReduceTransparency = ThemeManager.shared.isReduceTransparency
+        let isIncreaseContrast = ThemeManager.shared.isIncreaseContrast
+
+        // Reduce Transparency: Use opaque dark background
+        if isReduceTransparency {
+            visualEffect.isHidden = true
+            layer?.backgroundColor = ThemeManager.shared.reduceTransparencyBackground.cgColor
+        } else {
+            visualEffect.isHidden = false
+            layer?.backgroundColor = NSColor.clear.cgColor
+        }
+
         // Handle label mode (Always vs On Hover)
         if WheelLayoutModel.shared.labelMode == .onHover {
-            titleLabel.isHidden = !(isHovered || isDraggingOver)
+            titleLabel.isHidden = !(isHovered || isDraggingOver || isKeyFocused)
         } else {
             titleLabel.isHidden = false
         }
 
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.16
-            ctx.allowsImplicitAnimation = true
+        // Adaptive Scrim visibility
+        scrimView.isHidden = titleLabel.isHidden || isReduceTransparency
+        scrimView.layer?.backgroundColor = NSColor(white: 0.0, alpha: ThemeManager.shared.adaptiveScrimAlpha).cgColor
 
-            if isDraggingOver {
-                // Drag hover: scale clamped to maximum 1.06
+        let duration = isReduceMotion ? 0.0 : 0.16
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = duration
+            ctx.allowsImplicitAnimation = !isReduceMotion
+
+            if isDraggingOver || isKeyFocused {
+                // Drag hover or keyboard focus: scale clamped to maximum 1.06
                 layer?.transform = CATransform3DMakeScale(maxScale, maxScale, 1.0)
                 visualEffect.layer?.backgroundColor = accent.cgColor
-                layer?.borderColor = NSColor.white.cgColor
-                layer?.borderWidth = 2.0
-                layer?.shadowColor = accent.cgColor
-                layer?.shadowOpacity = 0.35 // Accent glow @ 0.35 alpha
+                layer?.borderColor = isIncreaseContrast ? ThemeManager.shared.increaseContrastBorderColor.cgColor : NSColor.white.cgColor
+                layer?.borderWidth = isIncreaseContrast ? ThemeManager.shared.increaseContrastBorderWidth : 2.0
+                layer?.shadowColor = isReduceMotion ? nil : accent.cgColor
+                layer?.shadowOpacity = isReduceMotion ? 0.0 : 0.35 // Accent glow @ 0.35 alpha
                 layer?.shadowRadius = WheelGeometry.maxGlowRadius // 18pt accent glow
                 layer?.shadowOffset = .zero
 
@@ -171,9 +230,9 @@ public final class RadialOptionNodeView: NSView {
                 layer?.transform = CATransform3DMakeScale(hoverScale, hoverScale, 1.0)
                 visualEffect.layer?.backgroundColor = accent.withAlphaComponent(0.35).cgColor
                 layer?.borderColor = accent.cgColor
-                layer?.borderWidth = 1.5
-                layer?.shadowColor = accent.cgColor
-                layer?.shadowOpacity = 0.30
+                layer?.borderWidth = isIncreaseContrast ? ThemeManager.shared.increaseContrastBorderWidth : 1.5
+                layer?.shadowColor = isReduceMotion ? nil : accent.cgColor
+                layer?.shadowOpacity = isReduceMotion ? 0.0 : 0.30
                 layer?.shadowRadius = 8
                 layer?.shadowOffset = .zero
 
@@ -183,8 +242,8 @@ public final class RadialOptionNodeView: NSView {
                 // Idle state: scale 1.00 exactly
                 layer?.transform = CATransform3DIdentity
                 visualEffect.layer?.backgroundColor = NSColor(white: 0.12, alpha: 0.75).cgColor
-                layer?.borderColor = NSColor(white: 1.0, alpha: 0.20).cgColor
-                layer?.borderWidth = 1.0
+                layer?.borderColor = isIncreaseContrast ? ThemeManager.shared.increaseContrastBorderColor.cgColor : NSColor(white: 1.0, alpha: 0.20).cgColor
+                layer?.borderWidth = isIncreaseContrast ? ThemeManager.shared.increaseContrastBorderWidth : 1.0
                 layer?.shadowColor = NSColor.black.cgColor
                 layer?.shadowOpacity = 0.25
                 layer?.shadowRadius = 4
