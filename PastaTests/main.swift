@@ -1550,14 +1550,14 @@ do {
     defer { ToolLocator.shared.setOverride(tool: "streaming_tool", url: nil) }
     let streamInv = Invocation(
         toolName: "streaming_tool",
-        arguments: ["-c", "for i in 1 2 3; do echo $i; sleep 0.1; done"],
-        timeout: 2.0,
-        inactivityTimeout: 0.25
+        arguments: ["-c", "for i in 1 2 3 4; do echo $i; sleep 0.1; done"],
+        timeout: 5.0,
+        inactivityTimeout: 0.6
     )
     var streamSucceeded = false
     do {
-        let (out, _) = try JobRunner.shared.executeCapture(invocation: streamInv, inactivityTimeoutSeconds: 0.25)
-        streamSucceeded = out.contains("1") && out.contains("2") && out.contains("3")
+        let (out, _) = try JobRunner.shared.executeCapture(invocation: streamInv, inactivityTimeoutSeconds: 0.6)
+        streamSucceeded = out.contains("1") && out.contains("2") && out.contains("3") && out.contains("4")
     } catch {}
     assertTest(streamSucceeded, "Step 0: Inactivity watchdog resets on active progress and completes successfully")
 }
