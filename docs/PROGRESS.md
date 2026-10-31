@@ -66,7 +66,7 @@
 
 | Step | Scope | Commit | Tests | Status |
 | :--- | :--- | :--- | :--- | :--- |
-| **Step 0** | Re-verify baseline, repair Phase 8 leftovers, add timeout/cancel/watchdog tests | *(Current)* | 166/166 Unit, 33/33 Sec8 | **Complete** |
+| **Step 0** | Re-verify baseline, repair Phase 8 leftovers, add timeout/cancel/watchdog tests | `b9c45cc` | 168/168 Unit, 33/33 Sec8 | **Complete** |
 | **Step 1** | Parameterized actions foundation, ActionParameter, OutputKind, CLI `--param` | `66ac489` | 67/67 | **Complete** |
 | **Step 2** | Missing formats: AVI, WMV, OGG, AIFF, GZIP, Image to PDF, PDF Merge, EPUB, LibreOffice detect | `e0ad753` | 89/89 | **Complete** |
 | **Step 3** | Compression modes: Percent & exact size for Image (binary search/palette), Video (bitrate/two-pass), Audio, PDF (Ghostscript) | `cb0cd56` | 99/99 | **Complete** |
@@ -75,7 +75,7 @@
 | **Step 6** | Section 8 Gate Verification: hostile filename tests, doctor verification, app signing, zero network, zero leaks | `9510a60` | 131/131 Unit, 30/30 Sec8 | **Complete** |
 | **Review** | Adversarial Review & Bug Fixes: runAsync customRunner fix, two-pass video encoding, filter-complex join fallback, audio bleep eval=frame, strict metadata read-back, reverse PDF reorganization, untampered network check | `85be177` | 139/139 Unit, 33/33 Sec8 | **Complete** |
 | **Section 12** | Shift-hold state machine, 450 ms threshold, 120 ms charging ring, latching, Option tap toggle | `9814586` | 157/157 Unit, 33/33 Sec8 | **Complete** |
-| **Section 13** | JobRunner timeout, cancel zero leaks, SIGTERM->SIGKILL, ffmpeg inactivity watchdog | *(Current)* | 166/166 Unit, 33/33 Sec8 | **Complete** |
+| **Section 13** | JobRunner timeout, cancel zero leaks, SIGTERM->SIGKILL, ffmpeg inactivity watchdog | `b9c45cc` | 168/168 Unit, 33/33 Sec8 | **Complete** |
 
 ---
 

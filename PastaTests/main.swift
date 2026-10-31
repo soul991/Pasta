@@ -1367,10 +1367,12 @@ do {
     } else {
         assertTest(false, "12.1 Expected Charging state at 449 ms")
     }
+    assertTest(lastProgress > 0.9 && lastProgress < 1.0, "12.1 Charging ring progress is >90% at 449 ms")
 
     // 12.2 Hold 450 ms: wheel opens
     monitor.processMouseDragged(modifiers: shiftMod, location: NSPoint(x: 100, y: 100), timestamp: 1000.450)
     assertTest(wheelOpened, "12.2 Hold 450 ms: wheel opens successfully")
+    assertTest(lastProgress == 1.0, "12.2 Charging ring reaches 100% exactly at 450 ms")
     if case .open = monitor.state {
         assertTest(true, "12.2 State transitions to Open at exactly 450 ms")
     } else {
