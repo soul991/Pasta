@@ -95,7 +95,7 @@
 | **Section 23** | Phase 10B Step 3: Circular backplate (400pt/128pt), 8 slots, 64pt nodes, hub, More paged search, Customize sheet, WheelLayoutModel | `5d42c0b` | 453/453 Unit, 33/33 Sec8 | **Complete** |
 | **Section 24** | Phase 10B Step 4: Liquid Glass rendering, wallpaper adaptivity scrim, accessibility modes, VoiceOver, keyboard nav | `0664ab6` | 508/508 Unit, 33/33 Sec8 | **Complete** |
 | **Section 25** | Phase 10B Step 5: Brand presence (MenuBarIcon 18pt template, hub idle icon, Settings header, About panel, AppIcon.icns) | `dd3acb1` | 529/529 Unit, 33/33 Sec8 | **Complete** |
-| **Section 26** | Phase 10B Step 6: Results, errors, real size changes, Reveal in Finder, Copy Details, Accessibility Onboarding & Settings | In Progress (Step 6) | 549/549 Unit, 33/33 Sec8 | **Complete** |
+| **Section 26** | Phase 10B Step 6: Results, errors, real size changes, Reveal in Finder, Copy Details, Accessibility Onboarding & Settings | `fff5dcc` | 549/549 Unit, 33/33 Sec8 | **Complete** |
 
 ---
 
