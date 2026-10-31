@@ -38,6 +38,10 @@ public final class PastaLogger {
         }
     }
 
+    public func debug(_ message: String) {
+        log(message, level: "DEBUG")
+    }
+
     public func info(_ message: String) {
         log(message, level: "INFO")
     }
