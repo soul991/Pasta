@@ -2384,6 +2384,9 @@ do {
     assertTest(qRow.currentStatusText == "Queued", "20.6 JobStatusRowView displays 'Queued' in queued state")
 
     // 20.7 Test 3: One file failing (manual crop out of bounds) does not stop others; summary shows '2 of 3 complete (1 failed)'
+    let fakeToolDir = outDir.appendingPathComponent("fake_tools")
+    try? FileManager.default.createDirectory(at: fakeToolDir, withIntermediateDirectories: true)
+
     let bFile1 = outDir.appendingPathComponent("batch_b1.mp4")
     let bFile2 = outDir.appendingPathComponent("batch_b2.mp4")
     let bFile3 = outDir.appendingPathComponent("batch_b3.mp4")
