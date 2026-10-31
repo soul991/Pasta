@@ -18,6 +18,7 @@
 | **Phase 10** | Parameter Panels & Batch Mode (Radial Wheel, Drop Window, Per-file Probing, Concurrency Queue, Async Probe) | **Complete** | 324/324 Unit/Integration tests passed; 33/33 Section 8 tests passed (debug & app bundle); 0 leaks, 0 network |
 | **Phase 10B Step 1** | Sticky Wheel, Sticky File Context, Logging, Real Event Sequences | **Complete** | 355/355 Unit/Integration tests passed; 33/33 Section 8 tests passed; 0 leaks, 0 network |
 | **Phase 10B Step 2** | Fix Clipped Node & Rectangular Glow Boundary, Screen Edge Repositioning, Geometry Tests | **Complete** | 402/402 Unit/Integration tests passed; 33/33 Section 8 tests passed; 0 leaks, 0 network |
+| **Phase 10B Step 3** | Wheel Redesign (Circular Backplate, 8 Slots, 64pt Glass Nodes, Hub, More Section, Customize Sheet, WheelLayoutModel) | **Complete** | 453/453 Unit/Integration tests passed; 33/33 Section 8 tests passed; 0 leaks, 0 network |
 
 ---
 
@@ -86,6 +87,9 @@
 | **Section 18** | Probed trim defaults, duration validation & target-size warnings | `3c4c9e2` | 277/277 Unit, 33/33 Sec8 | **Complete** |
 | **Section 19** | Drop window parameter panel reuse & batch support (multi-file progress, cancel) | `6f08221` | 297/297 Unit, 33/33 Sec8 | **Complete** |
 | **Section 20** | Batch review fixes: Fix A (per-file relative crop/trim), Fix B/C (concurrency limit 2, queue, cancel, cleanup), Fix D (async probe off main thread) | `966e8e6` | 324/324 Unit, 33/33 Sec8 | **Complete** |
+| **Section 21** | Phase 10B Step 1: Sticky wheel, latching, sticky file context, logging to ~/Library/Logs/Pasta/pasta.log, close control (×), empty hub | `11fc0dc` | 355/355 Unit, 33/33 Sec8 | **Complete** |
+| **Section 22** | Phase 10B Step 2: Anti-clipping, 520x560 panel, WheelGeometry, 18pt glow, screen edge repositioning for all 4 edges & corners | `233e400` | 402/402 Unit, 33/33 Sec8 | **Complete** |
+| **Section 23** | Phase 10B Step 3: Circular backplate (400pt/128pt), 8 slots, 64pt nodes, hub, More paged search, Customize sheet, WheelLayoutModel | In Progress (Step 3) | 453/453 Unit, 33/33 Sec8 | **Complete** |
 
 ---
 

@@ -1,0 +1,561 @@
+import Foundation
+import AppKit
+
+public final class RadialWheelCustomizeSheet: NSView {
+    public var onSettingsChanged: (() -> Void)?
+    public var onCloseRequested: (() -> Void)?
+
+    private let visualEffect = NSVisualEffectView()
+    private let titleLabel = NSTextField(labelWithString: "Customize Wheel")
+    private let closeBtn = NSButton()
+    private let sectionSegment = NSSegmentedControl()
+
+    private let appearanceContainer = NSView()
+    private let primaryToolsContainer = NSView()
+    private let behaviorContainer = NSView()
+
+    // Appearance controls
+    private var themeButtons: [NSButton] = []
+    private let glassStyleSegment = NSSegmentedControl()
+    private let glassStrengthSlider = NSSlider()
+    private let glassStrengthLabel = NSTextField(labelWithString: "Strength: 80%")
+    private let sizeSegment = NSSegmentedControl()
+    private let labelModeSegment = NSSegmentedControl()
+
+    // Primary tools controls
+    private let categorySegment = NSSegmentedControl()
+    private let toolsStackView = NSStackView()
+    private var selectedCategory: ActionCategory = .image
+
+    // Behavior controls
+    private let holdDurationSlider = NSSlider()
+    private let holdDurationLabel = NSTextField(labelWithString: "Hold duration: 450 ms")
+    private let keepOpenCheckbox = NSButton(checkboxWithTitle: "Keep wheel open after running", target: nil, action: nil)
+    private let showRingCheckbox = NSButton(checkboxWithTitle: "Show charging progress ring", target: nil, action: nil)
+
+    public override init(frame frameRect: NSRect) {
+        super.init(frame: NSRect(x: 0, y: 0, width: 360, height: 440))
+        setupUI()
+    }
+
+    public required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setupUI()
+    }
+
+    private func setupUI() {
+        wantsLayer = true
+        layer?.cornerRadius = 20
+        layer?.masksToBounds = false
+
+        visualEffect.translatesAutoresizingMaskIntoConstraints = false
+        visualEffect.blendingMode = .behindWindow
+        visualEffect.material = .hudWindow
+        visualEffect.state = .active
+        visualEffect.wantsLayer = true
+        visualEffect.layer?.cornerRadius = 20
+        visualEffect.layer?.masksToBounds = true
+        visualEffect.layer?.borderWidth = 1.0
+        visualEffect.layer?.borderColor = NSColor(white: 1.0, alpha: 0.20).cgColor
+        addSubview(visualEffect)
+
+        // Header Title
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        titleLabel.font = NSFont.systemFont(ofSize: 14, weight: .bold)
+        titleLabel.textColor = .white
+        addSubview(titleLabel)
+
+        // Close button (×)
+        closeBtn.translatesAutoresizingMaskIntoConstraints = false
+        closeBtn.title = "✕"
+        closeBtn.font = NSFont.systemFont(ofSize: 13, weight: .bold)
+        closeBtn.isBordered = false
+        closeBtn.target = self
+        closeBtn.action = #selector(closeClicked)
+        addSubview(closeBtn)
+
+        // Section Segmented Control: Appearance, Primary Tools, Behavior
+        sectionSegment.translatesAutoresizingMaskIntoConstraints = false
+        sectionSegment.segmentCount = 3
+        sectionSegment.setLabel("Appearance", forSegment: 0)
+        sectionSegment.setLabel("Primary Tools", forSegment: 1)
+        sectionSegment.setLabel("Behavior", forSegment: 2)
+        sectionSegment.selectedSegment = 0
+        sectionSegment.target = self
+        sectionSegment.action = #selector(sectionChanged)
+        addSubview(sectionSegment)
+
+        // Setup Section Containers
+        appearanceContainer.translatesAutoresizingMaskIntoConstraints = false
+        primaryToolsContainer.translatesAutoresizingMaskIntoConstraints = false
+        behaviorContainer.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(appearanceContainer)
+        addSubview(primaryToolsContainer)
+        addSubview(behaviorContainer)
+
+        primaryToolsContainer.isHidden = true
+        behaviorContainer.isHidden = true
+
+        NSLayoutConstraint.activate([
+            visualEffect.leadingAnchor.constraint(equalTo: leadingAnchor),
+            visualEffect.trailingAnchor.constraint(equalTo: trailingAnchor),
+            visualEffect.topAnchor.constraint(equalTo: topAnchor),
+            visualEffect.bottomAnchor.constraint(equalTo: bottomAnchor),
+
+            titleLabel.topAnchor.constraint(equalTo: topAnchor, constant: 14),
+            titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 18),
+
+            closeBtn.centerYAnchor.constraint(equalTo: titleLabel.centerYAnchor),
+            closeBtn.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
+            closeBtn.widthAnchor.constraint(equalToConstant: 28),
+            closeBtn.heightAnchor.constraint(equalToConstant: 28),
+
+            sectionSegment.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 12),
+            sectionSegment.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
+            sectionSegment.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
+            sectionSegment.heightAnchor.constraint(equalToConstant: 26),
+
+            appearanceContainer.topAnchor.constraint(equalTo: sectionSegment.bottomAnchor, constant: 12),
+            appearanceContainer.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
+            appearanceContainer.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
+            appearanceContainer.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -14),
+
+            primaryToolsContainer.topAnchor.constraint(equalTo: sectionSegment.bottomAnchor, constant: 12),
+            primaryToolsContainer.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
+            primaryToolsContainer.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
+            primaryToolsContainer.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -14),
+
+            behaviorContainer.topAnchor.constraint(equalTo: sectionSegment.bottomAnchor, constant: 12),
+            behaviorContainer.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
+            behaviorContainer.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
+            behaviorContainer.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -14)
+        ])
+
+        setupAppearanceSection()
+        setupPrimaryToolsSection()
+        setupBehaviorSection()
+    }
+
+    // MARK: - Section 1: Appearance
+    private func setupAppearanceSection() {
+        let themeLabel = makeSectionLabel("Theme Accent")
+        appearanceContainer.addSubview(themeLabel)
+
+        let swatchesStack = NSStackView()
+        swatchesStack.translatesAutoresizingMaskIntoConstraints = false
+        swatchesStack.orientation = .horizontal
+        swatchesStack.spacing = 8
+        swatchesStack.distribution = .fillEqually
+        appearanceContainer.addSubview(swatchesStack)
+
+        themeButtons.removeAll()
+        for theme in WheelTheme.allCases {
+            let btn = NSButton()
+            btn.translatesAutoresizingMaskIntoConstraints = false
+            btn.title = ""
+            btn.isBordered = false
+            btn.wantsLayer = true
+            btn.layer?.cornerRadius = 14
+            btn.layer?.backgroundColor = (NSColor(hex: theme.hex) ?? .orange).cgColor
+            btn.layer?.borderWidth = (theme == WheelLayoutModel.shared.currentTheme) ? 2.5 : 1.0
+            btn.layer?.borderColor = (theme == WheelLayoutModel.shared.currentTheme) ? NSColor.white.cgColor : NSColor(white: 1.0, alpha: 0.3).cgColor
+            btn.target = self
+            btn.action = #selector(themeSwatchClicked(_:))
+            btn.tag = WheelTheme.allCases.firstIndex(of: theme) ?? 0
+            swatchesStack.addArrangedSubview(btn)
+            btn.heightAnchor.constraint(equalToConstant: 28).isActive = true
+            themeButtons.append(btn)
+        }
+
+        let glassLabel = makeSectionLabel("Glass Style & Strength")
+        appearanceContainer.addSubview(glassLabel)
+
+        glassStyleSegment.translatesAutoresizingMaskIntoConstraints = false
+        glassStyleSegment.segmentCount = 3
+        glassStyleSegment.setLabel("Clear", forSegment: 0)
+        glassStyleSegment.setLabel("Regular", forSegment: 1)
+        glassStyleSegment.setLabel("Tinted", forSegment: 2)
+        switch WheelLayoutModel.shared.currentGlassStyle {
+        case .clear: glassStyleSegment.selectedSegment = 0
+        case .regular: glassStyleSegment.selectedSegment = 1
+        case .tinted: glassStyleSegment.selectedSegment = 2
+        }
+        glassStyleSegment.target = self
+        glassStyleSegment.action = #selector(glassStyleChanged)
+        appearanceContainer.addSubview(glassStyleSegment)
+
+        glassStrengthSlider.translatesAutoresizingMaskIntoConstraints = false
+        glassStrengthSlider.minValue = 0.1
+        glassStrengthSlider.maxValue = 1.0
+        glassStrengthSlider.doubleValue = WheelLayoutModel.shared.glassStrength
+        glassStrengthSlider.target = self
+        glassStrengthSlider.action = #selector(glassStrengthChanged)
+        appearanceContainer.addSubview(glassStrengthSlider)
+
+        glassStrengthLabel.translatesAutoresizingMaskIntoConstraints = false
+        glassStrengthLabel.font = NSFont.systemFont(ofSize: 10, weight: .semibold)
+        glassStrengthLabel.textColor = ThemeManager.shared.textSecondaryColor
+        glassStrengthLabel.stringValue = "Strength: \(Int(WheelLayoutModel.shared.glassStrength * 100))%"
+        appearanceContainer.addSubview(glassStrengthLabel)
+
+        let sizeLabel = makeSectionLabel("Wheel Diameter")
+        appearanceContainer.addSubview(sizeLabel)
+
+        sizeSegment.translatesAutoresizingMaskIntoConstraints = false
+        sizeSegment.segmentCount = 3
+        sizeSegment.setLabel("340 pt", forSegment: 0)
+        sizeSegment.setLabel("400 pt", forSegment: 1)
+        sizeSegment.setLabel("460 pt", forSegment: 2)
+        switch WheelLayoutModel.shared.currentSize {
+        case .compact: sizeSegment.selectedSegment = 0
+        case .standard: sizeSegment.selectedSegment = 1
+        case .large: sizeSegment.selectedSegment = 2
+        }
+        sizeSegment.target = self
+        sizeSegment.action = #selector(sizeChanged)
+        appearanceContainer.addSubview(sizeSegment)
+
+        let labelModeLabel = makeSectionLabel("Labels")
+        appearanceContainer.addSubview(labelModeLabel)
+
+        labelModeSegment.translatesAutoresizingMaskIntoConstraints = false
+        labelModeSegment.segmentCount = 2
+        labelModeSegment.setLabel("Always Visible", forSegment: 0)
+        labelModeSegment.setLabel("On Hover", forSegment: 1)
+        switch WheelLayoutModel.shared.labelMode {
+        case .always: labelModeSegment.selectedSegment = 0
+        case .onHover: labelModeSegment.selectedSegment = 1
+        }
+        labelModeSegment.target = self
+        labelModeSegment.action = #selector(labelModeChanged)
+        appearanceContainer.addSubview(labelModeSegment)
+
+        NSLayoutConstraint.activate([
+            themeLabel.topAnchor.constraint(equalTo: appearanceContainer.topAnchor),
+            themeLabel.leadingAnchor.constraint(equalTo: appearanceContainer.leadingAnchor),
+
+            swatchesStack.topAnchor.constraint(equalTo: themeLabel.bottomAnchor, constant: 6),
+            swatchesStack.leadingAnchor.constraint(equalTo: appearanceContainer.leadingAnchor),
+            swatchesStack.trailingAnchor.constraint(equalTo: appearanceContainer.trailingAnchor),
+            swatchesStack.heightAnchor.constraint(equalToConstant: 28),
+
+            glassLabel.topAnchor.constraint(equalTo: swatchesStack.bottomAnchor, constant: 14),
+            glassLabel.leadingAnchor.constraint(equalTo: appearanceContainer.leadingAnchor),
+
+            glassStyleSegment.topAnchor.constraint(equalTo: glassLabel.bottomAnchor, constant: 6),
+            glassStyleSegment.leadingAnchor.constraint(equalTo: appearanceContainer.leadingAnchor),
+            glassStyleSegment.trailingAnchor.constraint(equalTo: appearanceContainer.trailingAnchor),
+
+            glassStrengthSlider.topAnchor.constraint(equalTo: glassStyleSegment.bottomAnchor, constant: 8),
+            glassStrengthSlider.leadingAnchor.constraint(equalTo: appearanceContainer.leadingAnchor),
+            glassStrengthSlider.trailingAnchor.constraint(equalTo: glassStrengthLabel.leadingAnchor, constant: -8),
+
+            glassStrengthLabel.centerYAnchor.constraint(equalTo: glassStrengthSlider.centerYAnchor),
+            glassStrengthLabel.trailingAnchor.constraint(equalTo: appearanceContainer.trailingAnchor),
+            glassStrengthLabel.widthAnchor.constraint(equalToConstant: 90),
+
+            sizeLabel.topAnchor.constraint(equalTo: glassStrengthSlider.bottomAnchor, constant: 14),
+            sizeLabel.leadingAnchor.constraint(equalTo: appearanceContainer.leadingAnchor),
+
+            sizeSegment.topAnchor.constraint(equalTo: sizeLabel.bottomAnchor, constant: 6),
+            sizeSegment.leadingAnchor.constraint(equalTo: appearanceContainer.leadingAnchor),
+            sizeSegment.trailingAnchor.constraint(equalTo: appearanceContainer.trailingAnchor),
+
+            labelModeLabel.topAnchor.constraint(equalTo: sizeSegment.bottomAnchor, constant: 14),
+            labelModeLabel.leadingAnchor.constraint(equalTo: appearanceContainer.leadingAnchor),
+
+            labelModeSegment.topAnchor.constraint(equalTo: labelModeLabel.bottomAnchor, constant: 6),
+            labelModeSegment.leadingAnchor.constraint(equalTo: appearanceContainer.leadingAnchor),
+            labelModeSegment.trailingAnchor.constraint(equalTo: appearanceContainer.trailingAnchor)
+        ])
+    }
+
+    // MARK: - Section 2: Primary Tools
+    private func setupPrimaryToolsSection() {
+        categorySegment.translatesAutoresizingMaskIntoConstraints = false
+        let categories: [ActionCategory] = [.image, .video, .audio, .pdf, .document, .archive]
+        categorySegment.segmentCount = categories.count
+        for (i, cat) in categories.enumerated() {
+            categorySegment.setLabel(cat.displayName, forSegment: i)
+        }
+        categorySegment.selectedSegment = 0
+        categorySegment.target = self
+        categorySegment.action = #selector(categorySegmentChanged)
+        primaryToolsContainer.addSubview(categorySegment)
+
+        toolsStackView.translatesAutoresizingMaskIntoConstraints = false
+        toolsStackView.orientation = .vertical
+        toolsStackView.spacing = 6
+        toolsStackView.distribution = .fillEqually
+        primaryToolsContainer.addSubview(toolsStackView)
+
+        let resetBtn = NSButton(title: "Reset Category to Defaults", target: self, action: #selector(resetCategoryClicked))
+        resetBtn.translatesAutoresizingMaskIntoConstraints = false
+        resetBtn.bezelStyle = .rounded
+        primaryToolsContainer.addSubview(resetBtn)
+
+        NSLayoutConstraint.activate([
+            categorySegment.topAnchor.constraint(equalTo: primaryToolsContainer.topAnchor),
+            categorySegment.leadingAnchor.constraint(equalTo: primaryToolsContainer.leadingAnchor),
+            categorySegment.trailingAnchor.constraint(equalTo: primaryToolsContainer.trailingAnchor),
+
+            toolsStackView.topAnchor.constraint(equalTo: categorySegment.bottomAnchor, constant: 10),
+            toolsStackView.leadingAnchor.constraint(equalTo: primaryToolsContainer.leadingAnchor),
+            toolsStackView.trailingAnchor.constraint(equalTo: primaryToolsContainer.trailingAnchor),
+            toolsStackView.bottomAnchor.constraint(equalTo: resetBtn.topAnchor, constant: -10),
+
+            resetBtn.bottomAnchor.constraint(equalTo: primaryToolsContainer.bottomAnchor),
+            resetBtn.centerXAnchor.constraint(equalTo: primaryToolsContainer.centerXAnchor)
+        ])
+
+        reloadToolsList()
+    }
+
+    private func reloadToolsList() {
+        toolsStackView.arrangedSubviews.forEach { $0.removeFromSuperview() }
+
+        let pinnedIDs = WheelLayoutModel.shared.pinnedToolIDs(for: selectedCategory)
+        for (index, toolID) in pinnedIDs.enumerated() {
+            let row = NSView()
+            row.translatesAutoresizingMaskIntoConstraints = false
+            row.wantsLayer = true
+            row.layer?.cornerRadius = 6
+            row.layer?.backgroundColor = NSColor(white: 0.2, alpha: 0.5).cgColor
+
+            let label = NSTextField(labelWithString: "\(index + 1). \(toolID)")
+            label.translatesAutoresizingMaskIntoConstraints = false
+            label.font = NSFont.systemFont(ofSize: 11, weight: .medium)
+            label.textColor = .white
+            row.addSubview(label)
+
+            let isHidden = WheelLayoutModel.shared.isToolHidden(toolID, in: selectedCategory)
+            let hideBtn = NSButton(title: isHidden ? "Show" : "Hide", target: self, action: #selector(toggleHideClicked(_:)))
+            hideBtn.translatesAutoresizingMaskIntoConstraints = false
+            hideBtn.bezelStyle = .inline
+            hideBtn.tag = index
+            row.addSubview(hideBtn)
+
+            let upBtn = NSButton(title: "▲", target: self, action: #selector(moveToolUpClicked(_:)))
+            upBtn.translatesAutoresizingMaskIntoConstraints = false
+            upBtn.bezelStyle = .inline
+            upBtn.tag = index
+            upBtn.isEnabled = (index > 0)
+            row.addSubview(upBtn)
+
+            let downBtn = NSButton(title: "▼", target: self, action: #selector(moveToolDownClicked(_:)))
+            downBtn.translatesAutoresizingMaskIntoConstraints = false
+            downBtn.bezelStyle = .inline
+            downBtn.tag = index
+            downBtn.isEnabled = (index < pinnedIDs.count - 1)
+            row.addSubview(downBtn)
+
+            NSLayoutConstraint.activate([
+                label.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: 8),
+                label.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+                label.trailingAnchor.constraint(lessThanOrEqualTo: hideBtn.leadingAnchor, constant: -4),
+
+                downBtn.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: -6),
+                downBtn.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+                downBtn.widthAnchor.constraint(equalToConstant: 24),
+
+                upBtn.trailingAnchor.constraint(equalTo: downBtn.leadingAnchor, constant: -4),
+                upBtn.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+                upBtn.widthAnchor.constraint(equalToConstant: 24),
+
+                hideBtn.trailingAnchor.constraint(equalTo: upBtn.leadingAnchor, constant: -4),
+                hideBtn.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+                hideBtn.widthAnchor.constraint(equalToConstant: 44)
+            ])
+
+            toolsStackView.addArrangedSubview(row)
+        }
+    }
+
+    // MARK: - Section 3: Behavior
+    private func setupBehaviorSection() {
+        let holdLabel = makeSectionLabel("Shift-Hold Duration")
+        behaviorContainer.addSubview(holdLabel)
+
+        holdDurationSlider.translatesAutoresizingMaskIntoConstraints = false
+        holdDurationSlider.minValue = 300.0
+        holdDurationSlider.maxValue = 1000.0
+        holdDurationSlider.doubleValue = PreferencesManager.shared.shiftHoldDurationMs
+        holdDurationSlider.target = self
+        holdDurationSlider.action = #selector(holdDurationChanged)
+        behaviorContainer.addSubview(holdDurationSlider)
+
+        holdDurationLabel.translatesAutoresizingMaskIntoConstraints = false
+        holdDurationLabel.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
+        holdDurationLabel.textColor = ThemeManager.shared.textSecondaryColor
+        holdDurationLabel.stringValue = "Hold duration: \(Int(PreferencesManager.shared.shiftHoldDurationMs)) ms"
+        behaviorContainer.addSubview(holdDurationLabel)
+
+        let wheelBehaviorLabel = makeSectionLabel("Wheel Retention & Ring")
+        behaviorContainer.addSubview(wheelBehaviorLabel)
+
+        keepOpenCheckbox.translatesAutoresizingMaskIntoConstraints = false
+        keepOpenCheckbox.state = PreferencesManager.shared.keepWheelOpenAfterRunning ? .on : .off
+        keepOpenCheckbox.target = self
+        keepOpenCheckbox.action = #selector(keepOpenToggled)
+        behaviorContainer.addSubview(keepOpenCheckbox)
+
+        showRingCheckbox.translatesAutoresizingMaskIntoConstraints = false
+        showRingCheckbox.state = PreferencesManager.shared.showChargingRing ? .on : .off
+        showRingCheckbox.target = self
+        showRingCheckbox.action = #selector(showRingToggled)
+        behaviorContainer.addSubview(showRingCheckbox)
+
+        NSLayoutConstraint.activate([
+            holdLabel.topAnchor.constraint(equalTo: behaviorContainer.topAnchor),
+            holdLabel.leadingAnchor.constraint(equalTo: behaviorContainer.leadingAnchor),
+
+            holdDurationSlider.topAnchor.constraint(equalTo: holdLabel.bottomAnchor, constant: 8),
+            holdDurationSlider.leadingAnchor.constraint(equalTo: behaviorContainer.leadingAnchor),
+            holdDurationSlider.trailingAnchor.constraint(equalTo: behaviorContainer.trailingAnchor),
+
+            holdDurationLabel.topAnchor.constraint(equalTo: holdDurationSlider.bottomAnchor, constant: 4),
+            holdDurationLabel.leadingAnchor.constraint(equalTo: behaviorContainer.leadingAnchor),
+
+            wheelBehaviorLabel.topAnchor.constraint(equalTo: holdDurationLabel.bottomAnchor, constant: 20),
+            wheelBehaviorLabel.leadingAnchor.constraint(equalTo: behaviorContainer.leadingAnchor),
+
+            keepOpenCheckbox.topAnchor.constraint(equalTo: wheelBehaviorLabel.bottomAnchor, constant: 8),
+            keepOpenCheckbox.leadingAnchor.constraint(equalTo: behaviorContainer.leadingAnchor),
+            keepOpenCheckbox.trailingAnchor.constraint(equalTo: behaviorContainer.trailingAnchor),
+
+            showRingCheckbox.topAnchor.constraint(equalTo: keepOpenCheckbox.bottomAnchor, constant: 8),
+            showRingCheckbox.leadingAnchor.constraint(equalTo: behaviorContainer.leadingAnchor),
+            showRingCheckbox.trailingAnchor.constraint(equalTo: behaviorContainer.trailingAnchor)
+        ])
+    }
+
+    private func makeSectionLabel(_ title: String) -> NSTextField {
+        let label = NSTextField(labelWithString: title)
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.font = NSFont.systemFont(ofSize: 11, weight: .bold)
+        label.textColor = ThemeManager.shared.textSecondaryColor
+        return label
+    }
+
+    // MARK: - Actions
+    @objc private func closeClicked() {
+        onCloseRequested?()
+    }
+
+    @objc private func sectionChanged() {
+        appearanceContainer.isHidden = (sectionSegment.selectedSegment != 0)
+        primaryToolsContainer.isHidden = (sectionSegment.selectedSegment != 1)
+        behaviorContainer.isHidden = (sectionSegment.selectedSegment != 2)
+    }
+
+    @objc private func themeSwatchClicked(_ sender: NSButton) {
+        let index = sender.tag
+        let themes = WheelTheme.allCases
+        guard index >= 0 && index < themes.count else { return }
+        let theme = themes[index]
+        WheelLayoutModel.shared.currentTheme = theme
+
+        for (i, btn) in themeButtons.enumerated() {
+            let isSel = (i == index)
+            btn.layer?.borderWidth = isSel ? 2.5 : 1.0
+            btn.layer?.borderColor = isSel ? NSColor.white.cgColor : NSColor(white: 1.0, alpha: 0.3).cgColor
+        }
+
+        onSettingsChanged?()
+    }
+
+    @objc private func glassStyleChanged() {
+        switch glassStyleSegment.selectedSegment {
+        case 0: WheelLayoutModel.shared.currentGlassStyle = .clear
+        case 1: WheelLayoutModel.shared.currentGlassStyle = .regular
+        case 2: WheelLayoutModel.shared.currentGlassStyle = .tinted
+        default: break
+        }
+        onSettingsChanged?()
+    }
+
+    @objc private func glassStrengthChanged() {
+        let val = glassStrengthSlider.doubleValue
+        WheelLayoutModel.shared.glassStrength = val
+        glassStrengthLabel.stringValue = "Strength: \(Int(val * 100))%"
+        onSettingsChanged?()
+    }
+
+    @objc private func sizeChanged() {
+        switch sizeSegment.selectedSegment {
+        case 0: WheelLayoutModel.shared.currentSize = .compact
+        case 1: WheelLayoutModel.shared.currentSize = .standard
+        case 2: WheelLayoutModel.shared.currentSize = .large
+        default: break
+        }
+        onSettingsChanged?()
+    }
+
+    @objc private func labelModeChanged() {
+        switch labelModeSegment.selectedSegment {
+        case 0: WheelLayoutModel.shared.labelMode = .always
+        case 1: WheelLayoutModel.shared.labelMode = .onHover
+        default: break
+        }
+        onSettingsChanged?()
+    }
+
+    @objc private func categorySegmentChanged() {
+        let categories: [ActionCategory] = [.image, .video, .audio, .pdf, .document, .archive]
+        let idx = categorySegment.selectedSegment
+        if idx >= 0 && idx < categories.count {
+            selectedCategory = categories[idx]
+            reloadToolsList()
+        }
+    }
+
+    @objc private func toggleHideClicked(_ sender: NSButton) {
+        let index = sender.tag
+        let pinned = WheelLayoutModel.shared.pinnedToolIDs(for: selectedCategory)
+        guard index >= 0 && index < pinned.count else { return }
+        let toolID = pinned[index]
+        let currentlyHidden = WheelLayoutModel.shared.isToolHidden(toolID, in: selectedCategory)
+        WheelLayoutModel.shared.setToolHidden(toolID, hidden: !currentlyHidden, in: selectedCategory)
+        reloadToolsList()
+        onSettingsChanged?()
+    }
+
+    @objc private func moveToolUpClicked(_ sender: NSButton) {
+        let index = sender.tag
+        if index > 0 {
+            WheelLayoutModel.shared.reorderPinnedTool(from: index, to: index - 1, in: selectedCategory)
+            reloadToolsList()
+            onSettingsChanged?()
+        }
+    }
+
+    @objc private func moveToolDownClicked(_ sender: NSButton) {
+        let index = sender.tag
+        let pinned = WheelLayoutModel.shared.pinnedToolIDs(for: selectedCategory)
+        if index < pinned.count - 1 {
+            WheelLayoutModel.shared.reorderPinnedTool(from: index, to: index + 1, in: selectedCategory)
+            reloadToolsList()
+            onSettingsChanged?()
+        }
+    }
+
+    @objc private func resetCategoryClicked() {
+        WheelLayoutModel.shared.resetToDefaults(for: selectedCategory)
+        reloadToolsList()
+        onSettingsChanged?()
+    }
+
+    @objc private func holdDurationChanged() {
+        let val = holdDurationSlider.doubleValue
+        PreferencesManager.shared.shiftHoldDurationMs = val
+        holdDurationLabel.stringValue = "Hold duration: \(Int(val)) ms"
+    }
+
+    @objc private func keepOpenToggled() {
+        PreferencesManager.shared.keepWheelOpenAfterRunning = (keepOpenCheckbox.state == .on)
+    }
+
+    @objc private func showRingToggled() {
+        PreferencesManager.shared.showChargingRing = (showRingCheckbox.state == .on)
+    }
+}

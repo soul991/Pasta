@@ -8,10 +8,13 @@ public final class RadialWheelOverlayViewController: NSViewController {
     private var targetFiles: [URL] = []
     private var isAdvanced: Bool = false
 
+    private let backplateView = RadialWheelBackplateView()
     private let centerDisc = RadialWheelCenterDiscView()
     private let hudView = RadialConversionHUDView()
     private var nodeViews: [RadialOptionNodeView] = []
     private var parameterPanelView: ParameterPanelView?
+    private var moreView: RadialWheelMoreView?
+    private var customizeSheet: RadialWheelCustomizeSheet?
 
     // Floating hint pill
     private let hintPillContainer = NSVisualEffectView()
@@ -38,12 +41,26 @@ public final class RadialWheelOverlayViewController: NSViewController {
     }
 
     private func setupUI() {
+        // Backplate annulus (400 pt default)
+        let outerD = WheelLayoutModel.shared.currentSize.backplateDiameter
+        let hubD = WheelLayoutModel.shared.currentSize.hubDiameter
+        backplateView.outerDiameter = outerD
+        backplateView.hubDiameter = hubD
+        backplateView.frame = NSRect(
+            x: WheelGeometry.wheelCenterX - (outerD / 2.0),
+            y: WheelGeometry.wheelCenterY - (outerD / 2.0),
+            width: outerD,
+            height: outerD
+        )
+        view.addSubview(backplateView)
+
         // Center Disc centered at (WheelGeometry.wheelCenterX, WheelGeometry.wheelCenterY)
+        centerDisc.diameter = hubD
         centerDisc.frame = NSRect(
-            x: WheelGeometry.wheelCenterX - 55,
-            y: WheelGeometry.wheelCenterY - 55,
-            width: 110,
-            height: 110
+            x: WheelGeometry.wheelCenterX - (hubD / 2.0),
+            y: WheelGeometry.wheelCenterY - (hubD / 2.0),
+            width: hubD,
+            height: hubD
         )
         view.addSubview(centerDisc)
 
@@ -144,10 +161,10 @@ public final class RadialWheelOverlayViewController: NSViewController {
             compactProgressButton.centerYAnchor.constraint(equalTo: compactProgressContainer.centerYAnchor)
         ])
 
-        // Close control (×) at top-right of wheel
+        // Close control (×) at top-right of wheel backplate
         let closeBtn = NSButton(frame: NSRect(
-            x: WheelGeometry.wheelCenterX + 140,
-            y: WheelGeometry.wheelCenterY + 140,
+            x: WheelGeometry.wheelCenterX + 138,
+            y: WheelGeometry.wheelCenterY + 138,
             width: 28,
             height: 28
         ))
@@ -161,6 +178,10 @@ public final class RadialWheelOverlayViewController: NSViewController {
         closeBtn.target = self
         closeBtn.action = #selector(closeButtonClicked)
         view.addSubview(closeBtn)
+
+        DragMonitor.shared.onEscIntercepted = { [weak self] in
+            return self?.handleEscKey() ?? false
+        }
     }
 
     @objc private func closeButtonClicked() {
@@ -205,7 +226,7 @@ public final class RadialWheelOverlayViewController: NSViewController {
         centerDisc.isHidden = false
         centerDisc.alphaValue = 1.0
         hintPillContainer.alphaValue = 1.0
-        centerDisc.configure(fileURL: firstFile, isAdvanced: isOptionHeld)
+        centerDisc.configure(files: files, isAdvanced: isOptionHeld)
 
         let isReduceMotion = PreferencesManager.shared.reduceMotionEnabled
 
@@ -221,39 +242,62 @@ public final class RadialWheelOverlayViewController: NSViewController {
             centerDisc.layer?.transform = CATransform3DIdentity
         }
 
-        // Fetch valid actions
-        let actions = FormatRegistry.shared.actions(for: firstFile, isOptionHeld: isOptionHeld)
-        guard !actions.isEmpty else { return }
+        // Layout 8 slots via WheelLayoutModel
+        let slots = WheelLayoutModel.shared.slots(for: firstFile, isAdvanced: isOptionHeld)
+        let orbitRadius = WheelLayoutModel.shared.currentSize.orbitRadius
 
-        let count = actions.count
+        for slot in slots {
+            let angle = slot.angle
+            let nx = WheelGeometry.wheelCenterX + (orbitRadius * cos(angle))
+            let ny = WheelGeometry.wheelCenterY + (orbitRadius * sin(angle))
 
-        for (index, action) in actions.enumerated() {
-            let nodeCenter = WheelGeometry.nodeCenter(index: index, totalSlots: count)
-
-            let nodeView = RadialOptionNodeView(action: action)
-            let nodeWidth = nodeView.bounds.width
-            let nodeHeight = nodeView.bounds.height
+            let nodeView = RadialOptionNodeView(slotKind: slot.kind)
+            let nodeWidth: CGFloat = 64.0
+            let nodeHeight: CGFloat = 64.0
             nodeView.frame = NSRect(
-                x: nodeCenter.x - (nodeWidth / 2.0),
-                y: nodeCenter.y - (nodeHeight / 2.0),
+                x: nx - (nodeWidth / 2.0),
+                y: ny - (nodeHeight / 2.0),
                 width: nodeWidth,
                 height: nodeHeight
             )
             nodeView.layer?.masksToBounds = false
 
-            nodeView.onSelect = { [weak self] act in
-                if act.parameters.isEmpty {
-                    self?.performConversion(action: act)
-                } else {
-                    self?.showParameterPanel(for: act)
+            nodeView.onHoverChanged = { [weak self] isHovered in
+                if isHovered {
+                    self?.backplateView.hoveredSlotIndex = slot.slotIndex
+                } else if self?.backplateView.hoveredSlotIndex == slot.slotIndex {
+                    self?.backplateView.hoveredSlotIndex = nil
                 }
             }
-            nodeView.onDrop = { [weak self] act, droppedFiles in
+
+            nodeView.onSelect = { [weak self] kind in
+                switch kind {
+                case .action(let act):
+                    if act.parameters.isEmpty {
+                        self?.performConversion(action: act)
+                    } else {
+                        self?.showParameterPanel(for: act)
+                    }
+                case .more:
+                    self?.showMoreView()
+                case .customize:
+                    self?.showCustomizeSheet()
+                }
+            }
+
+            nodeView.onDrop = { [weak self] kind, droppedFiles in
                 self?.targetFiles = droppedFiles
-                if act.parameters.isEmpty {
-                    self?.performConversion(action: act)
-                } else {
-                    self?.showParameterPanel(for: act)
+                switch kind {
+                case .action(let act):
+                    if act.parameters.isEmpty {
+                        self?.performConversion(action: act)
+                    } else {
+                        self?.showParameterPanel(for: act)
+                    }
+                case .more:
+                    self?.showMoreView()
+                case .customize:
+                    self?.showCustomizeSheet()
                 }
             }
 
@@ -265,7 +309,7 @@ public final class RadialWheelOverlayViewController: NSViewController {
                 view.addSubview(nodeView)
                 nodeViews.append(nodeView)
 
-                let delay = Double(index) * 0.025
+                let delay = Double(slot.slotIndex) * 0.025
                 DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
                     NSAnimationContext.runAnimationGroup { ctx in
                         ctx.duration = 0.25
@@ -385,13 +429,165 @@ public final class RadialWheelOverlayViewController: NSViewController {
         }
     }
 
-    public override func cancelOperation(_ sender: Any?) {
+    public func handleEscKey() -> Bool {
+        if customizeSheet != nil && customizeSheet?.superview != nil {
+            dismissCustomizeSheet()
+            return true
+        }
+        if moreView != nil && moreView?.superview != nil {
+            dismissMoreView()
+            return true
+        }
         if parameterPanelView != nil {
             dismissParameterPanel(animated: true)
-        } else {
-            DragMonitor.shared.closeWheel(reason: "ESC key via cancelOperation")
-            onCloseRequested?()
+            return true
         }
+        return false
+    }
+
+    public override func cancelOperation(_ sender: Any?) {
+        if handleEscKey() {
+            return
+        }
+        DragMonitor.shared.closeWheel(reason: "ESC key via cancelOperation")
+        onCloseRequested?()
+    }
+
+    private func showMoreView() {
+        dismissMoreView()
+        dismissCustomizeSheet()
+        dismissParameterPanel(animated: false)
+
+        let more = RadialWheelMoreView()
+        let moreW: CGFloat = 340.0
+        let moreH: CGFloat = 400.0
+        more.frame = NSRect(
+            x: WheelGeometry.wheelCenterX - (moreW / 2.0),
+            y: WheelGeometry.wheelCenterY - (moreH / 2.0),
+            width: moreW,
+            height: moreH
+        )
+
+        let actions = WheelLayoutModel.shared.moreActions(for: targetFiles.first, isAdvanced: isAdvanced)
+        more.configure(actions: actions)
+
+        more.onSelectAction = { [weak self] action in
+            self?.dismissMoreView()
+            if action.parameters.isEmpty {
+                self?.performConversion(action: action)
+            } else {
+                self?.showParameterPanel(for: action)
+            }
+        }
+        more.onCloseRequested = { [weak self] in
+            self?.dismissMoreView()
+        }
+
+        view.addSubview(more)
+        self.moreView = more
+
+        if !PreferencesManager.shared.reduceMotionEnabled {
+            more.layer?.transform = CATransform3DMakeScale(0.9, 0.9, 1.0)
+            more.alphaValue = 0.0
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.20
+                more.animator().layer?.transform = CATransform3DIdentity
+                more.animator().alphaValue = 1.0
+            }
+        }
+    }
+
+    public func dismissMoreView() {
+        guard let more = moreView else { return }
+        self.moreView = nil
+        if !PreferencesManager.shared.reduceMotionEnabled {
+            NSAnimationContext.runAnimationGroup({ ctx in
+                ctx.duration = 0.16
+                more.animator().alphaValue = 0.0
+                more.animator().layer?.transform = CATransform3DMakeScale(0.9, 0.9, 1.0)
+            }, completionHandler: {
+                more.removeFromSuperview()
+            })
+        } else {
+            more.removeFromSuperview()
+        }
+    }
+
+    private func showCustomizeSheet() {
+        dismissCustomizeSheet()
+        dismissMoreView()
+        dismissParameterPanel(animated: false)
+
+        let sheet = RadialWheelCustomizeSheet()
+        let sheetW: CGFloat = 360.0
+        let sheetH: CGFloat = 440.0
+        sheet.frame = NSRect(
+            x: WheelGeometry.wheelCenterX - (sheetW / 2.0),
+            y: WheelGeometry.wheelCenterY - (sheetH / 2.0),
+            width: sheetW,
+            height: sheetH
+        )
+
+        sheet.onSettingsChanged = { [weak self] in
+            self?.applyLayoutSettings()
+        }
+        sheet.onCloseRequested = { [weak self] in
+            self?.dismissCustomizeSheet()
+        }
+
+        view.addSubview(sheet)
+        self.customizeSheet = sheet
+
+        if !PreferencesManager.shared.reduceMotionEnabled {
+            sheet.layer?.transform = CATransform3DMakeScale(0.92, 0.92, 1.0)
+            sheet.alphaValue = 0.0
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.20
+                sheet.animator().layer?.transform = CATransform3DIdentity
+                sheet.animator().alphaValue = 1.0
+            }
+        }
+    }
+
+    public func dismissCustomizeSheet() {
+        guard let sheet = customizeSheet else { return }
+        self.customizeSheet = nil
+        if !PreferencesManager.shared.reduceMotionEnabled {
+            NSAnimationContext.runAnimationGroup({ ctx in
+                ctx.duration = 0.16
+                sheet.animator().alphaValue = 0.0
+                sheet.animator().layer?.transform = CATransform3DMakeScale(0.92, 0.92, 1.0)
+            }, completionHandler: {
+                sheet.removeFromSuperview()
+            })
+        } else {
+            sheet.removeFromSuperview()
+        }
+    }
+
+    private func applyLayoutSettings() {
+        let size = WheelLayoutModel.shared.currentSize
+        let outerD = size.backplateDiameter
+        let hubD = size.hubDiameter
+
+        backplateView.outerDiameter = outerD
+        backplateView.hubDiameter = hubD
+        backplateView.frame = NSRect(
+            x: WheelGeometry.wheelCenterX - (outerD / 2.0),
+            y: WheelGeometry.wheelCenterY - (outerD / 2.0),
+            width: outerD,
+            height: outerD
+        )
+
+        centerDisc.diameter = hubD
+        centerDisc.frame = NSRect(
+            x: WheelGeometry.wheelCenterX - (hubD / 2.0),
+            y: WheelGeometry.wheelCenterY - (hubD / 2.0),
+            width: hubD,
+            height: hubD
+        )
+
+        configure(files: targetFiles, isOptionHeld: isAdvanced)
     }
 
     private func performConversion(action: ConversionAction, params: ParameterValues = [:], formModel: ParameterFormModel? = nil) {

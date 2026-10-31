@@ -9,6 +9,19 @@ public enum ActionCategory: String, Codable, CaseIterable {
     case subtitle
     case archive
     case metadata
+
+    public var displayName: String {
+        switch self {
+        case .image: return "Image"
+        case .video: return "Video"
+        case .audio: return "Audio"
+        case .pdf: return "PDF"
+        case .document: return "Document"
+        case .subtitle: return "Subtitle"
+        case .archive: return "Archive"
+        case .metadata: return "Metadata"
+        }
+    }
 }
 
 public enum OutputKind: Equatable, Sendable {

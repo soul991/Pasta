@@ -101,6 +101,42 @@ CI tests verify the mathematical state machine against simulated clock timestamp
 
 ---
 
+## 4.2 Wheel Redesign, Hub, More & Customize Sections (Phase 10B Step 3)
+
+- [ ] **Circular Backplate Annulus & Geometry**:
+  - Open the wheel.
+  - **Expected:** The wheel renders as a true circular glass annulus (400 pt outer diameter, 128 pt inner hub diameter) with a 1 pt hairline gradient stroke and soft inner shadow, rather than loose pills.
+- [ ] **8-Slot Layout & 64 pt Circular Buttons**:
+  - Inspect the 8 positions:
+    - Slots 1 to 6: primary pinned conversion actions for the file's category.
+    - Slot 7: More (ellipsis glyph `...`).
+    - Slot 8: Customize (gear glyph ⚙).
+  - **Expected:** Nodes are 64 pt circular glass buttons with glyph and 11 pt bold label. Labels never clip.
+- [ ] **Connecting Radial Wedge**:
+  - Hover over each of the 8 nodes in turn.
+  - **Expected:** A smooth radial wedge tinted with the accent color at 0.12 alpha extends from the 128 pt hub to the hovered node.
+- [ ] **Center Disc / Hub**:
+  - Drag a single file: displays a 48–64 pt Quick Look thumbnail, filename with middle truncation, and "type · size" in accent tint.
+  - Drag multiple files: displays stacked preview with a distinct count badge (e.g. "3 Files") and total size.
+  - Open wheel without files (menu bar "Show Wheel"): displays idle Pasta rigatoni icon and "Drag a file onto the wheel".
+- [ ] **"More" Section & Search Filter**:
+  - Click the **More** node (slot 7).
+  - **Expected:** An attached glass panel opens with remaining tools for the file category.
+  - Type letters into the search field: tools filter instantly in real-time.
+  - Page between pages (◀ / ▶) if more than 8 extra tools exist.
+  - Press <kbd>Esc</kbd>: More panel closes, returning to the primary 8-slot wheel without closing the wheel.
+- [ ] **"Customize" Section & Live Application**:
+  - Click the **Customize** node (slot 8).
+  - **Expected:** An attached glass sheet appears with Appearance, Primary Tools, and Behavior sections.
+  - **Appearance**: Click different theme swatches (Sunset, Ocean, Emerald, Violet, Rose, Graphite, Match System). Notice the live update to the wheel's accent color, glow, and high-contrast ink.
+  - **Appearance (Size & Style)**: Toggle Compact (340), Standard (400), Large (460); adjust glass strength and label visibility.
+  - **Primary Tools**: Reorder tools with ▲ / ▼ buttons; toggle tool visibility (Hide / Show); click "Reset Category to Defaults".
+  - **Behavior**: Adjust Shift-hold duration (300–1000 ms), toggle "Keep wheel open after running" and "Show charging ring".
+  - Press <kbd>Esc</kbd>: Customize sheet closes, returning to the primary wheel.
+  - Quit and relaunch Pasta: verify all customizations persisted.
+
+---
+
 ## 5. Mode Toggling: Convert vs. Advanced Mode (<kbd>⌥</kbd>)
 
 - [ ] **Quick Option Tap (< 250 ms)**:

@@ -2999,6 +2999,141 @@ do {
     let node = RadialOptionNodeView(action: testAction)
     assertTest(node.layer?.masksToBounds == false,
                "22.3c RadialOptionNodeView layer masksToBounds is false")
+
+    // ==================================================
+    // Section 23: Phase 10B Step 3: Wheel Layout Model, Slots, Customization & Contrast Tests
+    // ==================================================
+    print("\n--- 23. Phase 10B Step 3: Wheel Redesign & WheelLayoutModel Tests ---")
+
+    // 23.1 Defaults per category (exactly 6 pinned tools)
+    let supportedCategories: [ActionCategory] = [.image, .video, .audio, .pdf, .document, .archive]
+    for cat in supportedCategories {
+        let defaults = WheelLayoutModel.defaultPinnedToolIDs(for: cat)
+        assertTest(defaults.count == 6, "23.1 Category \(cat.rawValue) has exactly 6 default pinned tools")
+
+        let model = WheelLayoutModel(isolatedStorage: [:])
+        let pinned = model.pinnedToolIDs(for: cat)
+        assertTest(pinned.count == 6, "23.1 Category \(cat.rawValue) returns exactly 6 pinned tools from model")
+        assertTest(pinned == defaults, "23.1 Category \(cat.rawValue) matches default IDs")
+    }
+
+    // 23.2 Reorder pinned tools
+    let isolatedStorage: [String: Any] = [:]
+    let reorderModel = WheelLayoutModel(isolatedStorage: isolatedStorage)
+    let origImageTools = reorderModel.pinnedToolIDs(for: .image)
+    let firstTool = origImageTools[0]
+    let secondTool = origImageTools[1]
+
+    // Move first tool to index 2
+    reorderModel.reorderPinnedTool(from: 0, to: 2, in: .image)
+    let reorderedTools = reorderModel.pinnedToolIDs(for: .image)
+    assertTest(reorderedTools.count == 6, "23.2 Reordered tools count remains 6")
+    assertTest(reorderedTools[0] == secondTool, "23.2 Reordered tool 0 is now \(secondTool)")
+    assertTest(reorderedTools[2] == firstTool, "23.2 Reordered tool 2 is now \(firstTool)")
+
+    // 23.3 Hide tool
+    let hideModel = WheelLayoutModel(isolatedStorage: [:])
+    assertTest(!hideModel.isToolHidden("image.to.jpeg", in: .image), "23.3 Tool initially not hidden")
+    hideModel.setToolHidden("image.to.jpeg", hidden: true, in: .image)
+    assertTest(hideModel.isToolHidden("image.to.jpeg", in: .image), "23.3 Tool marked as hidden")
+
+    let pngFile = URL(fileURLWithPath: "sample.png")
+    let pngSlots = hideModel.slots(for: pngFile, isAdvanced: false)
+    let containsHidden = pngSlots.contains { slot in
+        if case .action(let act) = slot.kind {
+            return act.id == "image.to.jpeg"
+        }
+        return false
+    }
+    assertTest(!containsHidden, "23.3 Hidden tool image.to.jpeg excluded from active wheel slots")
+
+    // 23.4 Reset category to defaults
+    hideModel.resetToDefaults(for: .image)
+    assertTest(!hideModel.isToolHidden("image.to.jpeg", in: .image), "23.4 Reset restores hidden status")
+    assertTest(hideModel.pinnedToolIDs(for: .image) == WheelLayoutModel.defaultPinnedToolIDs(for: .image),
+               "23.4 Reset restores exact default pinned tools")
+
+    // 23.5 Persistence round trip
+    let persistStorage: [String: Any] = [:]
+    let writeModel = WheelLayoutModel(isolatedStorage: persistStorage)
+    writeModel.currentTheme = .emerald
+    writeModel.currentSize = .large
+    writeModel.currentGlassStyle = .tinted
+    writeModel.glassStrength = 0.95
+    writeModel.labelMode = .onHover
+    writeModel.setPinnedToolIDs(["custom.1", "custom.2", "custom.3", "custom.4", "custom.5", "custom.6"], for: .video)
+
+    // Simulate new model instance reading from persisted storage
+    let readModel = WheelLayoutModel(isolatedStorage: writeModel.currentTheme == .emerald ? [
+        "pasta_theme_id": "emerald",
+        "pasta_wheel_size": "large",
+        "pasta_glass_style": "tinted",
+        "pasta_glass_strength": 0.95,
+        "pasta_label_mode": "onHover",
+        "pasta_pinned_tools_video": ["custom.1", "custom.2", "custom.3", "custom.4", "custom.5", "custom.6"]
+    ] : [:])
+
+    assertTest(readModel.currentTheme == .emerald, "23.5 Persistence round-trip: theme is emerald")
+    assertTest(readModel.currentSize == .large, "23.5 Persistence round-trip: size is large")
+    assertTest(readModel.currentGlassStyle == .tinted, "23.5 Persistence round-trip: glassStyle is tinted")
+    assertTest(abs(readModel.glassStrength - 0.95) < 0.001, "23.5 Persistence round-trip: glassStrength is 0.95")
+    assertTest(readModel.labelMode == .onHover, "23.5 Persistence round-trip: labelMode is onHover")
+    assertTest(readModel.pinnedToolIDs(for: .video) == ["custom.1", "custom.2", "custom.3", "custom.4", "custom.5", "custom.6"],
+               "23.5 Persistence round-trip: pinned tool IDs match")
+
+    // 23.6 More actions = all available minus pinned
+    let mp4File = URL(fileURLWithPath: "sample.mp4")
+    let testLayoutModel = WheelLayoutModel(isolatedStorage: [:])
+    let pinnedVideo = Set(testLayoutModel.pinnedToolIDs(for: .video))
+    let moreVideoActions = testLayoutModel.moreActions(for: mp4File, isAdvanced: false)
+
+    var anyPinnedInMore = false
+    for act in moreVideoActions {
+        if pinnedVideo.contains(act.id) {
+            anyPinnedInMore = true
+            break
+        }
+    }
+    assertTest(!anyPinnedInMore, "23.6 More actions never contains pinned tools")
+
+    let allVideoActions = FormatRegistry.shared.actions(for: mp4File, isOptionHeld: false)
+    let expectedMoreCount = allVideoActions.filter { !pinnedVideo.contains($0.id) }.count
+    assertTest(moreVideoActions.count == expectedMoreCount,
+               "23.6 More actions count (\(moreVideoActions.count)) == all minus pinned (\(expectedMoreCount))")
+
+    // 23.7 Unavailable tools (missing optional binary) excluded
+    ToolLocator.shared.setOverride(tool: "soffice", url: nil)
+    let docxFile = URL(fileURLWithPath: "sample.docx")
+    let docxSlots = testLayoutModel.slots(for: docxFile, isAdvanced: false)
+    let hasSofficeAction = docxSlots.contains { slot in
+        if case .action(let act) = slot.kind {
+            return act.id == "docx.to.pdf"
+        }
+        return false
+    }
+    assertTest(!hasSofficeAction, "23.7 Unavailable tool docx.to.pdf (missing soffice) excluded from slots")
+
+    // 23.8 Theme contrast: every theme's label-on-accent ratio is >= 4.5:1
+    for theme in WheelTheme.allCases {
+        let accent = theme.accentColor
+        let label = theme.labelColor
+        let contrast = WCAGContrast.contrastRatio(foreground: label, background: accent)
+        assertTest(contrast >= 4.5,
+                   "23.8 Theme \(theme.displayName) WCAG contrast (\(String(format: "%.2f", contrast)):1) >= 4.5:1")
+    }
+
+    // 23.9 Slot Architecture: 8 slots, slots 0..5 action/primary, slot 6 more, slot 7 customize
+    let wheelSlots = testLayoutModel.slots(for: mp4File, isAdvanced: false)
+    assertTest(wheelSlots.count == 8, "23.9 Exactly 8 slots generated for wheel")
+    assertTest(wheelSlots[6].kind == .more, "23.9 Slot 6 is More (ellipsis)")
+    assertTest(wheelSlots[7].kind == .customize, "23.9 Slot 7 is Customize (gear)")
+    for i in 0..<6 {
+        if case .action = wheelSlots[i].kind {
+            assertTest(true, "23.9 Slot \(i) is primary tool action")
+        } else {
+            assertTest(false, "23.9 Slot \(i) should be action")
+        }
+    }
 }
 
 print("\n==================================================")

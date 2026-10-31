@@ -107,6 +107,7 @@ public final class DragMonitor {
     public var onWheelClose: (() -> Void)?
     public var onModeToggle: ((Bool) -> Void)?
     public var onFilesReplaced: (([URL]) -> Void)?
+    public var onEscIntercepted: (() -> Bool)?
 
     // Backward-compatibility callbacks
     public var onDragStart: (([URL], Bool, NSPoint) -> Void)? {
@@ -391,6 +392,9 @@ public final class DragMonitor {
 
         case .open, .secondHoldArmed:
             if keyCode == 53 { // ESC key
+                if let interceptor = onEscIntercepted, interceptor() {
+                    return
+                }
                 closeWheel(reason: "Esc key pressed")
             }
 

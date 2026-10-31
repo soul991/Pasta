@@ -3,24 +3,41 @@ import AppKit
 import QuartzCore
 
 public final class RadialOptionNodeView: NSView {
-    public let action: ConversionAction
-    public var onSelect: ((ConversionAction) -> Void)?
-    public var onDrop: ((ConversionAction, [URL]) -> Void)?
+    public let slotKind: WheelSlotKind
+    public var onSelect: ((WheelSlotKind) -> Void)?
+    public var onDrop: ((WheelSlotKind, [URL]) -> Void)?
+    public var onHoverChanged: ((Bool) -> Void)?
 
     private var isDraggingOver: Bool = false {
         didSet { updateState() }
     }
     private var isHovered: Bool = false {
-        didSet { updateState() }
+        didSet {
+            updateState()
+            onHoverChanged?(isHovered || isDraggingOver)
+        }
     }
 
+    private let visualEffect = NSVisualEffectView()
     private let titleLabel = NSTextField(labelWithString: "")
     private let iconView = NSImageView()
 
-    public init(action: ConversionAction) {
-        self.action = action
-        super.init(frame: NSRect(x: 0, y: 0, width: 90, height: 38))
+    public init(slotKind: WheelSlotKind) {
+        self.slotKind = slotKind
+        super.init(frame: NSRect(x: 0, y: 0, width: 64, height: 64))
         setupView()
+    }
+
+    // Convenience initializer for standard action
+    public convenience init(action: ConversionAction) {
+        self.init(slotKind: .action(action))
+    }
+
+    public var action: ConversionAction? {
+        if case .action(let act) = slotKind {
+            return act
+        }
+        return nil
     }
 
     required init?(coder: NSCoder) {
@@ -29,7 +46,7 @@ public final class RadialOptionNodeView: NSView {
 
     private func setupView() {
         wantsLayer = true
-        layer?.cornerRadius = 19
+        layer?.cornerRadius = 32
         layer?.masksToBounds = false
 
         registerForDraggedTypes([.fileURL])
@@ -42,35 +59,66 @@ public final class RadialOptionNodeView: NSView {
         )
         addTrackingArea(tracking)
 
+        // Visual effect glass base
+        visualEffect.translatesAutoresizingMaskIntoConstraints = false
+        visualEffect.blendingMode = .behindWindow
+        visualEffect.material = .hudWindow
+        visualEffect.state = .active
+        visualEffect.wantsLayer = true
+        visualEffect.layer?.cornerRadius = 32
+        visualEffect.layer?.masksToBounds = true
+        addSubview(visualEffect)
+
         // Icon
         iconView.translatesAutoresizingMaskIntoConstraints = false
-        if let img = NSImage(systemSymbolName: action.iconName, accessibilityDescription: nil) {
-            iconView.image = img
-            iconView.contentTintColor = .labelColor
+        switch slotKind {
+        case .action(let action):
+            if let img = NSImage(systemSymbolName: action.iconName, accessibilityDescription: action.displayName) {
+                iconView.image = img
+            } else {
+                iconView.image = NSImage(systemSymbolName: "doc.fill", accessibilityDescription: nil)
+            }
+        case .more:
+            iconView.image = NSImage(systemSymbolName: "ellipsis", accessibilityDescription: "More tools")
+        case .customize:
+            iconView.image = NSImage(systemSymbolName: "gearshape.fill", accessibilityDescription: "Customize wheel")
         }
+        iconView.contentTintColor = .white
         addSubview(iconView)
 
-        // Label
+        // Title Label
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        var label = action.outputExtension.uppercased()
-        if label.isEmpty {
-            label = action.displayName
+        let labelText: String
+        switch slotKind {
+        case .action(let action):
+            labelText = action.outputExtension.isEmpty ? action.displayName : action.outputExtension.uppercased()
+        case .more:
+            labelText = "More"
+        case .customize:
+            labelText = "Settings"
         }
-        titleLabel.stringValue = label
-        titleLabel.font = NSFont.systemFont(ofSize: 12, weight: .bold)
-        titleLabel.textColor = .labelColor
+        titleLabel.stringValue = labelText
+        titleLabel.font = NSFont.systemFont(ofSize: 11, weight: .bold)
+        titleLabel.textColor = .white
         titleLabel.alignment = .center
+        titleLabel.lineBreakMode = .byTruncatingTail
         addSubview(titleLabel)
 
         NSLayoutConstraint.activate([
-            iconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
-            iconView.centerYAnchor.constraint(equalTo: centerYAnchor),
-            iconView.widthAnchor.constraint(equalToConstant: 16),
-            iconView.heightAnchor.constraint(equalToConstant: 16),
+            visualEffect.leadingAnchor.constraint(equalTo: leadingAnchor),
+            visualEffect.trailingAnchor.constraint(equalTo: trailingAnchor),
+            visualEffect.topAnchor.constraint(equalTo: topAnchor),
+            visualEffect.bottomAnchor.constraint(equalTo: bottomAnchor),
 
-            titleLabel.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: 4),
-            titleLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
-            titleLabel.centerYAnchor.constraint(equalTo: centerYAnchor)
+            iconView.centerXAnchor.constraint(equalTo: centerXAnchor),
+            iconView.topAnchor.constraint(equalTo: topAnchor, constant: 10),
+            iconView.widthAnchor.constraint(equalToConstant: 20),
+            iconView.heightAnchor.constraint(equalToConstant: 20),
+
+            titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
+            titleLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
+            titleLabel.topAnchor.constraint(equalTo: iconView.bottomAnchor, constant: 2),
+            titleLabel.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor, constant: -6)
         ])
 
         updateState()
@@ -89,49 +137,56 @@ public final class RadialOptionNodeView: NSView {
 
     private func updateState() {
         let accent = ThemeManager.shared.accentColor
-        let darkInk = ThemeManager.shared.accentInkColor
+        let contrastInk = WCAGContrast.contrastingLabelColor(for: accent)
         let maxScale = ThemeManager.shared.maxHoverScale // 1.06
         let minScale = ThemeManager.shared.minHoverScale // 1.00
+
+        // Handle label mode (Always vs On Hover)
+        if WheelLayoutModel.shared.labelMode == .onHover {
+            titleLabel.isHidden = !(isHovered || isDraggingOver)
+        } else {
+            titleLabel.isHidden = false
+        }
 
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.16
             ctx.allowsImplicitAnimation = true
 
             if isDraggingOver {
-                // Drag hover: scale clamped to maximum 1.06 (never below 1.0)
+                // Drag hover: scale clamped to maximum 1.06
                 layer?.transform = CATransform3DMakeScale(maxScale, maxScale, 1.0)
-                layer?.backgroundColor = accent.cgColor
+                visualEffect.layer?.backgroundColor = accent.cgColor
                 layer?.borderColor = NSColor.white.cgColor
                 layer?.borderWidth = 2.0
                 layer?.shadowColor = accent.cgColor
-                layer?.shadowOpacity = 0.8
-                layer?.shadowRadius = WheelGeometry.maxGlowRadius // 18pt accent glow (Phase 10B Step 2)
+                layer?.shadowOpacity = 0.35 // Accent glow @ 0.35 alpha
+                layer?.shadowRadius = WheelGeometry.maxGlowRadius // 18pt accent glow
                 layer?.shadowOffset = .zero
 
-                // Contrast fix: Active slice labels use dark ink (#1A0F05) to ensure 8.9:1 contrast
-                titleLabel.textColor = darkInk
-                iconView.contentTintColor = darkInk
+                titleLabel.textColor = contrastInk
+                iconView.contentTintColor = contrastInk
             } else if isHovered {
-                // Subtle hover: 1.03 scale (within 1.0 to 1.06 range)
+                // Subtle hover: 1.03 scale
                 let hoverScale = (minScale + maxScale) / 2.0 // 1.03
                 layer?.transform = CATransform3DMakeScale(hoverScale, hoverScale, 1.0)
-                layer?.backgroundColor = accent.withAlphaComponent(0.3).cgColor
+                visualEffect.layer?.backgroundColor = accent.withAlphaComponent(0.35).cgColor
                 layer?.borderColor = accent.cgColor
-                layer?.borderWidth = 1.8
+                layer?.borderWidth = 1.5
                 layer?.shadowColor = accent.cgColor
-                layer?.shadowOpacity = 0.4
-                layer?.shadowRadius = 5
+                layer?.shadowOpacity = 0.30
+                layer?.shadowRadius = 8
+                layer?.shadowOffset = .zero
 
                 titleLabel.textColor = .white
                 iconView.contentTintColor = accent
             } else {
                 // Idle state: scale 1.00 exactly
                 layer?.transform = CATransform3DIdentity
-                layer?.backgroundColor = NSColor(white: 0.12, alpha: 0.88).cgColor
-                layer?.borderColor = NSColor(white: 0.35, alpha: 0.6).cgColor
-                layer?.borderWidth = 1.2
+                visualEffect.layer?.backgroundColor = NSColor(white: 0.12, alpha: 0.75).cgColor
+                layer?.borderColor = NSColor(white: 1.0, alpha: 0.20).cgColor
+                layer?.borderWidth = 1.0
                 layer?.shadowColor = NSColor.black.cgColor
-                layer?.shadowOpacity = 0.35
+                layer?.shadowOpacity = 0.25
                 layer?.shadowRadius = 4
                 layer?.shadowOffset = CGSize(width: 0, height: -2)
 
@@ -150,12 +205,13 @@ public final class RadialOptionNodeView: NSView {
     }
 
     public override func mouseDown(with event: NSEvent) {
-        onSelect?(action)
+        onSelect?(slotKind)
     }
 
     // MARK: - Dragging Destination
     public override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
         isDraggingOver = true
+        onHoverChanged?(true)
         return .copy
     }
 
@@ -165,10 +221,12 @@ public final class RadialOptionNodeView: NSView {
 
     public override func draggingExited(_ sender: NSDraggingInfo?) {
         isDraggingOver = false
+        onHoverChanged?(false)
     }
 
     public override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
         isDraggingOver = false
+        onHoverChanged?(false)
         var urls: [URL] = []
         if let pasteboardURLs = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: nil) as? [URL] {
             urls.append(contentsOf: pasteboardURLs)
@@ -181,10 +239,10 @@ public final class RadialOptionNodeView: NSView {
             }
         }
         if !urls.isEmpty {
-            onDrop?(action, urls)
+            onDrop?(slotKind, urls)
             return true
         } else {
-            onSelect?(action)
+            onSelect?(slotKind)
             return true
         }
     }
