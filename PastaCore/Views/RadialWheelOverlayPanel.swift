@@ -22,13 +22,17 @@ public final class RadialWheelOverlayPanel: NSPanel {
 
         contentViewController = wheelViewController
 
-        wheelViewController.onCloseRequested = { [weak self] in
-            self?.dismiss()
+        wheelViewController.onCloseRequested = {
+            DragMonitor.shared.closeWheel(reason: "Panel view controller requested close")
         }
     }
 
     public override var canBecomeKey: Bool {
         return true
+    }
+
+    public func configure(files: [URL]) {
+        wheelViewController.configure(files: files, isOptionHeld: false)
     }
 
     public func toggleMode(isAdvanced: Bool) {

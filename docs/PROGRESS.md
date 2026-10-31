@@ -16,6 +16,7 @@
 | **Phase 7** | Hardening, Logging to `~/Library/Logs/Peel`, PreferencesManager, Section 8 Suite | **Complete** | 13/13 Section 8 tests passed; 0 orphan processes, 0 network calls, 0 leaks |
 | **Phase 9** | Close Feature Gaps (Formats, Compression, Media Tools, Metadata, QR, Gate) | **Complete** | 139/139 Unit/Integration tests passed (Debug/Release); 33/33 Section 8 tests passed; 0 leaks, 0 network |
 | **Phase 10** | Parameter Panels & Batch Mode (Radial Wheel, Drop Window, Per-file Probing, Concurrency Queue, Async Probe) | **Complete** | 324/324 Unit/Integration tests passed; 33/33 Section 8 tests passed (debug & app bundle); 0 leaks, 0 network |
+| **Phase 10B Step 1** | Sticky Wheel, Sticky File Context, Logging, Real Event Sequences | **Complete** | 355/355 Unit/Integration tests passed; 33/33 Section 8 tests passed; 0 leaks, 0 network |
 
 ---
 
@@ -150,5 +151,14 @@
 | Per-file parameters in batch (relative crop/trim intents, per-file probe resolution, batch UI readout) | Phase 10 Fix A | Batch Execution | **DONE** | `20.1–20.4 Batch parameter resolution and intent tests` |
 | Concurrency queue (max N concurrent, pending queued status, cancel & window close cleanup) | Phase 10 Fix B/C | Batch Queue | **DONE** | `20.5–20.10 Concurrency queue, cancel & cleanup tests` |
 | Asynchronous media probe (UI thread protection, 'Reading file info...' status, disabled Run on probe/error) | Phase 10 Fix D | UI Responsiveness | **DONE** | `20.11–20.13 Asynchronous probe loading and validation tests` |
+| Sticky wheel state machine & event logging (`~/Library/Logs/Pasta/pasta.log`) | Phase 10B Step 1 | Wheel State | **DONE** | `21.1 Real-shaped event sequence: Shift down, hold 450ms, drag continues, Shift up, mouseUp, wait 5s` |
+| Sticky remembered files context & action execution | Phase 10B Step 1 | Wheel Context | **DONE** | `21.2 Action execution on remembered files with keepWheelOpenAfterRunning` |
+| Wheel Esc key dismissal & context cleanup | Phase 10B Step 1 | Dismissal | **DONE** | `21.3 Esc key closes wheel and clears remembered files` |
+| Second Shift hold re-targeting (replaces remembered files without closing) | Phase 10B Step 1 | Wheel State | **DONE** | `21.4 Second Shift hold with new files replaces remembered files and keeps wheel open` |
+| Drop outside / mouseUp preserves wheel open | Phase 10B Step 1 | Wheel State | **DONE** | `21.5 Drop outside preserves open wheel and remembered files` |
+| `stayOpenAfterRelease` and `keepWheelOpenAfterRunning` preferences default & honor | Phase 10B Step 1 | Preferences | **DONE** | `21.6 stayOpenAfterRelease and keepWheelOpenAfterRunning defaults and production honor` |
+| Close control (×) & manual open/close | Phase 10B Step 1 | UI / Control | **DONE** | `21.7 Close control (×) and manual open/close` |
+| Hub empty state when opened without files ("Drag a file onto the wheel") | Phase 10B Step 1 | Hub UI | **DONE** | `21.8 RadialWheelCenterDiscView empty state displays 'Drag a file onto the wheel'` |
+
 
 

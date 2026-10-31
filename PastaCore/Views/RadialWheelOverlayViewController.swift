@@ -17,6 +17,13 @@ public final class RadialWheelOverlayViewController: NSViewController {
     private let hintPillContainer = NSVisualEffectView()
     private let hintPillLabel = NSTextField(labelWithString: "")
 
+    // Compact progress row below wheel (Phase 10B Step 1)
+    private let compactProgressContainer = NSVisualEffectView()
+    private let compactProgressIcon = NSImageView()
+    private let compactProgressLabel = NSTextField(labelWithString: "")
+    private let compactProgressButton = NSButton(title: "Reveal", target: nil, action: nil)
+    private var lastOutputURL: URL?
+
     public override func loadView() {
         // Frame large enough for radial orbit (diameter 420) + bottom hint pill
         view = NSView(frame: NSRect(x: 0, y: 0, width: 440, height: 480))
@@ -54,12 +61,46 @@ public final class RadialWheelOverlayViewController: NSViewController {
         view.addSubview(hintPillContainer)
 
         hintPillLabel.translatesAutoresizingMaskIntoConstraints = false
-        hintPillLabel.stringValue = "Hold ⇧ to open · Esc cancels · tap ⌥ switches Convert / Advanced"
+        hintPillLabel.stringValue = "Esc closes · ⌥ tap switches Convert / Advanced · ⇧ hold re-targets"
         hintPillLabel.font = NSFont.systemFont(ofSize: 11, weight: .medium)
         // Calibrated 55% white to guarantee >= 4.5:1 contrast
         hintPillLabel.textColor = ThemeManager.shared.textTertiaryColor
         hintPillLabel.alignment = .center
         hintPillContainer.addSubview(hintPillLabel)
+
+        // Compact progress container (below wheel, above hint pill)
+        compactProgressContainer.translatesAutoresizingMaskIntoConstraints = false
+        compactProgressContainer.blendingMode = .behindWindow
+        compactProgressContainer.material = .hudWindow
+        compactProgressContainer.state = .active
+        compactProgressContainer.wantsLayer = true
+        compactProgressContainer.layer?.cornerRadius = 16
+        compactProgressContainer.layer?.borderWidth = 1.0
+        compactProgressContainer.layer?.borderColor = NSColor(white: 1.0, alpha: 0.18).cgColor
+        compactProgressContainer.layer?.masksToBounds = true
+        compactProgressContainer.isHidden = true
+        view.addSubview(compactProgressContainer)
+
+        compactProgressIcon.translatesAutoresizingMaskIntoConstraints = false
+        if let img = NSImage(systemSymbolName: "arrow.triangle.2.circlepath", accessibilityDescription: nil) {
+            compactProgressIcon.image = img
+            compactProgressIcon.contentTintColor = ThemeManager.shared.accentColor
+        }
+        compactProgressContainer.addSubview(compactProgressIcon)
+
+        compactProgressLabel.translatesAutoresizingMaskIntoConstraints = false
+        compactProgressLabel.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
+        compactProgressLabel.textColor = .white
+        compactProgressLabel.lineBreakMode = .byTruncatingMiddle
+        compactProgressContainer.addSubview(compactProgressLabel)
+
+        compactProgressButton.translatesAutoresizingMaskIntoConstraints = false
+        compactProgressButton.bezelStyle = .inline
+        compactProgressButton.title = "Reveal"
+        compactProgressButton.target = self
+        compactProgressButton.action = #selector(revealOutputClicked)
+        compactProgressButton.isHidden = true
+        compactProgressContainer.addSubview(compactProgressButton)
 
         NSLayoutConstraint.activate([
             hintPillContainer.centerXAnchor.constraint(equalTo: view.centerXAnchor),
@@ -70,8 +111,49 @@ public final class RadialWheelOverlayViewController: NSViewController {
 
             hintPillLabel.leadingAnchor.constraint(equalTo: hintPillContainer.leadingAnchor, constant: 14),
             hintPillLabel.trailingAnchor.constraint(equalTo: hintPillContainer.trailingAnchor, constant: -14),
-            hintPillLabel.centerYAnchor.constraint(equalTo: hintPillContainer.centerYAnchor)
+            hintPillLabel.centerYAnchor.constraint(equalTo: hintPillContainer.centerYAnchor),
+
+            compactProgressContainer.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            compactProgressContainer.bottomAnchor.constraint(equalTo: hintPillContainer.topAnchor, constant: -8),
+            compactProgressContainer.heightAnchor.constraint(equalToConstant: 32),
+            compactProgressContainer.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor, constant: 20),
+            compactProgressContainer.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -20),
+
+            compactProgressIcon.leadingAnchor.constraint(equalTo: compactProgressContainer.leadingAnchor, constant: 10),
+            compactProgressIcon.centerYAnchor.constraint(equalTo: compactProgressContainer.centerYAnchor),
+            compactProgressIcon.widthAnchor.constraint(equalToConstant: 16),
+            compactProgressIcon.heightAnchor.constraint(equalToConstant: 16),
+
+            compactProgressLabel.leadingAnchor.constraint(equalTo: compactProgressIcon.trailingAnchor, constant: 8),
+            compactProgressLabel.centerYAnchor.constraint(equalTo: compactProgressContainer.centerYAnchor),
+
+            compactProgressButton.leadingAnchor.constraint(equalTo: compactProgressLabel.trailingAnchor, constant: 8),
+            compactProgressButton.trailingAnchor.constraint(equalTo: compactProgressContainer.trailingAnchor, constant: -10),
+            compactProgressButton.centerYAnchor.constraint(equalTo: compactProgressContainer.centerYAnchor)
         ])
+
+        // Close control (×) at top-right of wheel
+        let closeBtn = NSButton(frame: NSRect(x: 220 + 130, y: 250 + 130, width: 28, height: 28))
+        closeBtn.title = "✕"
+        closeBtn.font = NSFont.systemFont(ofSize: 13, weight: .bold)
+        closeBtn.isBordered = false
+        closeBtn.wantsLayer = true
+        closeBtn.layer?.cornerRadius = 14
+        closeBtn.layer?.backgroundColor = NSColor(white: 0.15, alpha: 0.6).cgColor
+        closeBtn.contentTintColor = .white
+        closeBtn.target = self
+        closeBtn.action = #selector(closeButtonClicked)
+        view.addSubview(closeBtn)
+    }
+
+    @objc private func closeButtonClicked() {
+        DragMonitor.shared.closeWheel(reason: "Close button (×) clicked")
+    }
+
+    @objc private func revealOutputClicked() {
+        if let url = lastOutputURL {
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        }
     }
 
     public func toggleMode(isAdvanced: Bool) {
@@ -85,7 +167,18 @@ public final class RadialWheelOverlayViewController: NSViewController {
 
         dismissParameterPanel(animated: false)
 
-        guard let firstFile = files.first else { return }
+        guard let firstFile = files.first else {
+            // Empty state: wheel opened without remembered files
+            nodeViews.forEach { $0.removeFromSuperview() }
+            nodeViews.removeAll()
+            hudView.isHidden = true
+            centerDisc.isHidden = false
+            centerDisc.alphaValue = 1.0
+            hintPillContainer.alphaValue = 1.0
+            compactProgressContainer.isHidden = true
+            centerDisc.configureEmpty()
+            return
+        }
 
         // Remove old nodes
         nodeViews.forEach { $0.removeFromSuperview() }
@@ -278,6 +371,7 @@ public final class RadialWheelOverlayViewController: NSViewController {
         if parameterPanelView != nil {
             dismissParameterPanel(animated: true)
         } else {
+            DragMonitor.shared.closeWheel(reason: "ESC key via cancelOperation")
             onCloseRequested?()
         }
     }
@@ -286,34 +380,47 @@ public final class RadialWheelOverlayViewController: NSViewController {
         guard let file = targetFiles.first else { return }
         DragMonitor.shared.actionExecuted()
 
-        // Collapse and fade radial option nodes
-        for node in nodeViews {
-            NSAnimationContext.runAnimationGroup { ctx in
+        let keepOpen = PreferencesManager.shared.keepWheelOpenAfterRunning
+
+        if keepOpen {
+            // Keep wheel open: keep nodes and center disc visible, show compact progress row under wheel
+            compactProgressContainer.isHidden = false
+            compactProgressButton.isHidden = true
+            compactProgressLabel.stringValue = "Converting \(file.lastPathComponent)..."
+            if let img = NSImage(systemSymbolName: "arrow.triangle.2.circlepath", accessibilityDescription: nil) {
+                compactProgressIcon.image = img
+                compactProgressIcon.contentTintColor = ThemeManager.shared.accentColor
+            }
+        } else {
+            // Collapse and fade radial option nodes
+            for node in nodeViews {
+                NSAnimationContext.runAnimationGroup { ctx in
+                    ctx.duration = 0.18
+                    node.layer?.transform = CATransform3DMakeScale(0.5, 0.5, 1.0)
+                    node.alphaValue = 0.0
+                }
+            }
+
+            // Morph center disc into HUD View
+            NSAnimationContext.runAnimationGroup({ ctx in
                 ctx.duration = 0.18
-                node.layer?.transform = CATransform3DMakeScale(0.5, 0.5, 1.0)
-                node.alphaValue = 0.0
-            }
+                centerDisc.alphaValue = 0.0
+            }, completionHandler: { [weak self] in
+                guard let self = self else { return }
+                self.centerDisc.isHidden = true
+                self.hudView.isHidden = false
+                self.hudView.alphaValue = 0.0
+                self.hudView.layer?.transform = CATransform3DMakeScale(0.9, 0.9, 1.0)
+
+                self.hudView.showConverting(action: action, filename: file.lastPathComponent)
+
+                NSAnimationContext.runAnimationGroup { ctx in
+                    ctx.duration = 0.22
+                    self.hudView.alphaValue = 1.0
+                    self.hudView.layer?.transform = CATransform3DIdentity
+                }
+            })
         }
-
-        // Morph center disc into HUD View
-        NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = 0.18
-            centerDisc.alphaValue = 0.0
-        }, completionHandler: { [weak self] in
-            guard let self = self else { return }
-            self.centerDisc.isHidden = true
-            self.hudView.isHidden = false
-            self.hudView.alphaValue = 0.0
-            self.hudView.layer?.transform = CATransform3DMakeScale(0.9, 0.9, 1.0)
-
-            self.hudView.showConverting(action: action, filename: file.lastPathComponent)
-
-            NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = 0.22
-                self.hudView.alphaValue = 1.0
-                self.hudView.layer?.transform = CATransform3DIdentity
-            }
-        })
 
         // Execute conversion in background
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -323,7 +430,18 @@ public final class RadialWheelOverlayViewController: NSViewController {
                     fileParams = try model.resolveParameters(for: file)
                 } catch {
                     DispatchQueue.main.async {
-                        self?.hudView.showError(error.localizedDescription)
+                        guard let self = self else { return }
+                        if keepOpen {
+                            self.compactProgressContainer.isHidden = false
+                            self.compactProgressButton.isHidden = true
+                            self.compactProgressLabel.stringValue = "Error: \(error.localizedDescription)"
+                            if let img = NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: nil) {
+                                self.compactProgressIcon.image = img
+                                self.compactProgressIcon.contentTintColor = .systemOrange
+                            }
+                        } else {
+                            self.hudView.showError(error.localizedDescription)
+                        }
                     }
                     return
                 }
@@ -334,11 +452,34 @@ public final class RadialWheelOverlayViewController: NSViewController {
             do {
                 let output = try JobRunner.shared.run(action: action, input: file, parameters: fileParams)
                 DispatchQueue.main.async {
-                    self?.hudView.showSuccess(outputURL: output)
+                    guard let self = self else { return }
+                    self.lastOutputURL = output
+                    if keepOpen {
+                        self.compactProgressContainer.isHidden = false
+                        self.compactProgressButton.isHidden = false
+                        self.compactProgressLabel.stringValue = "Done: \(output.lastPathComponent)"
+                        if let img = NSImage(systemSymbolName: "checkmark.circle.fill", accessibilityDescription: nil) {
+                            self.compactProgressIcon.image = img
+                            self.compactProgressIcon.contentTintColor = .systemGreen
+                        }
+                    } else {
+                        self.hudView.showSuccess(outputURL: output)
+                    }
                 }
             } catch {
                 DispatchQueue.main.async {
-                    self?.hudView.showError(error.localizedDescription)
+                    guard let self = self else { return }
+                    if keepOpen {
+                        self.compactProgressContainer.isHidden = false
+                        self.compactProgressButton.isHidden = true
+                        self.compactProgressLabel.stringValue = "Error: \(error.localizedDescription)"
+                        if let img = NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: nil) {
+                            self.compactProgressIcon.image = img
+                            self.compactProgressIcon.contentTintColor = .systemOrange
+                        }
+                    } else {
+                        self.hudView.showError(error.localizedDescription)
+                    }
                 }
             }
         }

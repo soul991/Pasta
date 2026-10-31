@@ -54,6 +54,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
+        DragMonitor.shared.onFilesReplaced = { [weak self] newFiles in
+            DispatchQueue.main.async {
+                self?.wheelPanel.configure(files: newFiles)
+            }
+        }
+
         DragMonitor.shared.startMonitoring()
 
         // Initialize Status Item with Rigatoni silhouette icon
@@ -80,6 +86,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         if currentEvent?.type == .rightMouseUp {
             let menu = NSMenu()
             menu.addItem(NSMenuItem(title: "Open Drop Window", action: #selector(openDropWindow), keyEquivalent: "o"))
+            if DragMonitor.shared.isWheelOpen {
+                menu.addItem(NSMenuItem(title: "Hide Wheel", action: #selector(hideWheel), keyEquivalent: "w"))
+            } else {
+                menu.addItem(NSMenuItem(title: "Show Wheel", action: #selector(showWheel), keyEquivalent: "w"))
+            }
             menu.addItem(NSMenuItem.separator())
             if !DragMonitor.isAccessibilityTrusted() {
                 menu.addItem(NSMenuItem(title: "Enable Accessibility Permission...", action: #selector(requestAccessibility), keyEquivalent: ""))
@@ -109,8 +120,29 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    @objc private func hideWheel() {
+        DragMonitor.shared.closeWheel(reason: "User selected Hide Wheel from menu bar")
+    }
+
+    @objc private func showWheel() {
+        DragMonitor.shared.openWheelManually()
+    }
+
     @objc private func requestAccessibility() {
-        _ = DragMonitor.isAccessibilityTrusted(prompt: true)
+        let trusted = DragMonitor.isAccessibilityTrusted(prompt: true)
+        if !trusted {
+            let alert = NSAlert()
+            alert.messageText = "Accessibility & Input Monitoring Required"
+            alert.informativeText = "Pasta needs Accessibility permissions so it can detect Shift-drag gestures and allow the Esc key to close the wheel when other applications are active.\n\nPlease enable Pasta under System Settings → Privacy & Security → Accessibility."
+            alert.alertStyle = .informational
+            alert.addButton(withTitle: "Open System Settings")
+            alert.addButton(withTitle: "Later")
+            if alert.runModal() == .alertFirstButtonReturn {
+                if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+                    NSWorkspace.shared.open(url)
+                }
+            }
+        }
     }
 
     @objc private func showAbout() {

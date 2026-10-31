@@ -56,23 +56,33 @@ CI tests verify the mathematical state machine against simulated clock timestamp
 
 ---
 
-## 4. Latching & Dismissal Behavior
+## 4. Sticky Wheel & Dismissal Behavior (Phase 10B Step 1)
 
-- [ ] **Latching Open on Shift Release**:
-  - Once the wheel blooms at 450 ms, release the physical <kbd>Shift</kbd> key while keeping the mouse button pressed (dragging).
-  - **Expected:** The wheel **latches** and remains open. It does not vanish when Shift is released.
+- [ ] **Sticky Wheel on Shift Release**:
+  - Drag a file from Finder and hold <kbd>Shift</kbd> for 450 ms until the wheel opens.
+  - Release the <kbd>Shift</kbd> key.
+  - **Expected:** The wheel **stays open**. It does not close when Shift is released.
+- [ ] **Sticky Wheel on Mouse Up / Drop Outside**:
+  - Release the mouse button (drop outside or end the drag).
+  - **Expected:** The wheel **stays open**. The dragged files are remembered in the wheel context.
+- [ ] **Click Node on Remembered Files**:
+  - After releasing the drag, click any node on the open wheel.
+  - **Expected:** The tool runs on the remembered files. The wheel stays open with a compact progress row underneath showing status and a "Reveal" button.
+- [ ] **Second Shift-Hold Re-targeting**:
+  - While the wheel is open, drag a different file from Finder and hold <kbd>Shift</kbd> for 450 ms.
+  - **Expected:** The wheel stays open and updates its remembered files and center hub to the new file.
 - [ ] **Escape Key Dismissal**:
-  - While the wheel is open, press <kbd>Esc</kbd>.
-  - **Expected:** The wheel closes immediately. The file drag continues uninterrupted.
-- [ ] **Drop on Slice (Action Execution)**:
-  - Release the mouse button over a format slice (e.g. "PNG" or "JPG").
-  - **Expected:** The slice shows the active dark ink hover state, the wheel dismisses, conversion starts, and the converted file appears next to the original in Finder with an animated HUD notification.
-- [ ] **Drop Outside (Natural Drop)**:
-  - Drag the mouse away from the radial wheel onto a Finder folder or desktop and release.
-  - **Expected:** The wheel dismisses, and the normal Finder drop occurs without running a Pasta conversion.
-- [ ] **Second Shift-Hold Dismissal**:
-  - While the wheel is latched open, hold <kbd>Shift</kbd> again for 450 ms.
-  - **Expected:** The wheel closes cleanly.
+  - While the wheel is open (even when another app is active), press <kbd>Esc</kbd>.
+  - **Expected:** The wheel closes immediately, and remembered files are cleared.
+- [ ] **Close Control (×) Button**:
+  - Click the small glass (×) button at the top-right of the wheel.
+  - **Expected:** The wheel closes immediately.
+- [ ] **Menu Bar Control**:
+  - Right-click the Pasta menu bar item. Choose "Hide Wheel" (or "Show Wheel").
+  - **Expected:** Toggles the wheel open or closed.
+- [ ] **Diagnostic Logging**:
+  - Inspect `~/Library/Logs/Pasta/pasta.log` in Console.app or Terminal (`tail -f ~/Library/Logs/Pasta/pasta.log`).
+  - **Expected:** Detailed timestamped log lines appear for every transition: `mouseDragged`, `flagsChanged`, `mouseUp`, `openWheel`, `closeWheel` with exact reasons.
 
 ---
 

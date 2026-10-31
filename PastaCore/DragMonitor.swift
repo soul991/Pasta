@@ -80,7 +80,7 @@ public final class DragMonitor {
         case armed(startedAt: TimeInterval, files: [URL], location: NSPoint)
         case charging(startedAt: TimeInterval, files: [URL], location: NSPoint)
         case open(openedAt: TimeInterval, files: [URL], location: NSPoint, isAdvanced: Bool)
-        case secondHoldArmed(startedAt: TimeInterval)
+        case secondHoldArmed(startedAt: TimeInterval, files: [URL], location: NSPoint)
 
         public static func == (lhs: State, rhs: State) -> Bool {
             switch (lhs, rhs) {
@@ -92,8 +92,8 @@ public final class DragMonitor {
                 return abs(t1 - t2) < 0.0001 && f1 == f2 && l1 == l2
             case (.open(let t1, let f1, let l1, let a1), .open(let t2, let f2, let l2, let a2)):
                 return abs(t1 - t2) < 0.0001 && f1 == f2 && l1 == l2 && a1 == a2
-            case (.secondHoldArmed(let t1), .secondHoldArmed(let t2)):
-                return abs(t1 - t2) < 0.0001
+            case (.secondHoldArmed(let t1, let f1, let l1), .secondHoldArmed(let t2, let f2, let l2)):
+                return abs(t1 - t2) < 0.0001 && f1 == f2 && l1 == l2
             default:
                 return false
             }
@@ -106,6 +106,7 @@ public final class DragMonitor {
     public var onWheelOpen: (([URL], Bool, NSPoint) -> Void)?
     public var onWheelClose: (() -> Void)?
     public var onModeToggle: ((Bool) -> Void)?
+    public var onFilesReplaced: (([URL]) -> Void)?
 
     // Backward-compatibility callbacks
     public var onDragStart: (([URL], Bool, NSPoint) -> Void)? {
@@ -124,6 +125,9 @@ public final class DragMonitor {
 
     // Current internal state
     public private(set) var state: State = .idle
+
+    // Sticky context: files remembered while wheel remains open
+    public private(set) var rememberedFiles: [URL] = []
 
     // Option tap tracking
     private var optionKeyDownTimestamp: TimeInterval?
@@ -158,6 +162,32 @@ public final class DragMonitor {
         return preferences.shiftHoldDurationMs / 1000.0
     }
 
+    public var isWheelOpen: Bool {
+        switch state {
+        case .open, .secondHoldArmed:
+            return true
+        default:
+            return false
+        }
+    }
+
+    // MARK: - Diagnostic Logging Helper
+
+    private func logTransition(
+        event: String,
+        modifiers: NSEvent.ModifierFlags? = nil,
+        location: NSPoint? = nil,
+        oldState: State,
+        newState: State,
+        reason: String? = nil
+    ) {
+        var details = "event: \(event), oldState: \(oldState), newState: \(newState)"
+        if let m = modifiers { details += ", modifiers: \(m.rawValue)" }
+        if let l = location { details += ", location: (\(l.x), \(l.y))" }
+        if let r = reason { details += ", reason: \(r)" }
+        PastaLogger.shared.debug("DragMonitor [\(clock.now)] \(details)")
+    }
+
     // MARK: - Public State Machine Processing (Unit Testable)
 
     /// Process left mouse drag event
@@ -173,8 +203,8 @@ public final class DragMonitor {
 
         // Rule: Any other modifier during charging cancels
         if hasOtherModifiers {
-            if case .armed = state { cancelCharging() }
-            if case .charging = state { cancelCharging() }
+            if case .armed = state { cancelCharging(reason: "Cancel modifier during armed") }
+            if case .charging = state { cancelCharging(reason: "Cancel modifier during charging") }
             return
         }
 
@@ -186,11 +216,13 @@ public final class DragMonitor {
             guard !files.isEmpty else { return }
 
             // Armed: valid file drag active and Shift went down
+            let oldState = state
             state = .armed(startedAt: timestamp, files: files, location: location)
+            logTransition(event: "mouseDragged.armed", modifiers: modifiers, location: location, oldState: oldState, newState: state)
 
         case .armed(let startedAt, let files, _):
             guard isShiftHeld else {
-                cancelCharging()
+                cancelCharging(reason: "Shift released before 120ms threshold")
                 return
             }
 
@@ -205,7 +237,9 @@ public final class DragMonitor {
                 openWheel(openedAt: timestamp, files: files, location: location, isAdvanced: false)
             } else if elapsed >= 0.120 {
                 // After 120 ms delay, transition to charging and emit progress
+                let oldState = state
                 state = .charging(startedAt: startedAt, files: files, location: location)
+                logTransition(event: "mouseDragged.charging", modifiers: modifiers, location: location, oldState: oldState, newState: state)
                 let ringProgress = min(max(elapsed / duration, 0.0), 1.0)
                 if preferences.showChargingRing && !preferences.reduceMotionEnabled {
                     onChargingProgress?(ringProgress, location)
@@ -214,7 +248,7 @@ public final class DragMonitor {
 
         case .charging(let startedAt, let files, _):
             guard isShiftHeld else {
-                cancelCharging()
+                cancelCharging(reason: "Shift released before hold duration completed")
                 return
             }
 
@@ -233,26 +267,36 @@ public final class DragMonitor {
                 }
             }
 
-        case .open:
-            // Check second shift hold while open
+        case .open(_, let currentFiles, _, _):
+            // Sticky wheel: drag movements do NOT close the wheel.
+            // Check if a NEW drag with Shift held has started:
             if isShiftHeld {
-                // Started second hold
-                state = .secondHoldArmed(startedAt: timestamp)
+                let newFiles = pasteboardReader.extractFileURLs()
+                if !newFiles.isEmpty && newFiles != currentFiles {
+                    let oldState = state
+                    state = .secondHoldArmed(startedAt: timestamp, files: newFiles, location: location)
+                    logTransition(event: "mouseDragged.startSecondHold", modifiers: modifiers, location: location, oldState: oldState, newState: state)
+                }
             }
 
-        case .secondHoldArmed(let startedAt):
+        case .secondHoldArmed(let startedAt, let newFiles, let loc):
             guard isShiftHeld else {
-                // Released before second hold threshold
-                // Revert to open state
-                let files = pasteboardReader.extractFileURLs()
-                state = .open(openedAt: startedAt, files: files, location: location, isAdvanced: false)
+                // Shift released before second hold threshold:
+                // Revert to open state with current remembered files. Does NOT close wheel!
+                let oldState = state
+                state = .open(openedAt: startedAt, files: rememberedFiles, location: loc, isAdvanced: false)
+                logTransition(event: "mouseDragged.secondHoldRevert", modifiers: modifiers, location: location, oldState: oldState, newState: state)
                 return
             }
 
             let elapsed = timestamp - startedAt
             if elapsed >= holdDurationSeconds - 0.0005 {
-                // Second Shift hold closes wheel!
-                closeWheel()
+                // Second Shift hold completes: replace remembered files, keep wheel open!
+                let oldState = state
+                rememberedFiles = newFiles
+                state = .open(openedAt: timestamp, files: newFiles, location: location, isAdvanced: false)
+                logTransition(event: "mouseDragged.secondHoldReplacedFiles", modifiers: modifiers, location: location, oldState: oldState, newState: state)
+                onFilesReplaced?(newFiles)
             }
         }
     }
@@ -268,8 +312,8 @@ public final class DragMonitor {
         let hasCancelModifiers = otherModifiers.contains(.control) || otherModifiers.contains(.command)
 
         if hasCancelModifiers {
-            if case .armed = state { cancelCharging() }
-            if case .charging = state { cancelCharging() }
+            if case .armed = state { cancelCharging(reason: "Cancel modifier during armed") }
+            if case .charging = state { cancelCharging(reason: "Cancel modifier during charging") }
             return
         }
 
@@ -277,10 +321,15 @@ public final class DragMonitor {
         case .armed, .charging:
             if !isShiftHeld {
                 // Shift released before threshold: cancel charging!
-                cancelCharging()
+                cancelCharging(reason: "Shift released before opening")
             }
 
         case .open(let openedAt, let files, let loc, var isAdvanced):
+            if !isShiftHeld && !preferences.stayOpenAfterRelease {
+                closeWheel(reason: "Shift released and stayOpenAfterRelease is false")
+                return
+            }
+            // Releasing Shift while wheel is open does NOT close it: wheel latches open until Esc!
             // Track Option key tap: a quick Option tap (<250 ms) switches Convert/Advanced
             if isOptionHeld {
                 if optionKeyDownTimestamp == nil {
@@ -293,26 +342,38 @@ public final class DragMonitor {
                     if elapsed < 0.250 {
                         // Quick Option tap detected: toggle mode!
                         isAdvanced.toggle()
+                        let oldState = state
                         state = .open(openedAt: openedAt, files: files, location: loc, isAdvanced: isAdvanced)
+                        logTransition(event: "flagsChanged.optionToggle", modifiers: modifiers, oldState: oldState, newState: state)
                         onModeToggle?(isAdvanced)
                     }
                 }
             }
 
-            // If Shift pressed down again while open
+            // If Shift pressed down again while open with files:
             if isShiftHeld {
-                state = .secondHoldArmed(startedAt: timestamp)
+                let newFiles = pasteboardReader.extractFileURLs()
+                if !newFiles.isEmpty && newFiles != files {
+                    let oldState = state
+                    state = .secondHoldArmed(startedAt: timestamp, files: newFiles, location: loc)
+                    logTransition(event: "flagsChanged.secondHoldArmed", modifiers: modifiers, oldState: oldState, newState: state)
+                }
             }
 
-        case .secondHoldArmed(let startedAt):
+        case .secondHoldArmed(let startedAt, let newFiles, let loc):
             if !isShiftHeld {
-                // Released before second hold finished
-                let files = pasteboardReader.extractFileURLs()
-                state = .open(openedAt: startedAt, files: files, location: .zero, isAdvanced: false)
+                // Shift released before second hold finished: revert to open with remembered files
+                let oldState = state
+                state = .open(openedAt: startedAt, files: rememberedFiles, location: loc, isAdvanced: false)
+                logTransition(event: "flagsChanged.secondHoldRevert", modifiers: modifiers, oldState: oldState, newState: state)
             } else {
                 let elapsed = timestamp - startedAt
                 if elapsed >= holdDurationSeconds - 0.0005 {
-                    closeWheel()
+                    let oldState = state
+                    rememberedFiles = newFiles
+                    state = .open(openedAt: timestamp, files: newFiles, location: loc, isAdvanced: false)
+                    logTransition(event: "flagsChanged.secondHoldReplacedFiles", modifiers: modifiers, oldState: oldState, newState: state)
+                    onFilesReplaced?(newFiles)
                 }
             }
 
@@ -326,11 +387,11 @@ public final class DragMonitor {
         switch state {
         case .armed, .charging:
             // Any other key pressed during charging cancels
-            cancelCharging()
+            cancelCharging(reason: "Key pressed during charging (code: \(keyCode))")
 
         case .open, .secondHoldArmed:
             if keyCode == 53 { // ESC key
-                closeWheel()
+                closeWheel(reason: "Esc key pressed")
             }
 
         case .idle:
@@ -342,11 +403,22 @@ public final class DragMonitor {
     public func processMouseUp(timestamp: TimeInterval) {
         switch state {
         case .armed, .charging:
-            cancelCharging()
+            cancelCharging(reason: "Mouse up during charging")
 
-        case .open, .secondHoldArmed:
-            // Dropping outside the wheel or drag ending closes it
-            closeWheel()
+        case .open:
+            // STICKY WHEEL: Dropping outside or ending the drag does NOT close the wheel!
+            // It remains open until Esc or Close control, unless stayOpenAfterRelease is turned off.
+            if !preferences.stayOpenAfterRelease {
+                closeWheel(reason: "Mouse up and stayOpenAfterRelease is false")
+            } else {
+                logTransition(event: "mouseUp.openPreserved", oldState: state, newState: state, reason: "Sticky wheel preserved after mouseUp per stayOpenAfterRelease")
+            }
+
+        case .secondHoldArmed(let startedAt, _, let loc):
+            // Dropping during an incomplete second hold preserves the open wheel with original files
+            let oldState = state
+            state = .open(openedAt: startedAt, files: rememberedFiles, location: loc, isAdvanced: false)
+            logTransition(event: "mouseUp.secondHoldRevert", oldState: oldState, newState: state)
 
         case .idle:
             break
@@ -355,32 +427,50 @@ public final class DragMonitor {
 
     // MARK: - Actions
 
-    private func cancelCharging() {
+    private func cancelCharging(reason: String = "Cancelled") {
+        let oldState = state
         state = .idle
         optionKeyDownTimestamp = nil
+        logTransition(event: "cancelCharging", oldState: oldState, newState: .idle, reason: reason)
         onChargingCancel?()
     }
 
     private func openWheel(openedAt: TimeInterval, files: [URL], location: NSPoint, isAdvanced: Bool) {
+        let oldState = state
+        rememberedFiles = files
         state = .open(openedAt: openedAt, files: files, location: location, isAdvanced: isAdvanced)
         optionKeyDownTimestamp = nil
+        logTransition(event: "openWheel", location: location, oldState: oldState, newState: state)
+        PastaLogger.shared.info("DragMonitor opened wheel with \(files.count) files at (\(location.x), \(location.y)), isAdvanced: \(isAdvanced)")
         onChargingCancel?() // Dismiss ring
         onWheelOpen?(files, isAdvanced, location)
     }
 
-    public func closeWheel() {
+    public func openWheelManually(location: NSPoint? = nil) {
+        let loc = location ?? NSEvent.mouseLocation
+        let files = pasteboardReader.extractFileURLs()
+        openWheel(openedAt: clock.now, files: files, location: loc, isAdvanced: false)
+    }
+
+    public func closeWheel(reason: String = "User requested close") {
+        let oldState = state
         state = .idle
+        rememberedFiles.removeAll()
         optionKeyDownTimestamp = nil
+        logTransition(event: "closeWheel", oldState: oldState, newState: .idle, reason: reason)
+        PastaLogger.shared.info("DragMonitor closeWheel triggered: \(reason)")
         onChargingCancel?()
         onWheelClose?()
     }
 
     public func actionExecuted() {
-        // Called when a slice action is dropped/selected
-        state = .idle
-        optionKeyDownTimestamp = nil
-        onChargingCancel?()
-        onWheelClose?()
+        PastaLogger.shared.info("DragMonitor actionExecuted. keepWheelOpenAfterRunning: \(preferences.keepWheelOpenAfterRunning)")
+        if !preferences.keepWheelOpenAfterRunning {
+            closeWheel(reason: "Action executed and keepWheelOpenAfterRunning is false")
+        } else {
+            // Keep wheel open!
+            logTransition(event: "actionExecuted", oldState: state, newState: state, reason: "Kept open per preference")
+        }
     }
 
     // MARK: - Live System Monitoring
@@ -411,6 +501,9 @@ public final class DragMonitor {
         globalKeyDownMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self = self else { return }
             self.processKeyDown(keyCode: event.keyCode, timestamp: event.timestamp)
+        }
+        if globalKeyDownMonitor == nil {
+            PastaLogger.shared.warning("DragMonitor: globalKeyDownMonitor returned nil (requires Accessibility / Input Monitoring permission)")
         }
 
         // Local monitors (when Pasta is active)

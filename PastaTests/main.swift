@@ -1416,20 +1416,26 @@ do {
     monitor.processMouseDragged(modifiers: shiftMod, location: NSPoint(x: 100, y: 100), timestamp: 1300.600)
     assertTest(!wheelOpened && monitor.state == .idle, "12.7 Text drag without file URLs does nothing")
 
-    // 12.8 Second hold closes wheel
+    // 12.8 Second hold with new files replaces files and keeps wheel open (Phase 10B)
     mockPasteboard.mockURLs = [URL(fileURLWithPath: "/tmp/sample.png")]
     wheelOpened = false
     wheelClosed = false
+    var filesReplaced: [URL]? = nil
+    monitor.onFilesReplaced = { filesReplaced = $0 }
     monitor.processMouseDragged(modifiers: shiftMod, location: NSPoint(x: 100, y: 100), timestamp: 1400.000)
     monitor.processMouseDragged(modifiers: shiftMod, location: NSPoint(x: 100, y: 100), timestamp: 1400.450)
     assertTest(wheelOpened, "12.8 Wheel opened for second hold test")
     monitor.processFlagsChanged(modifiers: emptyMod, timestamp: 1400.500) // release shift
 
-    // Second shift press down
+    // Second shift press down with new files
+    let newURL = URL(fileURLWithPath: "/tmp/new_sample.mkv")
+    mockPasteboard.mockURLs = [newURL]
     monitor.processFlagsChanged(modifiers: shiftMod, timestamp: 1400.600)
     // Hold second shift for 450 ms -> 1401.050
     monitor.processMouseDragged(modifiers: shiftMod, location: NSPoint(x: 100, y: 100), timestamp: 1401.050)
-    assertTest(wheelClosed && monitor.state == .idle, "12.8 Second Shift hold closes the open wheel")
+    assertTest(!wheelClosed, "12.8 Second Shift hold does NOT close wheel in Phase 10B")
+    assertTest(filesReplaced == [newURL], "12.8 Second Shift hold replaces files context")
+    assertTest(monitor.rememberedFiles == [newURL], "12.8 Monitor rememberedFiles updated to new files")
 
     // 12.9 Option tap toggles mode
     wheelOpened = false
@@ -2700,6 +2706,156 @@ do {
     ToolLocator.shared.setOverride(tool: "fake_fast", url: nil)
     ToolLocator.shared.setOverride(tool: "fake_slow_overlap", url: nil)
     ToolLocator.shared.setOverride(tool: "fake_sleep_cancel", url: nil)
+}
+
+// MARK: - 21. Phase 10B Step 1: Sticky Wheel & Real Event Sequence Tests
+print("\n--- 21. Phase 10B Step 1: Sticky Wheel & Real Event Sequence Tests ---")
+do {
+    let mockClock = MockDragMonitorClock(initialTime: 5000.0)
+    let fileA = URL(fileURLWithPath: "/tmp/clip_a.mov")
+    let fileB = URL(fileURLWithPath: "/tmp/clip_b.mp4")
+    let fileC = URL(fileURLWithPath: "/tmp/photo_c.png")
+    let mockPasteboard = MockDragPasteboardReader(urls: [fileA, fileB])
+
+    let prefs = PreferencesManager()
+    prefs.shiftHoldDurationMs = 450.0
+    prefs.stayOpenAfterRelease = true
+    prefs.keepWheelOpenAfterRunning = true
+    prefs.showChargingRing = false
+    prefs.reduceMotionEnabled = false
+
+    let monitor = DragMonitor(clock: mockClock, pasteboardReader: mockPasteboard, preferences: prefs)
+
+    var wheelOpenCount = 0
+    var wheelCloseCount = 0
+    var replacedFiles: [URL]? = nil
+
+    monitor.onWheelOpen = { files, isAdv, loc in
+        wheelOpenCount += 1
+    }
+    monitor.onWheelClose = {
+        wheelCloseCount += 1
+    }
+    monitor.onFilesReplaced = { files in
+        replacedFiles = files
+    }
+
+    let shiftMod = NSEvent.ModifierFlags.shift
+    let emptyMod = NSEvent.ModifierFlags()
+
+    // 21.1 Real-shaped event sequence: shiftDown -> hold 450ms -> open -> drag continues -> shiftUp -> mouseUp -> wait 5s: still open
+    // Step a: Shift down with mouse drag (armed)
+    monitor.processMouseDragged(modifiers: shiftMod, location: NSPoint(x: 200, y: 200), timestamp: 5000.000)
+    assertTest(monitor.state == .armed(startedAt: 5000.000, files: [fileA, fileB], location: NSPoint(x: 200, y: 200)),
+               "21.1a Mouse drag with Shift begins in Armed state")
+
+    // Step b: Hold for 450 ms -> transitions to open
+    monitor.processMouseDragged(modifiers: shiftMod, location: NSPoint(x: 205, y: 205), timestamp: 5000.450)
+    assertTest(wheelOpenCount == 1 && monitor.isWheelOpen, "21.1b Hold 450ms opens radial wheel")
+    assertTest(monitor.rememberedFiles == [fileA, fileB], "21.1b Remembered files match drag context")
+
+    // Step c: Drag continues across screen without shift
+    monitor.processMouseDragged(modifiers: emptyMod, location: NSPoint(x: 240, y: 250), timestamp: 5000.600)
+    assertTest(monitor.isWheelOpen, "21.1c Drag continuing without Shift does not close wheel")
+
+    // Step d: Physical Shift key released (flagsChanged with empty modifiers)
+    monitor.processFlagsChanged(modifiers: emptyMod, timestamp: 5000.700)
+    assertTest(monitor.isWheelOpen, "21.1d Shift release (empty modifiers) preserves open wheel (latched)")
+
+    // Step e: Mouse button released (mouseUp / drag session ends)
+    monitor.processMouseUp(timestamp: 5000.800)
+    assertTest(monitor.isWheelOpen, "21.1e Mouse up does NOT close wheel in sticky mode")
+
+    // Step f: Wait 5 seconds idle
+    mockClock.advance(by: 5.0)
+    assertTest(wheelCloseCount == 0 && monitor.isWheelOpen, "21.1f Wheel remains open after 5s idle wait")
+    assertTest(monitor.rememberedFiles == [fileA, fileB], "21.1f Remembered files preserved during 5s idle wait")
+
+    // 21.2 Action execution on remembered files with keepWheelOpenAfterRunning = true
+    monitor.actionExecuted()
+    assertTest(wheelCloseCount == 0 && monitor.isWheelOpen, "21.2a Wheel stays open after running action when keepWheelOpenAfterRunning is true")
+    assertTest(monitor.rememberedFiles == [fileA, fileB], "21.2a Remembered files preserved after action execution")
+
+    // 21.2b Action execution when keepWheelOpenAfterRunning = false closes wheel
+    prefs.keepWheelOpenAfterRunning = false
+    monitor.actionExecuted()
+    assertTest(wheelCloseCount == 1 && !monitor.isWheelOpen && monitor.state == .idle,
+               "21.2b Wheel closes after running action when keepWheelOpenAfterRunning is false")
+    assertTest(monitor.rememberedFiles.isEmpty, "21.2b Remembered files cleared after close")
+    prefs.keepWheelOpenAfterRunning = true
+
+    // 21.3 Esc key closes wheel and clears remembered files
+    // Re-open wheel manually for Esc test
+    mockPasteboard.mockURLs = [fileA]
+    monitor.openWheelManually(location: NSPoint(x: 300, y: 300))
+    assertTest(monitor.isWheelOpen && monitor.rememberedFiles == [fileA], "21.3a Wheel opened manually with remembered files")
+
+    monitor.processKeyDown(keyCode: 53, timestamp: 5010.0) // Esc key
+    assertTest(monitor.state == .idle && !monitor.isWheelOpen, "21.3b Esc key closes wheel and returns to idle")
+    assertTest(monitor.rememberedFiles.isEmpty, "21.3b Esc key clears remembered files")
+
+    // 21.4 Second Shift hold with new files replaces remembered files and keeps wheel open
+    mockPasteboard.mockURLs = [fileA]
+    monitor.processMouseDragged(modifiers: shiftMod, location: NSPoint(x: 100, y: 100), timestamp: 5020.000)
+    monitor.processMouseDragged(modifiers: shiftMod, location: NSPoint(x: 100, y: 100), timestamp: 5020.450)
+    assertTest(monitor.isWheelOpen && monitor.rememberedFiles == [fileA], "21.4a Wheel opened with fileA")
+
+    // Release shift, end first drag
+    monitor.processFlagsChanged(modifiers: emptyMod, timestamp: 5020.500)
+    monitor.processMouseUp(timestamp: 5020.600)
+    assertTest(monitor.isWheelOpen, "21.4b Wheel stays open after first drag ended")
+
+    // Start second drag with fileC and hold shift for 450 ms
+    mockPasteboard.mockURLs = [fileC]
+    replacedFiles = nil
+    let closeBeforeSecondHold = wheelCloseCount
+    monitor.processFlagsChanged(modifiers: shiftMod, timestamp: 5021.000)
+    monitor.processMouseDragged(modifiers: shiftMod, location: NSPoint(x: 120, y: 120), timestamp: 5021.450)
+
+    assertTest(wheelCloseCount == closeBeforeSecondHold, "21.4c Second Shift hold does NOT close wheel")
+    assertTest(monitor.isWheelOpen, "21.4c Wheel remains open during and after second Shift hold")
+    assertTest(replacedFiles == [fileC], "21.4c onFilesReplaced called with new fileC")
+    assertTest(monitor.rememberedFiles == [fileC], "21.4c Remembered files updated to new fileC")
+
+    // Incomplete second shift hold reverts without closing
+    mockPasteboard.mockURLs = [fileB]
+    monitor.processFlagsChanged(modifiers: emptyMod, timestamp: 5022.000)
+    monitor.processFlagsChanged(modifiers: shiftMod, timestamp: 5022.100)
+    monitor.processMouseDragged(modifiers: shiftMod, location: NSPoint(x: 130, y: 130), timestamp: 5022.200) // only 100ms
+    monitor.processFlagsChanged(modifiers: emptyMod, timestamp: 5022.250) // released early
+    assertTest(monitor.isWheelOpen && monitor.rememberedFiles == [fileC],
+               "21.4d Incomplete second Shift hold reverts to previous remembered files and keeps wheel open")
+
+    // 21.5 Drop outside preserves open wheel
+    monitor.processMouseDragged(modifiers: emptyMod, location: NSPoint(x: 800, y: 800), timestamp: 5023.000)
+    monitor.processMouseUp(timestamp: 5023.100)
+    assertTest(monitor.isWheelOpen && monitor.rememberedFiles == [fileC],
+               "21.5 Drop outside does NOT close wheel and preserves remembered files")
+
+    // 21.6 stayOpenAfterRelease preference default is on and honored by production path
+    let freshPrefs = PreferencesManager()
+    assertTest(freshPrefs.stayOpenAfterRelease == true, "21.6a Default stayOpenAfterRelease is true")
+    assertTest(freshPrefs.keepWheelOpenAfterRunning == true, "21.6a Default keepWheelOpenAfterRunning is true")
+
+    // Test with stayOpenAfterRelease = false
+    prefs.stayOpenAfterRelease = false
+    monitor.processMouseUp(timestamp: 5024.000)
+    assertTest(!monitor.isWheelOpen && monitor.state == .idle,
+               "21.6b When stayOpenAfterRelease is false, mouseUp closes wheel immediately")
+    prefs.stayOpenAfterRelease = true
+
+    // 21.7 Close control (×) and manual open/close
+    monitor.openWheelManually(location: NSPoint(x: 150, y: 150))
+    assertTest(monitor.isWheelOpen, "21.7a openWheelManually opens wheel")
+    monitor.closeWheel(reason: "Close button (×) clicked")
+    assertTest(!monitor.isWheelOpen && monitor.rememberedFiles.isEmpty,
+               "21.7b closeWheel closes wheel and clears remembered files")
+
+    // 21.8 RadialWheelCenterDiscView empty state
+    let centerDisc = RadialWheelCenterDiscView()
+    centerDisc.configureEmpty()
+    assertTest(centerDisc.displayedFileName == "Drag a file onto the wheel",
+               "21.8 RadialWheelCenterDiscView empty state displays 'Drag a file onto the wheel'")
 }
 
 print("\n==================================================")

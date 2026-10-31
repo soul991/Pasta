@@ -94,7 +94,29 @@ public final class RadialWheelCenterDiscView: NSView {
         convertBadge.textColor = accent
     }
 
-    public func configure(fileURL: URL, isAdvanced: Bool) {
+    public var displayedFileName: String {
+        return fileNameLabel.stringValue
+    }
+
+    public func configureEmpty() {
+        if let pastaIcon = NSImage(named: "MenuBarIcon") {
+            pastaIcon.isTemplate = true
+            pastaIcon.size = NSSize(width: 34, height: 34)
+            iconImageView.image = pastaIcon
+        } else {
+            let img = NSImage(systemSymbolName: "arrow.down.doc", accessibilityDescription: "Drag file")
+            img?.size = NSSize(width: 34, height: 34)
+            iconImageView.image = img
+        }
+        fileNameLabel.stringValue = "Drag a file onto the wheel"
+        convertBadge.stringValue = "PASTA"
+    }
+
+    public func configure(fileURL: URL?, isAdvanced: Bool) {
+        guard let fileURL = fileURL else {
+            configureEmpty()
+            return
+        }
         let icon = NSWorkspace.shared.icon(forFile: fileURL.path)
         icon.size = NSSize(width: 34, height: 34)
         iconImageView.image = icon

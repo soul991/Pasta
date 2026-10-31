@@ -13,6 +13,7 @@ public final class PreferencesManager {
     private let customPathKey = "pasta_output_custom_path"
     private let holdDurationKey = "pasta_shift_hold_duration_ms"
     private let stayOpenKey = "pasta_stay_open_after_release"
+    private let keepWheelOpenKey = "pasta_keep_wheel_open_after_running"
     private let showRingKey = "pasta_show_charging_ring"
     private let reduceMotionKey = "pasta_reduce_motion"
     private let reduceTransparencyKey = "pasta_reduce_transparency"
@@ -69,6 +70,19 @@ public final class PreferencesManager {
         }
         set {
             UserDefaults.standard.set(newValue, forKey: stayOpenKey)
+        }
+    }
+
+    /// Whether the wheel stays open after executing a tool (default: true)
+    public var keepWheelOpenAfterRunning: Bool {
+        get {
+            if UserDefaults.standard.object(forKey: keepWheelOpenKey) == nil {
+                return true
+            }
+            return UserDefaults.standard.bool(forKey: keepWheelOpenKey)
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: keepWheelOpenKey)
         }
     }
 
