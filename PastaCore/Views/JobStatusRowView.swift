@@ -117,6 +117,7 @@ public final class JobStatusRowView: NSView {
                 self.statusIcon.image = NSImage(systemSymbolName: "checkmark.circle.fill", accessibilityDescription: nil)
                 self.statusIcon.contentTintColor = .systemGreen
 
+                // Safe to swallow: file size comparison for status display is informational; fallback to 0 yields standard completion string
                 let inSize = (try? FileManager.default.attributesOfItem(atPath: self.inputURL.path)[.size] as? Int64) ?? 0
                 let outSize = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? 0
 

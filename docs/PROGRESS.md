@@ -51,14 +51,14 @@
 
 ### PHASE8 Fixes Status Check (Step 0 - Verified & Repaired)
 
-| Item | What to check | Status | Notes |
-| :--- | :--- | :--- | :--- |
-| **Fix 1** | `pdf.to.images` and `pdf.advanced.split` lose pages | **DONE** | Verified with 3-page fixture; produces dedicated output folder with all pages, non-destructive collision handling, and fixture integrity. |
-| **Fix 2** | 120 s timeout kills long ffmpeg jobs | **DONE** | Implemented per-invocation `timeoutSeconds`, defaulted `ffmpeg` to `nil` (no timeout), quick tools to 300s, and surfaced `PastaError.timedOut`. |
-| **Fix 3** | Cancellation does not work reliably | **DONE** | Implemented job process registry, `cancel(jobId:)`, `cancelAll()`, Swift concurrency `withTaskCancellationHandler`, and SIGTERM -> SIGKILL escalation. |
-| **Fix 4** | `runProcess` blocks Swift concurrency pool | **DONE** | Non-blocking `process.terminationHandler` with continuation, concurrent pipe streaming via `readabilityHandler`, and 64KB bounded stderr tail. |
-| **Fix 5** | Finder selection & AppleScript | **DONE** | Added `NSAppleEventsUsageDescription` to Info.plist in `build_app.sh`, added `FinderSelectionHelper`, and logged/surfaced Automation error (-1743). |
-| **Fix 6** | Housekeeping & Compact violations (`try?`) | **DONE** | Replaced swallowed move/read `try?` calls in `JobRunner`, `Compressor`, `MediaTools`, and `MetadataTools` with throwing `try`; documented all remaining safe cleanup/logging `try?` calls. |
+| Item | What to check | Status | CI Verification Test Name | Notes |
+| :--- | :--- | :--- | :--- | :--- |
+| **Fix 1** | `pdf.to.images` and `pdf.advanced.split` lose pages | **DONE** | `Step 1: pdf.to.images has OutputKind .folder(suffix: 'pages')` | Verified with 3-page fixture; produces dedicated output folder with all pages, non-destructive collision handling, and fixture integrity. |
+| **Fix 2** | 120 s timeout kills long ffmpeg jobs | **DONE** | `Step 0: JobRunner explicit timeout throws PastaError.timedOut` | Implemented per-invocation `timeoutSeconds`, defaulted `ffmpeg` to `nil` (no timeout), quick tools to 300s, and surfaced `PastaError.timedOut`. |
+| **Fix 3** | Cancellation does not work reliably | **DONE** | `Step 0: cancel(jobId:) throws PastaError.cancelled` | Implemented job process registry, `cancel(jobId:)`, `cancelAll()`, Swift concurrency `withTaskCancellationHandler`, and SIGTERM -> SIGKILL escalation. |
+| **Fix 4** | `runProcess` blocks Swift concurrency pool | **DONE** | `Step 0: Job process is cleanly terminated after cancel` | Non-blocking `process.terminationHandler` with continuation, concurrent pipe streaming via `readabilityHandler`, and 64KB bounded stderr tail. |
+| **Fix 5** | Finder selection & AppleScript | **DONE** | Section 8 suite on `Pasta.app` binary | Added `NSAppleEventsUsageDescription` to Info.plist in `build_app.sh`, added `FinderSelectionHelper`, and logged/surfaced Automation error (-1743). |
+| **Fix 6** | Housekeeping & Compact violations (`try?`) | **DONE** | Section 8 error reporting & clean test suites | Replaced swallowed move/read `try?` calls in `JobRunner`, `Compressor`, `MediaTools`, and `MetadataTools` with throwing `try`; documented all remaining safe cleanup/logging `try?` calls. |
 
 ---
 

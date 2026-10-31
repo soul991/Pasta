@@ -171,13 +171,19 @@ public final class MediaTools {
         if let jsonStart = errStr.range(of: "{", options: .backwards),
            let jsonEnd = errStr.range(of: "}", options: .backwards) {
             let jsonSubstring = String(errStr[jsonStart.lowerBound...jsonEnd.upperBound])
-            if let data = jsonSubstring.data(using: .utf8),
-               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                measuredI = (json["input_i"] as? String) ?? measuredI
-                measuredTP = (json["input_tp"] as? String) ?? measuredTP
-                measuredLRA = (json["input_lra"] as? String) ?? measuredLRA
-                measuredThresh = (json["input_thresh"] as? String) ?? measuredThresh
-                targetOffset = (json["target_offset"] as? String) ?? targetOffset
+            if let data = jsonSubstring.data(using: .utf8) {
+                do {
+                    if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                        measuredI = (json["input_i"] as? String) ?? measuredI
+                        measuredTP = (json["input_tp"] as? String) ?? measuredTP
+                        measuredLRA = (json["input_lra"] as? String) ?? measuredLRA
+                        measuredThresh = (json["input_thresh"] as? String) ?? measuredThresh
+                        targetOffset = (json["target_offset"] as? String) ?? targetOffset
+                    }
+                } catch {
+                    // Safe fallback: if JSON parsing fails, retain standard EBU R128 integrated loudness default values (-16 LUFS)
+                    PastaLogger.shared.debug("Could not parse loudnorm measurement JSON: \(error.localizedDescription), using default target offsets")
+                }
             }
         }
 
