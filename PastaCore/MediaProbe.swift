@@ -32,7 +32,7 @@ public final class FFprobeMediaProbe: MediaProbe {
     public func probe(url: URL) throws -> MediaProbeResult {
         let fm = FileManager.default
         guard fm.fileExists(atPath: url.path) else {
-            throw PastaError.fileNotFound(url.path)
+            throw PastaError.invalidInput("File not found at '\(url.path)'")
         }
 
         let fileSize = (try? fm.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? 0
