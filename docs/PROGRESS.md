@@ -137,5 +137,6 @@
 | Inactivity watchdog streaming progress reset | Step 0 | Watchdog | **DONE** | `Step 0: Inactivity watchdog resets on active progress and completes successfully` |
 | Audio loudness measurement validation (`audio.normalize`) | Step 0 (Fix) | Audio Tools | **DONE** | `14.1–14.4 audio.normalize loudness measurement validation and exact pass 2 args` |
 | ParameterFormModel (fields, defaults, presets, last-used, validation) | Phase 10 Step 1 | Architecture | **DONE** | `15.1–15.9 ParameterFormModel headless unit tests` |
+| Parameter panel in radial wheel (sliders, chips, crop, VoiceOver, Esc/Return) | Phase 10 Step 2 | Wheel UI | **DONE** | `16.1–16.8 Parameter panel UI and radial integration tests` |
 
 

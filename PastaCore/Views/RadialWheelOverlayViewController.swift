@@ -11,6 +11,7 @@ public final class RadialWheelOverlayViewController: NSViewController {
     private let centerDisc = RadialWheelCenterDiscView()
     private let hudView = RadialConversionHUDView()
     private var nodeViews: [RadialOptionNodeView] = []
+    private var parameterPanelView: ParameterPanelView?
 
     // Floating hint pill
     private let hintPillContainer = NSVisualEffectView()
@@ -82,6 +83,8 @@ public final class RadialWheelOverlayViewController: NSViewController {
         self.targetFiles = files
         self.isAdvanced = isOptionHeld
 
+        dismissParameterPanel(animated: false)
+
         guard let firstFile = files.first else { return }
 
         // Remove old nodes
@@ -90,6 +93,8 @@ public final class RadialWheelOverlayViewController: NSViewController {
 
         hudView.isHidden = true
         centerDisc.isHidden = false
+        centerDisc.alphaValue = 1.0
+        hintPillContainer.alphaValue = 1.0
         centerDisc.configure(fileURL: firstFile, isAdvanced: isOptionHeld)
 
         let isReduceMotion = PreferencesManager.shared.reduceMotionEnabled
@@ -131,11 +136,19 @@ public final class RadialWheelOverlayViewController: NSViewController {
             )
 
             nodeView.onSelect = { [weak self] act in
-                self?.performConversion(action: act)
+                if act.parameters.isEmpty {
+                    self?.performConversion(action: act)
+                } else {
+                    self?.showParameterPanel(for: act)
+                }
             }
             nodeView.onDrop = { [weak self] act, droppedFiles in
                 self?.targetFiles = droppedFiles
-                self?.performConversion(action: act)
+                if act.parameters.isEmpty {
+                    self?.performConversion(action: act)
+                } else {
+                    self?.showParameterPanel(for: act)
+                }
             }
 
             if !isReduceMotion {
@@ -165,7 +178,104 @@ public final class RadialWheelOverlayViewController: NSViewController {
         }
     }
 
-    private func performConversion(action: ConversionAction) {
+    // MARK: - Parameter Panel Management (Phase 10 Step 2)
+
+    private func showParameterPanel(for action: ConversionAction) {
+        dismissParameterPanel(animated: false)
+
+        let isReduceMotion = PreferencesManager.shared.reduceMotionEnabled
+
+        // Dim background elements
+        if !isReduceMotion {
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.18
+                for node in nodeViews {
+                    node.animator().alphaValue = 0.15
+                }
+                centerDisc.animator().alphaValue = 0.0
+                hintPillContainer.animator().alphaValue = 0.0
+            }
+        } else {
+            for node in nodeViews {
+                node.alphaValue = 0.15
+            }
+            centerDisc.alphaValue = 0.0
+            hintPillContainer.alphaValue = 0.0
+        }
+
+        let model = ParameterFormModel(action: action, loadLastUsed: true)
+        let panel = ParameterPanelView(model: model, action: action)
+        let panelW: CGFloat = 310.0
+        let panelH: CGFloat = 340.0
+        panel.frame = NSRect(x: 220.0 - (panelW / 2.0), y: 250.0 - (panelH / 2.0), width: panelW, height: panelH)
+
+        panel.onCancel = { [weak self] in
+            self?.dismissParameterPanel(animated: true)
+        }
+        panel.onRun = { [weak self] params in
+            self?.dismissParameterPanel(animated: true)
+            self?.performConversion(action: action, params: params)
+        }
+
+        view.addSubview(panel)
+        self.parameterPanelView = panel
+
+        if !isReduceMotion {
+            panel.layer?.transform = CATransform3DMakeScale(0.9, 0.9, 1.0)
+            panel.alphaValue = 0.0
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.20
+                panel.animator().layer?.transform = CATransform3DIdentity
+                panel.animator().alphaValue = 1.0
+            }
+        } else {
+            panel.alphaValue = 1.0
+        }
+    }
+
+    public func dismissParameterPanel(animated: Bool = true) {
+        guard let panel = parameterPanelView else { return }
+        self.parameterPanelView = nil
+
+        let isReduceMotion = PreferencesManager.shared.reduceMotionEnabled
+
+        let restoreBackground: () -> Void = { [weak self] in
+            guard let self = self else { return }
+            for node in self.nodeViews {
+                node.alphaValue = 1.0
+            }
+            self.centerDisc.alphaValue = 1.0
+            self.hintPillContainer.alphaValue = 1.0
+        }
+
+        if animated && !isReduceMotion {
+            NSAnimationContext.runAnimationGroup({ ctx in
+                ctx.duration = 0.16
+                panel.animator().alphaValue = 0.0
+                panel.animator().layer?.transform = CATransform3DMakeScale(0.9, 0.9, 1.0)
+                for node in self.nodeViews {
+                    node.animator().alphaValue = 1.0
+                }
+                self.centerDisc.animator().alphaValue = 1.0
+                self.hintPillContainer.animator().alphaValue = 1.0
+            }, completionHandler: {
+                panel.removeFromSuperview()
+            })
+        } else {
+            panel.removeFromSuperview()
+            restoreBackground()
+        }
+    }
+
+    public override func cancelOperation(_ sender: Any?) {
+        if parameterPanelView != nil {
+            dismissParameterPanel(animated: true)
+        } else {
+            onCloseRequested?()
+        }
+    }
+
+    private func performConversion(action: ConversionAction, params: ParameterValues = [:]) {
         guard let file = targetFiles.first else { return }
         DragMonitor.shared.actionExecuted()
 
@@ -201,7 +311,7 @@ public final class RadialWheelOverlayViewController: NSViewController {
         // Execute conversion in background
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             do {
-                let output = try JobRunner.shared.run(action: action, input: file)
+                let output = try JobRunner.shared.run(action: action, input: file, parameters: params)
                 DispatchQueue.main.async {
                     self?.hudView.showSuccess(outputURL: output)
                 }

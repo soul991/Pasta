@@ -14,6 +14,8 @@ public final class PreferencesManager {
     private let stayOpenKey = "pasta_stay_open_after_release"
     private let showRingKey = "pasta_show_charging_ring"
     private let reduceMotionKey = "pasta_reduce_motion"
+    private let reduceTransparencyKey = "pasta_reduce_transparency"
+    private let increaseContrastKey = "pasta_increase_contrast"
     private let watchdogTimeoutKey = "pasta_watchdog_timeout_minutes"
 
     public init() {}
@@ -91,6 +93,32 @@ public final class PreferencesManager {
         }
         set {
             UserDefaults.standard.set(newValue, forKey: reduceMotionKey)
+        }
+    }
+
+    /// Reduce transparency setting override or query
+    public var reduceTransparencyEnabled: Bool {
+        get {
+            if UserDefaults.standard.object(forKey: reduceTransparencyKey) == nil {
+                return NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
+            }
+            return UserDefaults.standard.bool(forKey: reduceTransparencyKey)
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: reduceTransparencyKey)
+        }
+    }
+
+    /// Increase contrast setting override or query
+    public var increaseContrastEnabled: Bool {
+        get {
+            if UserDefaults.standard.object(forKey: increaseContrastKey) == nil {
+                return NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
+            }
+            return UserDefaults.standard.bool(forKey: increaseContrastKey)
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: increaseContrastKey)
         }
     }
 

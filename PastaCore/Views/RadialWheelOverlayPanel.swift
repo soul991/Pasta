@@ -27,6 +27,10 @@ public final class RadialWheelOverlayPanel: NSPanel {
         }
     }
 
+    public override var canBecomeKey: Bool {
+        return true
+    }
+
     public func toggleMode(isAdvanced: Bool) {
         wheelViewController.toggleMode(isAdvanced: isAdvanced)
     }

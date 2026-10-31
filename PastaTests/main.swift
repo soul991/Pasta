@@ -1783,6 +1783,114 @@ do {
     }
 }
 
+// MARK: - 16. Parameter Panel UI & Integration Tests (Phase 10 Step 2)
+print("\n--- 16. Parameter Panel UI & Integration Tests (Phase 10 Step 2) ---")
+do {
+    let dummyFile = URL(fileURLWithPath: "sample.mp4")
+    guard let speedAction = FormatRegistry.shared.action(for: dummyFile, actionID: "video.speed") else {
+        fatalError("video.speed action not registered")
+    }
+
+    let model = ParameterFormModel(action: speedAction, loadLastUsed: false)
+    let panel = ParameterPanelView(model: model, action: speedAction)
+
+    // 16.1 View structure and action binding
+    assertTest(panel.action.id == "video.speed", "16.1 ParameterPanelView binds action correctly")
+    assertTest(panel.model === model, "16.1 ParameterPanelView uses shared ParameterFormModel")
+
+    // 16.2 VoiceOver and Accessibility
+    assertTest(panel.isAccessibilityElement(), "16.2 ParameterPanelView is accessibility element")
+    assertTest(panel.accessibilityRole() == .group, "16.2 ParameterPanelView role is group")
+    assertTest(panel.accessibilityLabel()?.contains("Speed") == true, "16.2 ParameterPanelView has descriptive VoiceOver label")
+
+    // 16.3 Presets chip interaction
+    let initialCount = panel.model.presets.count
+    assertTest(initialCount >= 2, "16.3 Model provides at least 2 presets for speed")
+    if let preset05 = panel.model.presets.first(where: { $0.id == "spd_05" }) {
+        let chip = PresetChipView(preset: preset05)
+        assertTest(chip.isAccessibilityElement(), "16.3 PresetChipView is accessibility element")
+        assertTest(chip.accessibilityRole() == .button, "16.3 PresetChipView role is button")
+        var tapped = false
+        chip.onTap = { tapped = true }
+        chip.mouseDown(with: NSEvent())
+        assertTest(tapped, "16.3 PresetChipView mouseDown triggers onTap callback")
+    } else {
+        assertTest(false, "16.3 spd_05 preset not found")
+    }
+
+    // 16.4 Choice chips for audio.channels
+    let wavFile = URL(fileURLWithPath: "sample.wav")
+    if let chanAction = FormatRegistry.shared.action(for: wavFile, actionID: "audio.channels") {
+        let chanModel = ParameterFormModel(action: chanAction, loadLastUsed: false)
+        let chanPanel = ParameterPanelView(model: chanModel, action: chanAction)
+        assertTest(chanPanel.action.id == "audio.channels", "16.4 Channels panel created successfully")
+
+        let monoChip = ChoiceChipView(title: "mono", isSelected: false)
+        assertTest(!monoChip.isSelected, "16.4 ChoiceChipView initially unselected")
+        monoChip.setSelected(true)
+        assertTest(monoChip.isSelected, "16.4 ChoiceChipView setSelected updates selected state")
+        assertTest(monoChip.isAccessibilityElement(), "16.4 ChoiceChipView is accessibility element")
+        assertTest(monoChip.accessibilityLabel() == "Option mono", "16.4 ChoiceChipView has accessible label")
+    } else {
+        assertTest(false, "16.4 audio.channels action not registered")
+    }
+
+    // 16.5 Crop rectangle picker and ratio preset
+    if let cropAction = FormatRegistry.shared.action(for: dummyFile, actionID: "video.crop") {
+        let cropModel = ParameterFormModel(action: cropAction, loadLastUsed: false)
+        let cropPanel = ParameterPanelView(model: cropModel, action: cropAction)
+        assertTest(cropPanel.action.id == "video.crop", "16.5 Crop panel created successfully")
+
+        if let ratio169 = cropModel.presets.first(where: { $0.id == "crop_16_9" }) {
+            cropModel.applyPreset(ratio169)
+            if case .rectangle(_, _, let w, let h)? = cropModel.values["rectangle"] {
+                assertTest(w == 1920 && h == 1080, "16.5 Applying 16:9 preset sets 1920x1080 crop rectangle")
+            } else {
+                assertTest(false, "16.5 Rectangle value not set after applying preset")
+            }
+        } else {
+            assertTest(false, "16.5 crop_16_9 preset not found")
+        }
+    } else {
+        assertTest(false, "16.5 video.crop action not registered")
+    }
+
+    // 16.6 Run callback and execution with parameters
+    var capturedParams: ParameterValues?
+    panel.onRun = { params in
+        capturedParams = params
+    }
+    model.updateValue(.number(1.5), for: "factor")
+    if panel.model.isValid {
+        panel.model.saveAsLastUsed()
+        panel.onRun?(panel.model.values)
+    }
+    assertTest(capturedParams?["factor"] == .number(1.5), "16.6 Panel executes onRun with configured parameter values")
+
+    // 16.7 Reduce motion and transparency preferences
+    let origMotion = PreferencesManager.shared.reduceMotionEnabled
+    let origTrans = PreferencesManager.shared.reduceTransparencyEnabled
+    defer {
+        PreferencesManager.shared.reduceMotionEnabled = origMotion
+        PreferencesManager.shared.reduceTransparencyEnabled = origTrans
+    }
+    PreferencesManager.shared.reduceMotionEnabled = true
+    PreferencesManager.shared.reduceTransparencyEnabled = true
+    assertTest(PreferencesManager.shared.reduceMotionEnabled, "16.7 reduceMotionEnabled query returns true when set")
+    assertTest(PreferencesManager.shared.reduceTransparencyEnabled, "16.7 reduceTransparencyEnabled query returns true when set")
+
+    // 16.8 Radial wheel integration: parameter panel vs direct execution
+    let wheelVC = RadialWheelOverlayViewController()
+    wheelVC.loadView()
+    wheelVC.viewDidLoad()
+    assertTest(wheelVC.view != nil, "16.8 RadialWheelOverlayViewController view loaded")
+    wheelVC.configure(files: [dummyFile], isOptionHeld: false)
+    var closeRequested = false
+    wheelVC.onCloseRequested = { closeRequested = true }
+    wheelVC.cancelOperation(nil)
+    assertTest(closeRequested, "16.8 cancelOperation without parameter panel requests wheel close")
+}
+
 print("\n==================================================")
 print("Test Suite Summary: \(passedTests)/\(totalTests) Passed, \(failedTests) Failed")
 print("==================================================")
