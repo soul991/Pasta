@@ -140,5 +140,6 @@
 | Parameter panel in radial wheel (sliders, chips, crop, VoiceOver, Esc/Return) | Phase 10 Step 2 | Wheel UI | **DONE** | `16.1–16.8 Parameter panel UI and radial integration tests` |
 | Crop presets computed from media probe (no hardcoded rectangles, even bounds, probe error handling) | Phase 10 Fix 1 | Probing / UI | **DONE** | `17.1–17.9 Crop presets and dynamic media probe tests` |
 | Probed trim defaults, duration validation & target-size warnings (inline warning, Run enabled) | Phase 10 Fix 2 | Probing / UI | **DONE** | `18.1–18.9 Trim duration validation and target-size warnings` |
+| Drop window parameter panel reuse & batch support (BatchProgressRowView, combined status, cancel) | Phase 10 Step 3 | Drop Window / Batch | **DONE** | `19.1–19.10 Drop window parameter panel and batch execution tests` |
 
 

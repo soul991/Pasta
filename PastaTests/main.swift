@@ -2110,6 +2110,115 @@ do {
     }
 }
 
+// MARK: - 19. Drop Window Parameter Panel & Batch Execution Tests (Phase 10 Step 3)
+print("\n--- 19. Drop Window Parameter Panel & Batch Execution Tests (Phase 10 Step 3) ---")
+do {
+    let dummyAction = ConversionAction(
+        id: "image.convert.jpg",
+        displayName: "Convert to JPG",
+        outputExtension: "jpg",
+        category: .image,
+        iconName: "photo",
+        parameters: [],
+        buildInvocations: { inUrl, outUrl, _ in
+            return [Invocation(toolName: "magick", arguments: [inUrl.path, outUrl.path])]
+        }
+    )
+
+    let dummyParamAction = ConversionAction(
+        id: "image.compress",
+        displayName: "Compress Image",
+        outputExtension: "jpg",
+        isAdvanced: true,
+        category: .image,
+        iconName: "arrow.down.right.and.arrow.up.left",
+        parameters: [
+            ActionParameter(
+                id: "targetSize",
+                label: "Target Size",
+                kind: .sizeInBytes,
+                defaultValue: .integer(5 * 1024 * 1024)
+            )
+        ],
+        buildInvocations: { inUrl, outUrl, _ in
+            return [Invocation(toolName: "magick", arguments: [inUrl.path, outUrl.path])]
+        }
+    )
+
+    // 19.1 BatchProgressRowView initialization
+    let batchView = BatchProgressRowView(totalCount: 5, action: dummyParamAction)
+    assertTest(batchView.totalCount == 5, "19.1 BatchProgressRowView totalCount is 5")
+    assertTest(batchView.completedCount == 0, "19.1 Initial completedCount is 0")
+    assertTest(batchView.summaryLabel.stringValue == "0 of 5 complete", "19.1 Initial summary string is '0 of 5 complete'")
+    assertTest(batchView.progressBar.doubleValue == 0.0, "19.1 Initial progress bar doubleValue is 0.0")
+    assertTest(batchView.progressBar.maxValue == 5.0, "19.1 Progress bar maxValue is 5.0")
+
+    // 19.2 BatchProgressRowView update progress
+    batchView.update(completed: 3, failed: 0)
+    RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+    assertTest(batchView.completedCount == 3, "19.2 BatchProgressRowView updates completedCount to 3")
+    assertTest(batchView.summaryLabel.stringValue == "3 of 5 complete", "19.2 Summary label displays '3 of 5 complete'")
+    assertTest(batchView.progressBar.doubleValue == 3.0, "19.2 Progress bar advances to 3.0")
+
+    // 19.3 BatchProgressRowView failure handling
+    batchView.update(completed: 3, failed: 1)
+    RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+    assertTest(batchView.failedCount == 1, "19.3 BatchProgressRowView records 1 failure")
+    assertTest(batchView.summaryLabel.stringValue.contains("4 of 5 complete (1 failed)"),
+               "19.3 Summary label includes failure count")
+
+    // 19.4 BatchProgressRowView all complete
+    batchView.update(completed: 5, failed: 0)
+    RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+    assertTest(batchView.summaryLabel.stringValue == "All 5 complete", "19.4 Summary label shows 'All 5 complete' when done")
+    assertTest(batchView.cancelButton.isHidden, "19.4 Cancel button is hidden when all complete")
+
+    // 19.5 BatchProgressRowView cancellation
+    var wasCancelled = false
+    batchView.onCancel = { wasCancelled = true }
+    batchView.markCancelled()
+    RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+    assertTest(batchView.isCancelled, "19.5 BatchProgressRowView marked as cancelled")
+    assertTest(batchView.summaryLabel.stringValue.contains("Cancelled"), "19.5 Summary label indicates cancellation")
+
+    // 19.6 DropWindowViewController files drop
+    let dropVC = DropWindowViewController()
+    dropVC.loadView()
+    dropVC.viewDidLoad()
+    assertTest(dropVC.view != nil, "19.6 DropWindowViewController view loaded")
+
+    let testFile1 = URL(fileURLWithPath: "test1.png")
+    let testFile2 = URL(fileURLWithPath: "test2.png")
+    let testFile3 = URL(fileURLWithPath: "test3.png")
+
+    dropVC.handleFilesDropped([testFile1])
+    assertTest(dropVC.selectedFiles.count == 1, "19.6 Single file dropped records 1 selected file")
+
+    dropVC.handleFilesDropped([testFile1, testFile2, testFile3])
+    assertTest(dropVC.selectedFiles.count == 3, "19.6 Multi-file batch dropped records 3 selected files")
+
+    // 19.7 Parameterless action executes directly without showing ParameterPanelView
+    dropVC.selectAction(dummyAction)
+    assertTest(dropVC.activeParameterPanel == nil, "19.7 Parameterless action executes directly without parameter panel")
+
+    // 19.8 Parameterized action presents ParameterPanelView inline
+    dropVC.selectAction(dummyParamAction)
+    assertTest(dropVC.activeParameterPanel != nil, "19.8 Parameterized action displays ParameterPanelView inline")
+    assertTest(dropVC.activeParameterPanel?.action.id == "image.compress", "19.8 Active parameter panel is bound to image.compress")
+
+    // 19.9 Parameter panel cancel dismisses panel and restores format chips
+    dropVC.activeParameterPanel?.onCancel?()
+    assertTest(dropVC.activeParameterPanel == nil, "19.9 onCancel dismisses parameter panel")
+
+    // 19.10 Batch execution creates BatchProgressRowView and individual job rows
+    dropVC.selectAction(dummyParamAction)
+    assertTest(dropVC.activeParameterPanel != nil, "19.10 Parameter panel presented for batch")
+    dropVC.activeParameterPanel?.onRun?([:])
+    assertTest(dropVC.activeParameterPanel == nil, "19.10 onRun dismisses parameter panel")
+    assertTest(dropVC.jobsStack.arrangedSubviews.contains(where: { $0 is BatchProgressRowView }),
+               "19.10 Batch execution adds BatchProgressRowView to jobsStack")
+}
+
 print("\n==================================================")
 print("Test Suite Summary: \(passedTests)/\(totalTests) Passed, \(failedTests) Failed")
 print("==================================================")
