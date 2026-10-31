@@ -2858,6 +2858,149 @@ do {
                "21.8 RadialWheelCenterDiscView empty state displays 'Drag a file onto the wheel'")
 }
 
+// MARK: - 22. Phase 10B Step 2: Node Geometry, Anti-Clipping & Screen Edge Tests
+print("\n--- 22. Phase 10B Step 2: Node Geometry, Anti-Clipping & Screen Edge Tests ---")
+do {
+    // 22.1 Headless geometry test: All 8 nodes at hover scale 1.06 with glow radius 18 are inside panel bounds with >= 8pt margin
+    let panelW = WheelGeometry.panelWidth
+    let panelH = WheelGeometry.panelHeight
+    let minMargin = WheelGeometry.minMargin // 8.0
+
+    for slot in 0..<8 {
+        let extents = WheelGeometry.nodeExtents(
+            index: slot,
+            totalSlots: 8,
+            nodeWidth: 90.0,
+            nodeHeight: 38.0,
+            scale: 1.06,
+            glowRadius: 18.0,
+            shadowRadius: 10.0
+        )
+
+        let leftMargin = extents.minX
+        let rightMargin = panelW - extents.maxX
+        let bottomMargin = extents.minY
+        let topMargin = panelH - extents.maxY
+
+        assertTest(leftMargin >= minMargin,
+                   "22.1 Slot \(slot) left margin (\(String(format: "%.1f", leftMargin))pt) >= \(minMargin)pt")
+        assertTest(rightMargin >= minMargin,
+                   "22.1 Slot \(slot) right margin (\(String(format: "%.1f", rightMargin))pt) >= \(minMargin)pt")
+        assertTest(bottomMargin >= minMargin,
+                   "22.1 Slot \(slot) bottom margin (\(String(format: "%.1f", bottomMargin))pt) >= \(minMargin)pt")
+        assertTest(topMargin >= minMargin,
+                   "22.1 Slot \(slot) top margin (\(String(format: "%.1f", topMargin))pt) >= \(minMargin)pt")
+    }
+
+    // 22.2 Screen-edge repositioning tests for all four edges and four corners
+    let screenVisible = CGRect(x: 0, y: 30, width: 1920, height: 1050) // e.g. 30pt top menu bar
+    let edgeMargin: CGFloat = 10.0
+
+    // Test a: Left screen edge (cursor at x = 20, y = 500)
+    let leftOrigin = WheelGeometry.computePanelOrigin(
+        cursorPoint: CGPoint(x: 20, y: 500),
+        visibleFrame: screenVisible,
+        edgeMargin: edgeMargin
+    )
+    let leftFrame = CGRect(origin: leftOrigin, size: CGSize(width: panelW, height: panelH))
+    assertTest(leftFrame.minX >= screenVisible.minX + edgeMargin,
+               "22.2a Left edge repositioning keeps panel inside visible screen")
+    assertTest(leftFrame.maxX <= screenVisible.maxX - edgeMargin,
+               "22.2a Left edge repositioning does not exceed screen right")
+
+    // Test b: Right screen edge (cursor at x = 1910, y = 500)
+    let rightOrigin = WheelGeometry.computePanelOrigin(
+        cursorPoint: CGPoint(x: 1910, y: 500),
+        visibleFrame: screenVisible,
+        edgeMargin: edgeMargin
+    )
+    let rightFrame = CGRect(origin: rightOrigin, size: CGSize(width: panelW, height: panelH))
+    assertTest(rightFrame.maxX <= screenVisible.maxX - edgeMargin,
+               "22.2b Right edge repositioning keeps panel inside visible screen")
+    assertTest(rightFrame.minX >= screenVisible.minX + edgeMargin,
+               "22.2b Right edge repositioning does not exceed screen left")
+
+    // Test c: Top screen edge / menu bar (cursor at x = 960, y = 1070)
+    let topOrigin = WheelGeometry.computePanelOrigin(
+        cursorPoint: CGPoint(x: 960, y: 1070),
+        visibleFrame: screenVisible,
+        edgeMargin: edgeMargin
+    )
+    let topFrame = CGRect(origin: topOrigin, size: CGSize(width: panelW, height: panelH))
+    assertTest(topFrame.maxY <= screenVisible.maxY - edgeMargin,
+               "22.2c Top edge repositioning keeps panel below menu bar")
+    assertTest(topFrame.minY >= screenVisible.minY + edgeMargin,
+               "22.2c Top edge repositioning does not cross screen bottom")
+
+    // Test d: Bottom screen edge (cursor at x = 960, y = 35)
+    let bottomOrigin = WheelGeometry.computePanelOrigin(
+        cursorPoint: CGPoint(x: 960, y: 35),
+        visibleFrame: screenVisible,
+        edgeMargin: edgeMargin
+    )
+    let bottomFrame = CGRect(origin: bottomOrigin, size: CGSize(width: panelW, height: panelH))
+    assertTest(bottomFrame.minY >= screenVisible.minY + edgeMargin,
+               "22.2d Bottom edge repositioning keeps panel above dock/bottom")
+    assertTest(bottomFrame.maxY <= screenVisible.maxY - edgeMargin,
+               "22.2d Bottom edge repositioning does not cross screen top")
+
+    // Test e: Top-Left corner (cursor at x = 10, y = 1075)
+    let tlOrigin = WheelGeometry.computePanelOrigin(
+        cursorPoint: CGPoint(x: 10, y: 1075),
+        visibleFrame: screenVisible,
+        edgeMargin: edgeMargin
+    )
+    let tlFrame = CGRect(origin: tlOrigin, size: CGSize(width: panelW, height: panelH))
+    assertTest(tlFrame.minX >= screenVisible.minX + edgeMargin && tlFrame.maxY <= screenVisible.maxY - edgeMargin,
+               "22.2e Top-left corner repositioning keeps panel within visible screen")
+
+    // Test f: Top-Right corner (cursor at x = 1915, y = 1075)
+    let trOrigin = WheelGeometry.computePanelOrigin(
+        cursorPoint: CGPoint(x: 1915, y: 1075),
+        visibleFrame: screenVisible,
+        edgeMargin: edgeMargin
+    )
+    let trFrame = CGRect(origin: trOrigin, size: CGSize(width: panelW, height: panelH))
+    assertTest(trFrame.maxX <= screenVisible.maxX - edgeMargin && trFrame.maxY <= screenVisible.maxY - edgeMargin,
+               "22.2f Top-right corner repositioning keeps panel within visible screen")
+
+    // Test g: Bottom-Left corner (cursor at x = 10, y = 32)
+    let blOrigin = WheelGeometry.computePanelOrigin(
+        cursorPoint: CGPoint(x: 10, y: 32),
+        visibleFrame: screenVisible,
+        edgeMargin: edgeMargin
+    )
+    let blFrame = CGRect(origin: blOrigin, size: CGSize(width: panelW, height: panelH))
+    assertTest(blFrame.minX >= screenVisible.minX + edgeMargin && blFrame.minY >= screenVisible.minY + edgeMargin,
+               "22.2g Bottom-left corner repositioning keeps panel within visible screen")
+
+    // Test h: Bottom-Right corner (cursor at x = 1915, y = 32)
+    let brOrigin = WheelGeometry.computePanelOrigin(
+        cursorPoint: CGPoint(x: 1915, y: 32),
+        visibleFrame: screenVisible,
+        edgeMargin: edgeMargin
+    )
+    let brFrame = CGRect(origin: brOrigin, size: CGSize(width: panelW, height: panelH))
+    assertTest(brFrame.maxX <= screenVisible.maxX - edgeMargin && brFrame.minY >= screenVisible.minY + edgeMargin,
+               "22.2h Bottom-right corner repositioning keeps panel within visible screen")
+
+    // 22.3 Ancestor masksToBounds is disabled to prevent rectangular glow clipping
+    let panel = RadialWheelOverlayPanel()
+    assertTest(panel.contentView?.layer?.masksToBounds == false,
+               "22.3a Panel contentView layer masksToBounds is false")
+
+    let wheelVC = RadialWheelOverlayViewController()
+    wheelVC.loadView()
+    wheelVC.viewDidLoad()
+    assertTest(wheelVC.view.layer?.masksToBounds == false,
+               "22.3b RadialWheelOverlayViewController view layer masksToBounds is false")
+
+    let testAction = FormatRegistry.shared.allActions(for: URL(fileURLWithPath: "sample.mp4")).first!
+    let node = RadialOptionNodeView(action: testAction)
+    assertTest(node.layer?.masksToBounds == false,
+               "22.3c RadialOptionNodeView layer masksToBounds is false")
+}
+
 print("\n==================================================")
 print("Test Suite Summary: \(passedTests)/\(totalTests) Passed, \(failedTests) Failed")
 print("==================================================")

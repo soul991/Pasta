@@ -105,7 +105,7 @@ public final class RadialOptionNodeView: NSView {
                 layer?.borderWidth = 2.0
                 layer?.shadowColor = accent.cgColor
                 layer?.shadowOpacity = 0.8
-                layer?.shadowRadius = 8
+                layer?.shadowRadius = WheelGeometry.maxGlowRadius // 18pt accent glow (Phase 10B Step 2)
                 layer?.shadowOffset = .zero
 
                 // Contrast fix: Active slice labels use dark ink (#1A0F05) to ensure 8.9:1 contrast

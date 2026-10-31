@@ -86,6 +86,21 @@ CI tests verify the mathematical state machine against simulated clock timestamp
 
 ---
 
+## 4.1 Node Anti-Clipping & Screen Edge Repositioning (Phase 10B Step 2)
+
+- [ ] **Active Node Glow & No Straight Edge (Fix for MKV Pill)**:
+  - Drag a video file and open the radial wheel. Hover over the rightmost node (e.g. MKV).
+  - **Expected:** The node blooms with a 1.06 hover scale and an 18 pt soft accent glow. There is **no straight vertical line or cut-off edge** on the right side of the glow.
+- [ ] **All 8 Nodes Free from Clipping**:
+  - Hover over each of the 8 nodes around the wheel.
+  - **Expected:** Every node's glow and shadow render with complete radial softness and at least 36 pt margin to the panel boundary.
+- [ ] **Screen Edge Repositioning (Edges & Corners)**:
+  - Drag a file to the extreme edges and corners of your screen (far right edge, far left edge, directly under the menu bar, above the Dock, and all 4 corners).
+  - Hold <kbd>Shift</kbd> for 450 ms to trigger the wheel.
+  - **Expected:** The wheel automatically shifts inward so the entire panel remains 100% on screen, never clipping against the display edges or menu bar.
+
+---
+
 ## 5. Mode Toggling: Convert vs. Advanced Mode (<kbd>⌥</kbd>)
 
 - [ ] **Quick Option Tap (< 250 ms)**:

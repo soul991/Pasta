@@ -6,7 +6,7 @@ public final class RadialWheelOverlayPanel: NSPanel {
 
     public init() {
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: 440, height: 480),
+            contentRect: NSRect(x: 0, y: 0, width: WheelGeometry.panelWidth, height: WheelGeometry.panelHeight),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -21,6 +21,8 @@ public final class RadialWheelOverlayPanel: NSPanel {
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
 
         contentViewController = wheelViewController
+        contentView?.wantsLayer = true
+        contentView?.layer?.masksToBounds = false
 
         wheelViewController.onCloseRequested = {
             DragMonitor.shared.closeWheel(reason: "Panel view controller requested close")
@@ -42,27 +44,17 @@ public final class RadialWheelOverlayPanel: NSPanel {
     public func showCenteredAt(point: NSPoint, files: [URL], isOptionHeld: Bool) {
         wheelViewController.configure(files: files, isOptionHeld: isOptionHeld)
 
-        let panelSize = NSSize(width: 440, height: 480)
+        let panelSize = NSSize(width: WheelGeometry.panelWidth, height: WheelGeometry.panelHeight)
         setContentSize(panelSize)
 
-        // Center wheel center (220, 250) directly over the cursor point
-        var origin = NSPoint(x: point.x - 220, y: point.y - 250)
-
-        if let screen = NSScreen.main {
-            let visible = screen.visibleFrame
-            if origin.x < visible.minX + 10 {
-                origin.x = visible.minX + 10
-            }
-            if origin.x + panelSize.width > visible.maxX - 10 {
-                origin.x = visible.maxX - panelSize.width - 10
-            }
-            if origin.y < visible.minY + 10 {
-                origin.y = visible.minY + 10
-            }
-            if origin.y + panelSize.height > visible.maxY - 10 {
-                origin.y = visible.maxY - panelSize.height - 10
-            }
-        }
+        let visibleFrame = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1920, height: 1080)
+        let origin = WheelGeometry.computePanelOrigin(
+            cursorPoint: point,
+            panelSize: panelSize,
+            centerOffset: NSPoint(x: WheelGeometry.wheelCenterX, y: WheelGeometry.wheelCenterY),
+            visibleFrame: visibleFrame,
+            edgeMargin: 10.0
+        )
 
         setFrameOrigin(origin)
 

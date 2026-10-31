@@ -17,6 +17,7 @@
 | **Phase 9** | Close Feature Gaps (Formats, Compression, Media Tools, Metadata, QR, Gate) | **Complete** | 139/139 Unit/Integration tests passed (Debug/Release); 33/33 Section 8 tests passed; 0 leaks, 0 network |
 | **Phase 10** | Parameter Panels & Batch Mode (Radial Wheel, Drop Window, Per-file Probing, Concurrency Queue, Async Probe) | **Complete** | 324/324 Unit/Integration tests passed; 33/33 Section 8 tests passed (debug & app bundle); 0 leaks, 0 network |
 | **Phase 10B Step 1** | Sticky Wheel, Sticky File Context, Logging, Real Event Sequences | **Complete** | 355/355 Unit/Integration tests passed; 33/33 Section 8 tests passed; 0 leaks, 0 network |
+| **Phase 10B Step 2** | Fix Clipped Node & Rectangular Glow Boundary, Screen Edge Repositioning, Geometry Tests | **Complete** | 402/402 Unit/Integration tests passed; 33/33 Section 8 tests passed; 0 leaks, 0 network |
 
 ---
 
@@ -159,6 +160,9 @@
 | `stayOpenAfterRelease` and `keepWheelOpenAfterRunning` preferences default & honor | Phase 10B Step 1 | Preferences | **DONE** | `21.6 stayOpenAfterRelease and keepWheelOpenAfterRunning defaults and production honor` |
 | Close control (×) & manual open/close | Phase 10B Step 1 | UI / Control | **DONE** | `21.7 Close control (×) and manual open/close` |
 | Hub empty state when opened without files ("Drag a file onto the wheel") | Phase 10B Step 1 | Hub UI | **DONE** | `21.8 RadialWheelCenterDiscView empty state displays 'Drag a file onto the wheel'` |
+| WheelGeometry layout & metrics (520x560 panel, 148pt orbit, center at 260,310) | Phase 10B Step 2 | Geometry | **DONE** | `22.1 Headless geometry: 8 slots >= 8pt margin at 1.06 scale with 18pt glow` |
+| Screen edge repositioning (keeps full panel on screen, clears menu bar & dock) | Phase 10B Step 2 | Window Manager | **DONE** | `22.2 Screen-edge repositioning for 4 edges and 4 corners` |
+| Disabled masksToBounds on all glow ancestor layers (`panel.contentView`, `view`, `node`) | Phase 10B Step 2 | Anti-Clipping | **DONE** | `22.3 Ancestor masksToBounds disabled` |
 
 
 

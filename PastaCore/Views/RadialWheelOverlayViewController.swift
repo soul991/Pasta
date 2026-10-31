@@ -25,9 +25,11 @@ public final class RadialWheelOverlayViewController: NSViewController {
     private var lastOutputURL: URL?
 
     public override func loadView() {
-        // Frame large enough for radial orbit (diameter 420) + bottom hint pill
-        view = NSView(frame: NSRect(x: 0, y: 0, width: 440, height: 480))
+        // Frame sized via WheelGeometry to accommodate all 8 nodes, max 1.06 hover scale,
+        // 18pt accent glow, 10pt shadow, and controls with >= 8pt margin.
+        view = NSView(frame: NSRect(x: 0, y: 0, width: WheelGeometry.panelWidth, height: WheelGeometry.panelHeight))
         view.wantsLayer = true
+        view.layer?.masksToBounds = false
     }
 
     public override func viewDidLoad() {
@@ -36,12 +38,22 @@ public final class RadialWheelOverlayViewController: NSViewController {
     }
 
     private func setupUI() {
-        // Center Disc centered at (220, 250)
-        centerDisc.frame = NSRect(x: 220 - 55, y: 250 - 55, width: 110, height: 110)
+        // Center Disc centered at (WheelGeometry.wheelCenterX, WheelGeometry.wheelCenterY)
+        centerDisc.frame = NSRect(
+            x: WheelGeometry.wheelCenterX - 55,
+            y: WheelGeometry.wheelCenterY - 55,
+            width: 110,
+            height: 110
+        )
         view.addSubview(centerDisc)
 
         // HUD View (initially hidden)
-        hudView.frame = NSRect(x: 220 - 75, y: 250 - 75, width: 150, height: 150)
+        hudView.frame = NSRect(
+            x: WheelGeometry.wheelCenterX - 75,
+            y: WheelGeometry.wheelCenterY - 75,
+            width: 150,
+            height: 150
+        )
         hudView.isHidden = true
         hudView.onDismiss = { [weak self] in
             self?.onCloseRequested?()
@@ -133,7 +145,12 @@ public final class RadialWheelOverlayViewController: NSViewController {
         ])
 
         // Close control (×) at top-right of wheel
-        let closeBtn = NSButton(frame: NSRect(x: 220 + 130, y: 250 + 130, width: 28, height: 28))
+        let closeBtn = NSButton(frame: NSRect(
+            x: WheelGeometry.wheelCenterX + 140,
+            y: WheelGeometry.wheelCenterY + 140,
+            width: 28,
+            height: 28
+        ))
         closeBtn.title = "✕"
         closeBtn.font = NSFont.systemFont(ofSize: 13, weight: .bold)
         closeBtn.isBordered = false
@@ -209,24 +226,20 @@ public final class RadialWheelOverlayViewController: NSViewController {
         guard !actions.isEmpty else { return }
 
         let count = actions.count
-        let orbitRadius: CGFloat = 138.0
-        let centerX: CGFloat = 220.0
-        let centerY: CGFloat = 250.0
 
         for (index, action) in actions.enumerated() {
-            let angle = (-CGFloat.pi / 2.0) + (CGFloat(index) * (2.0 * CGFloat.pi / CGFloat(count)))
-            let nodeCenterX = centerX + (orbitRadius * cos(angle))
-            let nodeCenterY = centerY + (orbitRadius * sin(angle))
+            let nodeCenter = WheelGeometry.nodeCenter(index: index, totalSlots: count)
 
             let nodeView = RadialOptionNodeView(action: action)
             let nodeWidth = nodeView.bounds.width
             let nodeHeight = nodeView.bounds.height
             nodeView.frame = NSRect(
-                x: nodeCenterX - (nodeWidth / 2.0),
-                y: nodeCenterY - (nodeHeight / 2.0),
+                x: nodeCenter.x - (nodeWidth / 2.0),
+                y: nodeCenter.y - (nodeHeight / 2.0),
                 width: nodeWidth,
                 height: nodeHeight
             )
+            nodeView.layer?.masksToBounds = false
 
             nodeView.onSelect = { [weak self] act in
                 if act.parameters.isEmpty {
@@ -306,7 +319,12 @@ public final class RadialWheelOverlayViewController: NSViewController {
         let panel = ParameterPanelView(model: model, action: action)
         let panelW: CGFloat = 310.0
         let panelH: CGFloat = 340.0
-        panel.frame = NSRect(x: 220.0 - (panelW / 2.0), y: 250.0 - (panelH / 2.0), width: panelW, height: panelH)
+        panel.frame = NSRect(
+            x: WheelGeometry.wheelCenterX - (panelW / 2.0),
+            y: WheelGeometry.wheelCenterY - (panelH / 2.0),
+            width: panelW,
+            height: panelH
+        )
 
         panel.onCancel = { [weak self] in
             self?.dismissParameterPanel(animated: true)
