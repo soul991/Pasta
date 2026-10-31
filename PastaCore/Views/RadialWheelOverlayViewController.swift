@@ -203,7 +203,7 @@ public final class RadialWheelOverlayViewController: NSViewController {
             hintPillContainer.alphaValue = 0.0
         }
 
-        let model = ParameterFormModel(action: action, loadLastUsed: true)
+        let model = ParameterFormModel(action: action, loadLastUsed: true, inputFile: targetFiles.first)
         let panel = ParameterPanelView(model: model, action: action)
         let panelW: CGFloat = 310.0
         let panelH: CGFloat = 340.0

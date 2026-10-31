@@ -72,6 +72,10 @@ public final class ParameterFormModel {
     public let actionDisplayName: String
     public let parameters: [ActionParameter]
     public let preferences: PreferencesManager
+    public let inputFile: URL?
+    public let probe: MediaProbe
+    public private(set) var probeResult: MediaProbeResult?
+    public private(set) var probeError: String?
 
     public private(set) var fields: [ParameterFormField] = []
     public private(set) var presets: [ParameterPreset] = []
@@ -94,12 +98,16 @@ public final class ParameterFormModel {
     public init(
         action: ConversionAction,
         preferences: PreferencesManager = .shared,
-        loadLastUsed: Bool = true
+        loadLastUsed: Bool = true,
+        inputFile: URL? = nil,
+        probe: MediaProbe = MediaProbeService.shared.probe
     ) {
         self.actionID = action.id
         self.actionDisplayName = action.displayName
         self.parameters = action.parameters
         self.preferences = preferences
+        self.inputFile = inputFile
+        self.probe = probe
         setup(loadLastUsed: loadLastUsed)
     }
 
@@ -108,24 +116,45 @@ public final class ParameterFormModel {
         actionDisplayName: String,
         parameters: [ActionParameter],
         preferences: PreferencesManager = .shared,
-        loadLastUsed: Bool = true
+        loadLastUsed: Bool = true,
+        inputFile: URL? = nil,
+        probe: MediaProbe = MediaProbeService.shared.probe
     ) {
         self.actionID = actionID
         self.actionDisplayName = actionDisplayName
         self.parameters = parameters
         self.preferences = preferences
+        self.inputFile = inputFile
+        self.probe = probe
         setup(loadLastUsed: loadLastUsed)
     }
 
     private func setup(loadLastUsed: Bool) {
+        if let file = inputFile {
+            do {
+                self.probeResult = try probe.probe(url: file)
+                self.probeError = nil
+            } catch {
+                self.probeResult = nil
+                self.probeError = error.localizedDescription
+            }
+        } else {
+            self.probeResult = nil
+            self.probeError = nil
+        }
+
         let lastUsed = loadLastUsed ? preferences.lastUsedParameterValues(for: actionID, parameters: parameters) : nil
 
         self.fields = parameters.map { param in
-            let initial = lastUsed?[param.id] ?? param.defaultValue
+            var initial = lastUsed?[param.id] ?? param.defaultValue
+            if lastUsed == nil, param.id == "rectangle", let p = self.probeResult, let cw = p.width, let ch = p.height, cw > 0, ch > 0 {
+                let full = CropCalculator.computeCrop(containerWidth: cw, containerHeight: ch, ratioWidth: cw, ratioHeight: ch)
+                initial = .rectangle(x: full.x, y: full.y, width: full.width, height: full.height)
+            }
             return ParameterFormField(parameter: param, initialValue: initial)
         }
 
-        self.presets = Self.defaultPresets(for: actionID, parameters: parameters)
+        self.presets = Self.defaultPresets(for: actionID, parameters: parameters, probeResult: probeResult)
         validate()
     }
 
@@ -222,13 +251,32 @@ public final class ParameterFormModel {
             }
         }
 
+        let ids = Set(parameters.map { $0.id })
+        if ids.contains("rectangle") {
+            if let err = probeError {
+                let msg = "Could not probe media for crop: \(err)"
+                validationErrors["rectangle"] = msg
+                field(for: "rectangle")?.errorMessage = msg
+            } else if let p = probeResult, let cw = p.width, let ch = p.height, cw > 0, ch > 0 {
+                if let rectVal = values["rectangle"], case .rectangle(let rx, let ry, let rw, let rh) = rectVal {
+                    do {
+                        try InputValidator.validateCropWithinBounds(width: rw, height: rh, x: rx, y: ry, containerWidth: cw, containerHeight: ch)
+                    } catch {
+                        validationErrors["rectangle"] = error.localizedDescription
+                        field(for: "rectangle")?.errorMessage = error.localizedDescription
+                    }
+                }
+            }
+        }
+
         isValid = validationErrors.isEmpty
         return isValid
     }
 
     public static func defaultPresets(
         for actionID: String,
-        parameters: [ActionParameter]
+        parameters: [ActionParameter],
+        probeResult: MediaProbeResult? = nil
     ) -> [ParameterPreset] {
         var presets: [ParameterPreset] = []
         let ids = Set(parameters.map { $0.id })
@@ -305,21 +353,27 @@ public final class ParameterFormModel {
         }
 
         if ids.contains("rectangle") {
-            presets.append(ParameterPreset(
-                id: "crop_16_9",
-                label: "16:9",
-                values: ["rectangle": .rectangle(x: 0, y: 0, width: 1920, height: 1080)]
-            ))
-            presets.append(ParameterPreset(
-                id: "crop_1_1",
-                label: "1:1",
-                values: ["rectangle": .rectangle(x: 0, y: 0, width: 1080, height: 1080)]
-            ))
-            presets.append(ParameterPreset(
-                id: "crop_9_16",
-                label: "9:16",
-                values: ["rectangle": .rectangle(x: 0, y: 0, width: 1080, height: 1920)]
-            ))
+            if let p = probeResult, let cw = p.width, let ch = p.height, cw > 0, ch > 0 {
+                let crop169 = CropCalculator.computeCrop(containerWidth: cw, containerHeight: ch, ratioWidth: 16, ratioHeight: 9)
+                let crop11 = CropCalculator.computeCrop(containerWidth: cw, containerHeight: ch, ratioWidth: 1, ratioHeight: 1)
+                let crop916 = CropCalculator.computeCrop(containerWidth: cw, containerHeight: ch, ratioWidth: 9, ratioHeight: 16)
+
+                presets.append(ParameterPreset(
+                    id: "crop_16_9",
+                    label: "16:9",
+                    values: ["rectangle": .rectangle(x: crop169.x, y: crop169.y, width: crop169.width, height: crop169.height)]
+                ))
+                presets.append(ParameterPreset(
+                    id: "crop_1_1",
+                    label: "1:1",
+                    values: ["rectangle": .rectangle(x: crop11.x, y: crop11.y, width: crop11.width, height: crop11.height)]
+                ))
+                presets.append(ParameterPreset(
+                    id: "crop_9_16",
+                    label: "9:16",
+                    values: ["rectangle": .rectangle(x: crop916.x, y: crop916.y, width: crop916.width, height: crop916.height)]
+                ))
+            }
         } else if ids.contains("box") {
             presets.append(ParameterPreset(
                 id: "crop_16_9",

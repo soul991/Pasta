@@ -1,6 +1,7 @@
 import Foundation
 import AppKit
 import QuartzCore
+import ObjectiveC
 
 /// Inline parameter configuration panel for actions with parameters.
 /// Built for the Shift-hold radial wheel and the menu bar drop window.
@@ -500,20 +501,52 @@ public final class ParameterPanelView: NSVisualEffectView {
             fieldRefreshers.append(updater)
 
         case .rectangle:
-            // Ratio chips + W, H, X, Y fields
+            // Source & resulting crop size readout
+            let sizeInfoRow = NSStackView()
+            sizeInfoRow.orientation = .horizontal
+            sizeInfoRow.alignment = .centerY
+            sizeInfoRow.spacing = 8
+            sizeInfoRow.translatesAutoresizingMaskIntoConstraints = false
+
+            let srcW = model.probeResult?.width ?? 0
+            let srcH = model.probeResult?.height ?? 0
+            let sourceLabel = NSTextField(labelWithString: (srcW > 0 && srcH > 0) ? "Source: \(srcW)×\(srcH)" : (model.probeError != nil ? "Source: probe error" : "Source: unknown"))
+            sourceLabel.identifier = NSUserInterfaceItemIdentifier("ParameterPanel.sourceDimensions")
+            sourceLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium)
+            sourceLabel.textColor = (model.probeError != nil) ? NSColor.systemRed : ThemeManager.shared.textSecondaryColor
+            sourceLabel.setAccessibilityElement(true)
+            sourceLabel.setAccessibilityLabel("Source dimensions")
+
+            let cropSizeLabel = NSTextField(labelWithString: "Crop: 0×0")
+            cropSizeLabel.identifier = NSUserInterfaceItemIdentifier("ParameterPanel.cropDimensions")
+            cropSizeLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
+            cropSizeLabel.textColor = ThemeManager.shared.accentColor
+            cropSizeLabel.setAccessibilityElement(true)
+            cropSizeLabel.setAccessibilityLabel("Crop dimensions")
+
+            sizeInfoRow.addArrangedSubview(sourceLabel)
+            sizeInfoRow.addArrangedSubview(NSTextField(labelWithString: "→"))
+            sizeInfoRow.addArrangedSubview(cropSizeLabel)
+            row.addArrangedSubview(sizeInfoRow)
+
+            // Ratio chips
             let ratioRow = NSStackView()
             ratioRow.orientation = .horizontal
             ratioRow.alignment = .centerY
             ratioRow.spacing = 6
             ratioRow.translatesAutoresizingMaskIntoConstraints = false
 
-            let ratios = [("16:9", 1920, 1080), ("1:1", 1080, 1080), ("9:16", 1080, 1920)]
+            let ratios = [("16:9", 16, 9), ("1:1", 1, 1), ("9:16", 9, 16)]
             for (rName, rw, rh) in ratios {
                 let chip = ChoiceChipView(title: rName, isSelected: false)
                 chip.onTap = { [weak self] in
-                    self?.model.updateValue(.rectangle(x: 0, y: 0, width: rw, height: rh), for: param.id)
-                    self?.refreshAllFields()
-                    self?.validateAndUpdate()
+                    guard let self = self else { return }
+                    if let cw = self.model.probeResult?.width, let ch = self.model.probeResult?.height, cw > 0, ch > 0 {
+                        let crop = CropCalculator.computeCrop(containerWidth: cw, containerHeight: ch, ratioWidth: rw, ratioHeight: rh)
+                        self.model.updateValue(.rectangle(x: crop.x, y: crop.y, width: crop.width, height: crop.height), for: param.id)
+                        self.refreshAllFields()
+                        self.validateAndUpdate()
+                    }
                 }
                 ratioRow.addArrangedSubview(chip)
             }
@@ -544,6 +577,28 @@ public final class ParameterPanelView: NSVisualEffectView {
             styleCoordField(xField, label: "X Offset")
             styleCoordField(yField, label: "Y Offset")
 
+            let handleCoordChange: () -> Void = { [weak self, weak wField, weak hField, weak xField, weak yField] in
+                guard let self = self else { return }
+                let w = Int(wField?.stringValue ?? "") ?? 0
+                let h = Int(hField?.stringValue ?? "") ?? 0
+                let x = Int(xField?.stringValue ?? "") ?? 0
+                let y = Int(yField?.stringValue ?? "") ?? 0
+                self.model.updateValue(.rectangle(x: x, y: y, width: w, height: h), for: param.id)
+                cropSizeLabel.stringValue = "Crop: \(w)×\(h)"
+                self.validateAndUpdate()
+            }
+
+            wField.target = self
+            wField.action = #selector(coordFieldChanged(_:))
+            hField.target = self
+            hField.action = #selector(coordFieldChanged(_:))
+            xField.target = self
+            xField.action = #selector(coordFieldChanged(_:))
+            yField.target = self
+            yField.action = #selector(coordFieldChanged(_:))
+
+            objc_setAssociatedObject(self, &AssociatedKeys.coordHandler, handleCoordChange, .OBJC_ASSOCIATION_COPY_NONATOMIC)
+
             coordRow.addArrangedSubview(NSTextField(labelWithString: "W:"))
             coordRow.addArrangedSubview(wField)
             coordRow.addArrangedSubview(NSTextField(labelWithString: "H:"))
@@ -555,7 +610,7 @@ public final class ParameterPanelView: NSVisualEffectView {
 
             row.addArrangedSubview(coordRow)
 
-            let updater: () -> Void = { [weak self, weak wField, weak hField, weak xField, weak yField] in
+            let updater: () -> Void = { [weak self, weak wField, weak hField, weak xField, weak yField, weak cropSizeLabel] in
                 guard let self = self,
                       let rectVal = self.model.values[param.id],
                       case .rectangle(let x, let y, let w, let h) = rectVal else { return }
@@ -563,6 +618,7 @@ public final class ParameterPanelView: NSVisualEffectView {
                 hField?.stringValue = "\(h)"
                 xField?.stringValue = "\(x)"
                 yField?.stringValue = "\(y)"
+                cropSizeLabel?.stringValue = "Crop: \(w)×\(h)"
             }
             fieldRefreshers.append(updater)
             updater()
@@ -639,7 +695,7 @@ public final class ParameterPanelView: NSVisualEffectView {
         validateAndUpdate()
     }
 
-    private func refreshAllFields() {
+    public func refreshAllFields() {
         for refresher in fieldRefreshers {
             refresher()
         }
@@ -655,6 +711,12 @@ public final class ParameterPanelView: NSVisualEffectView {
         } else {
             errorLabel.stringValue = ""
             errorLabel.isHidden = true
+        }
+    }
+
+    @objc private func coordFieldChanged(_ sender: NSTextField) {
+        if let handler = objc_getAssociatedObject(self, &AssociatedKeys.coordHandler) as? () -> Void {
+            handler()
         }
     }
 
@@ -674,6 +736,7 @@ private struct AssociatedKeys {
     static var paramId: UInt8 = 0
     static var readout: UInt8 = 0
     static var isBytesField: UInt8 = 0
+    static var coordHandler: UInt8 = 0
 }
 
 // MARK: - PresetChipView

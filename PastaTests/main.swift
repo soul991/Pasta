@@ -1837,7 +1837,8 @@ do {
 
     // 16.5 Crop rectangle picker and ratio preset
     if let cropAction = FormatRegistry.shared.action(for: dummyFile, actionID: "video.crop") {
-        let cropModel = ParameterFormModel(action: cropAction, loadLastUsed: false)
+        let probe = FakeMediaProbe(results: ["sample.mp4": MediaProbeResult(width: 1920, height: 1080, duration: 10.0)])
+        let cropModel = ParameterFormModel(action: cropAction, loadLastUsed: false, inputFile: dummyFile, probe: probe)
         let cropPanel = ParameterPanelView(model: cropModel, action: cropAction)
         assertTest(cropPanel.action.id == "video.crop", "16.5 Crop panel created successfully")
 
@@ -1889,6 +1890,114 @@ do {
     wheelVC.onCloseRequested = { closeRequested = true }
     wheelVC.cancelOperation(nil)
     assertTest(closeRequested, "16.8 cancelOperation without parameter panel requests wheel close")
+}
+
+// MARK: - 17. Crop Presets & Dynamic Media Probe Tests (Phase 10 Fix 1)
+print("\n--- 17. Crop Presets & Dynamic Media Probe Tests (Phase 10 Fix 1) ---")
+do {
+    // 17.1 CropCalculator: 1280x720 container with 1:1 ratio gives 720x720 at x=280, y=0
+    let crop1 = CropCalculator.computeCrop(containerWidth: 1280, containerHeight: 720, ratioWidth: 1, ratioHeight: 1)
+    assertTest(crop1.width == 720 && crop1.height == 720 && crop1.x == 280 && crop1.y == 0,
+               "17.1 CropCalculator: 1280x720 with 1:1 gives 720x720 at x=280, y=0")
+
+    // 17.2 CropCalculator: 1080x1920 container with 16:9 ratio gives 1080x608 centered vertically at x=0, y=656
+    let crop2 = CropCalculator.computeCrop(containerWidth: 1080, containerHeight: 1920, ratioWidth: 16, ratioHeight: 9)
+    assertTest(crop2.width == 1080 && crop2.height == 608 && crop2.x == 0 && crop2.y == 656,
+               "17.2 CropCalculator: 1080x1920 with 16:9 gives 1080x608 centered at x=0, y=656")
+
+    // 17.3 CropCalculator: 1920x1080 container with 16:9 ratio gives full frame at x=0, y=0
+    let crop3 = CropCalculator.computeCrop(containerWidth: 1920, containerHeight: 1080, ratioWidth: 16, ratioHeight: 9)
+    assertTest(crop3.width == 1920 && crop3.height == 1080 && crop3.x == 0 && crop3.y == 0,
+               "17.3 CropCalculator: 1920x1080 with 16:9 gives 1920x1080 at x=0, y=0 (full frame)")
+
+    // 17.4 CropCalculator: non-standard odd dimensions produce even-rounded width and height
+    let crop4 = CropCalculator.computeCrop(containerWidth: 1001, containerHeight: 701, ratioWidth: 1, ratioHeight: 1)
+    assertTest(crop4.width % 2 == 0 && crop4.height % 2 == 0 && crop4.width <= 1001 && crop4.height <= 701,
+               "17.4 CropCalculator produces even-rounded dimensions on odd containers")
+
+    // 17.5 FakeMediaProbe provides dimensions, duration, and file size
+    let probe = FakeMediaProbe(results: [
+        "landscape.mp4": MediaProbeResult(width: 1280, height: 720, duration: 42.0, fileSize: 10_000_000),
+        "portrait.mp4": MediaProbeResult(width: 1080, height: 1920, duration: 15.5, fileSize: 5_000_000)
+    ])
+    let landRes = try probe.probe(url: URL(fileURLWithPath: "landscape.mp4"))
+    assertTest(landRes.width == 1280 && landRes.height == 720 && landRes.duration == 42.0 && landRes.fileSize == 10_000_000,
+               "17.5 FakeMediaProbe returns probed dimensions and metadata")
+
+    // 17.6 ParameterFormModel computes crop presets dynamically from probed video dimensions
+    let landFile = URL(fileURLWithPath: "landscape.mp4")
+    if let cropAction = FormatRegistry.shared.action(for: landFile, actionID: "video.crop") {
+        let model = ParameterFormModel(action: cropAction, loadLastUsed: false, inputFile: landFile, probe: probe)
+        assertTest(model.isValid, "17.6 ParameterFormModel with probed file is initially valid")
+        assertTest(model.presets.count == 3, "17.6 Crop action generates 3 dynamic ratio presets (16:9, 1:1, 9:16)")
+
+        if let p11 = model.presets.first(where: { $0.id == "crop_1_1" }) {
+            model.applyPreset(p11)
+            if case .rectangle(let x, let y, let w, let h)? = model.values["rectangle"] {
+                assertTest(w == 720 && h == 720 && x == 280 && y == 0,
+                           "17.6 Applying 1:1 preset on 1280x720 computes 720x720 at x=280, y=0")
+            } else {
+                assertTest(false, "17.6 rectangle value not set after applying 1:1 preset")
+            }
+        } else {
+            assertTest(false, "17.6 crop_1_1 preset not found")
+        }
+
+        // 17.7 Out-of-bounds crop rejected with readable error message
+        model.updateValue(.rectangle(x: 700, y: 100, width: 720, height: 720), for: "rectangle")
+        assertTest(!model.isValid, "17.7 Crop rectangle exceeding container boundary is invalid")
+        assertTest(model.validationErrors["rectangle"]?.contains("exceeds container dimensions") == true,
+                   "17.7 Validation error explains that crop rectangle exceeds container dimensions")
+    } else {
+        assertTest(false, "17.6 video.crop action not found")
+    }
+
+    // 17.8 Probing failure shows readable error instead of guessing presets
+    let failingProbe = FakeMediaProbe(shouldThrow: PastaError.invalidInput("Corrupt header"))
+    let corruptFile = URL(fileURLWithPath: "corrupt.mp4")
+    if let cropAction = FormatRegistry.shared.action(for: corruptFile, actionID: "video.crop") {
+        let failModel = ParameterFormModel(action: cropAction, loadLastUsed: false, inputFile: corruptFile, probe: failingProbe)
+        assertTest(!failModel.isValid, "17.8 ParameterFormModel is invalid when probing fails")
+        assertTest(failModel.presets.isEmpty, "17.8 No guessed presets are created when probing fails")
+        assertTest(failModel.validationErrors["rectangle"]?.contains("Could not probe media for crop") == true,
+                   "17.8 Validation error contains readable message explaining probe failure")
+    } else {
+        assertTest(false, "17.8 video.crop action not found")
+    }
+
+    // 17.9 ParameterPanelView displays real source and crop size readouts
+    if let cropAction = FormatRegistry.shared.action(for: landFile, actionID: "video.crop") {
+        let panelModel = ParameterFormModel(action: cropAction, loadLastUsed: false, inputFile: landFile, probe: probe)
+        let panel = ParameterPanelView(model: panelModel, action: cropAction)
+        assertTest(panel.subviews.count > 0, "17.9 ParameterPanelView renders crop interface")
+
+        func findLabel(identifier: String, in view: NSView) -> NSTextField? {
+            if let tf = view as? NSTextField, tf.identifier?.rawValue == identifier {
+                return tf
+            }
+            for sub in view.subviews {
+                if let found = findLabel(identifier: identifier, in: sub) {
+                    return found
+                }
+            }
+            return nil
+        }
+
+        let srcLabel = findLabel(identifier: "ParameterPanel.sourceDimensions", in: panel)
+        let cropLabel = findLabel(identifier: "ParameterPanel.cropDimensions", in: panel)
+        assertTest(srcLabel?.stringValue == "Source: 1280×720", "17.9 Source dimension label displays real 1280×720 probed size")
+        assertTest(cropLabel?.stringValue == "Crop: 1280×720", "17.9 Initial crop dimension label displays full frame 1280×720")
+
+        if let p11 = panelModel.presets.first(where: { $0.id == "crop_1_1" }) {
+            panelModel.applyPreset(p11)
+            panel.refreshAllFields()
+            assertTest(cropLabel?.stringValue == "Crop: 720×720", "17.9 Crop dimension label updates to 720×720 after applying 1:1 preset")
+        } else {
+            assertTest(false, "17.9 crop_1_1 preset not found")
+        }
+    } else {
+        assertTest(false, "17.9 video.crop action not found")
+    }
 }
 
 print("\n==================================================")
