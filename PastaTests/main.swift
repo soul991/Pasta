@@ -2587,12 +2587,16 @@ do {
     dropVC2.executeConversion(action: fakeSleepAction)
     Thread.sleep(forTimeInterval: 0.1)
 
+    let activeQ = dropVC2.currentBatchQueue
+    assertTest(activeQ != nil, "20.10 Batch queue was created for drop window")
+
     // Close window via viewWillDisappear
     dropVC2.viewWillDisappear()
     Thread.sleep(forTimeInterval: 0.3)
 
-    assertTest(dropVC2.currentBatchQueue?.runningCount == 0, "20.10 Window close cancels all running batch jobs")
-    assertTest(dropVC2.currentBatchQueue?.pendingCount == 0, "20.10 Window close clears all queued batch jobs")
+    assertTest(dropVC2.currentBatchQueue == nil, "20.10 Window close clears currentBatchQueue reference")
+    assertTest(activeQ?.runningCount == 0, "20.10 Window close cancels all running batch jobs")
+    assertTest(activeQ?.pendingCount == 0, "20.10 Window close clears all queued batch jobs")
     let leftoverAfterClose = (try? FileManager.default.contentsOfDirectory(atPath: NSTemporaryDirectory()))?.filter { $0.hasPrefix("Pasta_") } ?? []
     assertTest(leftoverAfterClose.isEmpty, "20.10 Zero leftover Pasta_* directories after window close")
 
