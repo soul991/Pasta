@@ -26,6 +26,7 @@ public final class RadialWheelOverlayViewController: NSViewController {
     private let compactProgressLabel = NSTextField(labelWithString: "")
     private let compactProgressButton = NSButton(title: "Reveal", target: nil, action: nil)
     private var lastOutputURL: URL?
+    private var lastErrorMessage: String?
 
     public override func loadView() {
         // Frame sized via WheelGeometry to accommodate all 8 nodes, max 1.06 hover scale,
@@ -198,6 +199,11 @@ public final class RadialWheelOverlayViewController: NSViewController {
     @objc private func revealOutputClicked() {
         if let url = lastOutputURL {
             NSWorkspace.shared.activateFileViewerSelecting([url])
+        } else if let errorMsg = lastErrorMessage {
+            let details = "Pasta Error Report\nAction error: \(errorMsg)\nTimestamp: \(ISO8601DateFormatter().string(from: Date()))"
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(details, forType: .string)
+            compactProgressLabel.stringValue = "Error copied to clipboard ✓"
         }
     }
 
@@ -252,6 +258,11 @@ public final class RadialWheelOverlayViewController: NSViewController {
         // Layout 8 slots via WheelLayoutModel
         let slots = WheelLayoutModel.shared.slots(for: firstFile, isAdvanced: isOptionHeld)
         let orbitRadius = WheelLayoutModel.shared.currentSize.orbitRadius
+
+        let hasPrimaryActions = slots.contains(where: { $0.action != nil })
+        if !hasPrimaryActions {
+            centerDisc.configureUnsupported(fileName: firstFile.lastPathComponent, fileExtension: firstFile.pathExtension)
+        }
 
         for slot in slots {
             let angle = slot.angle
@@ -756,10 +767,30 @@ public final class RadialWheelOverlayViewController: NSViewController {
                 DispatchQueue.main.async {
                     guard let self = self else { return }
                     self.lastOutputURL = output
+                    self.lastErrorMessage = nil
                     if keepOpen {
                         self.compactProgressContainer.isHidden = false
                         self.compactProgressButton.isHidden = false
-                        self.compactProgressLabel.stringValue = "Done: \(output.lastPathComponent)"
+                        self.compactProgressButton.title = "Reveal"
+
+                        let inSize = (try? FileManager.default.attributesOfItem(atPath: file.path)[.size] as? Int64) ?? 0
+                        let outSize = (try? FileManager.default.attributesOfItem(atPath: output.path)[.size] as? Int64) ?? 0
+                        if inSize > 0 && outSize > 0 {
+                            let inMB = String(format: "%.1f MB", Double(inSize) / 1_048_576.0)
+                            let outMB = String(format: "%.1f MB", Double(outSize) / 1_048_576.0)
+                            if outSize < inSize {
+                                let savedPct = Int(round((1.0 - Double(outSize) / Double(inSize)) * 100.0))
+                                self.compactProgressLabel.stringValue = "Done · Saved \(savedPct)% (\(inMB) → \(outMB))"
+                            } else if outSize > inSize {
+                                let incPct = Int(round((Double(outSize) / Double(inSize) - 1.0) * 100.0))
+                                self.compactProgressLabel.stringValue = "Done · (\(inMB) → \(outMB) [+\(incPct)%])"
+                            } else {
+                                self.compactProgressLabel.stringValue = "Done · \(output.lastPathComponent)"
+                            }
+                        } else {
+                            self.compactProgressLabel.stringValue = "Done: \(output.lastPathComponent)"
+                        }
+
                         if let img = NSImage(systemSymbolName: "checkmark.circle.fill", accessibilityDescription: nil) {
                             self.compactProgressIcon.image = img
                             self.compactProgressIcon.contentTintColor = .systemGreen
@@ -771,9 +802,12 @@ public final class RadialWheelOverlayViewController: NSViewController {
             } catch {
                 DispatchQueue.main.async {
                     guard let self = self else { return }
+                    self.lastOutputURL = nil
+                    self.lastErrorMessage = error.localizedDescription
                     if keepOpen {
                         self.compactProgressContainer.isHidden = false
-                        self.compactProgressButton.isHidden = true
+                        self.compactProgressButton.isHidden = false
+                        self.compactProgressButton.title = "Copy Error"
                         self.compactProgressLabel.stringValue = "Error: \(error.localizedDescription)"
                         if let img = NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: nil) {
                             self.compactProgressIcon.image = img

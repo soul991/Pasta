@@ -3330,6 +3330,84 @@ do {
     } else {
         assertTest(false, "25.7 assets/MenuBarIcon.pdf missing")
     }
+
+    // =======================================================
+    // 26. Phase 10B Step 6: Results, Errors & Onboarding Tests
+    // =======================================================
+    print("\n--- 26. Phase 10B Step 6: Results, Errors & Onboarding Tests ---")
+
+    // 26.1 JobStatusRowView: running with ETA & Cancel
+    let dummyAction = ConversionAction(
+        id: "image.to.jpg",
+        displayName: "JPG",
+        outputExtension: "jpg",
+        category: .image
+    )
+    let statusRow = JobStatusRowView(inputURL: URL(fileURLWithPath: "sample.png"), action: dummyAction)
+    statusRow.update(state: .running(etaSeconds: 4.0))
+    // Give main queue block time to execute
+    RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
+    assertTest(statusRow.currentStatusText.contains("~4s left"), "26.1 JobStatusRowView shows ETA in running state (\(statusRow.currentStatusText))")
+    assertTest(statusRow.actionButtonTitle == "Cancel", "26.1 JobStatusRowView actionButton is 'Cancel' while running")
+
+    var cancelCalled = false
+    statusRow.onCancel = { cancelCalled = true }
+    statusRow.actionButton.performClick(nil)
+    assertTest(cancelCalled == true, "26.1 Clicking actionButton while running calls onCancel")
+
+    // 26.2 JobStatusRowView: real size change calculation & formatting
+    assertTest(statusRow.formatByteSize(500) == "500 B", "26.2 formatByteSize handles bytes")
+    assertTest(statusRow.formatByteSize(2048) == "2.0 KB", "26.2 formatByteSize handles kilobytes")
+    assertTest(statusRow.formatByteSize(5_242_880) == "5.0 MB", "26.2 formatByteSize handles megabytes")
+
+    // 26.3 JobStatusRowView: error report copying
+    statusRow.update(state: .failed("Corrupt input file header"))
+    RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
+    assertTest(statusRow.actionButtonTitle == "Copy Details", "26.3 JobStatusRowView actionButton is 'Copy Details' on failure")
+    assertTest(statusRow.currentStatusText.contains("Corrupt input"), "26.3 JobStatusRowView displays failure message")
+
+    statusRow.actionButton.performClick(nil)
+    let copiedText = NSPasteboard.general.string(forType: .string) ?? ""
+    assertTest(copiedText.contains("Pasta Error Report"), "26.3 Copy Details copied error report header to pasteboard")
+    assertTest(copiedText.contains("Corrupt input file header"), "26.3 Copy Details copied specific error message")
+    assertTest(copiedText.contains("sample.png"), "26.3 Copy Details included input filename")
+
+    // 26.4 BatchProgressRowView: ETA estimation updates
+    let batchRow = BatchProgressRowView(totalCount: 10, action: dummyAction)
+    batchRow.update(completed: 5, failed: 0)
+    RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
+    assertTest(batchRow.completedCount == 5, "26.4 BatchProgressRow completed count is 5")
+    assertTest(batchRow.summaryLabel.stringValue.contains("5 of 10 complete"), "26.4 BatchProgressRow updates summary label")
+
+    // 26.5 AccessibilityOnboardingView: UI components & layout
+    let onboardingView = AccessibilityOnboardingView()
+    assertTest(!onboardingView.statusBadge.stringValue.isEmpty, "26.5 AccessibilityOnboardingView has status badge")
+    assertTest(onboardingView.openSettingsButton.title == "Open System Settings", "26.5 AccessibilityOnboardingView has Open System Settings button")
+    assertTest(onboardingView.dismissButton.title == "Later", "26.5 AccessibilityOnboardingView has dismiss button")
+
+    // 26.6 AccessibilityOnboardingView: permission detection
+    var grantedTriggered = false
+    onboardingView.onPermissionGranted = { grantedTriggered = true }
+    // Call checkPermission directly to simulate grant
+    if DragMonitor.isAccessibilityTrusted() {
+        onboardingView.checkPermission()
+        assertTest(grantedTriggered == true, "26.6 AccessibilityOnboardingView triggers callback when trusted")
+        assertTest(onboardingView.statusBadge.stringValue.contains("Granted"), "26.6 Status badge updates to Granted")
+    } else {
+        assertTest(onboardingView.statusBadge.stringValue.contains("Waiting"), "26.6 Status badge indicates waiting when untrusted")
+    }
+
+    // 26.7 Unsupported & Empty States
+    let discUnsupported = RadialWheelCenterDiscView()
+    discUnsupported.configureUnsupported(fileName: "archive.xyz", fileExtension: "xyz")
+    assertTest(discUnsupported.displayedFileName == "archive.xyz", "26.7 Center disc displays unsupported filename")
+    assertTest(discUnsupported.displayedDetail.contains("No actions for .xyz"), "26.7 Center disc displays unsupported detail label")
+
+    let dropWindowUnsupported = DropWindowViewController()
+    dropWindowUnsupported.loadView()
+    dropWindowUnsupported.viewDidLoad()
+    dropWindowUnsupported.handleFilesDropped([URL(fileURLWithPath: "test.xyz")])
+    assertTest(dropWindowUnsupported.files.count == 1, "26.7 DropWindowViewController receives unsupported file")
 }
 
 print("\n==================================================")

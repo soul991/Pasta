@@ -8,6 +8,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var dropWindowController: DropWindowViewController!
     private var wheelPanel: RadialWheelOverlayPanel!
     private var settingsWindowController: SettingsWindowController?
+    private var onboardingWindowController: AccessibilityOnboardingWindowController?
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -135,19 +136,13 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func requestAccessibility() {
-        let trusted = DragMonitor.isAccessibilityTrusted(prompt: true)
+        let trusted = DragMonitor.isAccessibilityTrusted(prompt: false)
         if !trusted {
-            let alert = NSAlert()
-            alert.messageText = "Accessibility & Input Monitoring Required"
-            alert.informativeText = "Pasta needs Accessibility permissions so it can detect Shift-drag gestures and allow the Esc key to close the wheel when other applications are active.\n\nPlease enable Pasta under System Settings → Privacy & Security → Accessibility."
-            alert.alertStyle = .informational
-            alert.addButton(withTitle: "Open System Settings")
-            alert.addButton(withTitle: "Later")
-            if alert.runModal() == .alertFirstButtonReturn {
-                if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
-                    NSWorkspace.shared.open(url)
-                }
+            if onboardingWindowController == nil {
+                onboardingWindowController = AccessibilityOnboardingWindowController()
             }
+            onboardingWindowController?.showWindow(nil)
+            NSApp.activate(ignoringOtherApps: true)
         }
     }
 

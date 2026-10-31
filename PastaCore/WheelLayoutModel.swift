@@ -154,6 +154,13 @@ public struct WheelSlot: Equatable {
     public let kind: WheelSlotKind
     public let angle: CGFloat // Radians (-pi/2 starting at top)
 
+    public var action: ConversionAction? {
+        if case .action(let act) = kind {
+            return act
+        }
+        return nil
+    }
+
     public init(slotIndex: Int, kind: WheelSlotKind, angle: CGFloat) {
         self.slotIndex = slotIndex
         self.kind = kind

@@ -8,6 +8,8 @@ public final class BatchProgressRowView: NSView {
     public private(set) var completedCount: Int = 0
     public private(set) var failedCount: Int = 0
     public private(set) var isCancelled: Bool = false
+    public private(set) var startTime = Date()
+    public var etaSeconds: Double?
 
     public var onCancel: (() -> Void)?
 
@@ -101,6 +103,7 @@ public final class BatchProgressRowView: NSView {
 
             if totalDone >= self.totalCount {
                 self.cancelButton.isHidden = true
+                self.etaSeconds = 0
                 if failed == 0 {
                     self.summaryLabel.stringValue = "All \(self.totalCount) complete"
                 } else {
@@ -108,7 +111,16 @@ public final class BatchProgressRowView: NSView {
                 }
             } else {
                 let failSuffix = failed > 0 ? " (\(failed) failed)" : ""
-                self.summaryLabel.stringValue = "\(totalDone) of \(self.totalCount) complete\(failSuffix)"
+                let elapsed = Date().timeIntervalSince(self.startTime)
+                if totalDone > 0 && elapsed > 0.1 {
+                    let rate = Double(totalDone) / elapsed
+                    let remaining = Double(self.totalCount - totalDone) / rate
+                    self.etaSeconds = remaining
+                    let etaSuffix = remaining >= 1.0 ? " · ~\(Int(remaining))s left" : ""
+                    self.summaryLabel.stringValue = "\(totalDone) of \(self.totalCount) complete\(failSuffix)\(etaSuffix)"
+                } else {
+                    self.summaryLabel.stringValue = "\(totalDone) of \(self.totalCount) complete\(failSuffix)"
+                }
             }
             self.setAccessibilityLabel("Batch progress: \(self.summaryLabel.stringValue)")
         }

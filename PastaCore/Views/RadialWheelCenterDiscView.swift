@@ -179,6 +179,17 @@ public final class RadialWheelCenterDiscView: NSView {
         detailLabel.stringValue = "PASTA"
     }
 
+    public func configureUnsupported(fileName: String, fileExtension: String) {
+        countBadge.isHidden = true
+        let img = NSImage(systemSymbolName: "questionmark.circle", accessibilityDescription: "Unsupported format")
+        img?.isTemplate = true
+        iconImageView.image = img
+        iconImageView.contentTintColor = .secondaryLabelColor
+        fileNameLabel.stringValue = fileName
+        detailLabel.stringValue = "No actions for .\(fileExtension.lowercased())"
+        detailLabel.textColor = .secondaryLabelColor
+    }
+
     public func configure(fileURL: URL?, isAdvanced: Bool) {
         guard let fileURL = fileURL else {
             configureEmpty()

@@ -194,6 +194,30 @@ CI tests verify the mathematical state machine against simulated clock timestamp
 
 ---
 
+## 4.5 Results, Errors, Size Changes & Accessibility Onboarding (Phase 10B Step 6)
+
+- [ ] **Progress Rows with Live ETA & Cancel**:
+  - Start converting a large video or audio file.
+  - **Expected:** Progress row displays active spinner, estimated remaining time (e.g. `Converting... ~4s left`), and an inline "Cancel" button.
+  - Click "Cancel": job process is immediately terminated via SIGTERM/SIGKILL, leaving 0 leftover processes and 0 temp files.
+- [ ] **Real Size Change & "Reveal" in Finder**:
+  - Convert an image or compress a video file.
+  - **Expected:** On completion, the row displays exact before-and-after sizes and percentage change (e.g. `Done · Saved 64% (2.4 MB → 860.0 KB)`).
+  - Click "Reveal": Finder activates and selects the converted file in its folder.
+- [ ] **Error Reporting & "Copy Details"**:
+  - Trigger a failing conversion (e.g. corrupt or incompatible file).
+  - **Expected:** Row highlights in red with a clear human-readable error description and a "Copy Details" button.
+  - Click "Copy Details": copies formatted diagnostic report containing file path, action name, error message, and timestamp to the clipboard.
+- [ ] **Unsupported File & Empty States**:
+  - Drag an unsupported file type (e.g. `.dmg` or `.xyz`) onto the wheel.
+  - **Expected:** Center hub displays `No actions for .xyz` and `Unsupported format` with secondary muted styling.
+- [ ] **First-Run Accessibility Onboarding**:
+  - Launch Pasta on a system where Accessibility permission is not yet granted, or click "Enable Accessibility Permission..." in the menu bar.
+  - **Expected:** A clean onboarding modal displays step-by-step instructions with an "Open System Settings" button.
+  - Toggle permission in macOS System Settings: onboarding window detects the grant live without requiring app restart and confirms with "Permission Granted ✓".
+
+---
+
 ## 5. Mode Toggling: Convert vs. Advanced Mode (<kbd>⌥</kbd>)
 
 - [ ] **Quick Option Tap (< 250 ms)**:

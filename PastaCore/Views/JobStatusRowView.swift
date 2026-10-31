@@ -2,24 +2,33 @@ import Foundation
 import AppKit
 
 public final class JobStatusRowView: NSView {
-    public enum State {
+    public enum State: Equatable {
         case queued
-        case running
+        case running(etaSeconds: Double?)
         case completed(URL)
         case failed(String)
+
+        public static var running: State {
+            return .running(etaSeconds: nil)
+        }
     }
 
     public let inputURL: URL
     public let action: ConversionAction
     public var onDismiss: (() -> Void)?
+    public var onCancel: (() -> Void)?
+
+    public private(set) var currentState: State = .queued
+    public private(set) var lastError: String?
 
     public var currentStatusText: String { statusLabel.stringValue }
+    public var actionButtonTitle: String { actionButton.title }
 
     private let titleLabel = NSTextField(labelWithString: "")
-    private let statusLabel = NSTextField(labelWithString: "")
+    public let statusLabel = NSTextField(labelWithString: "")
     private let spinner = NSProgressIndicator()
     private let statusIcon = NSImageView()
-    private let actionButton = NSButton(title: "Reveal", target: nil, action: nil)
+    public let actionButton = NSButton(title: "Reveal", target: nil, action: nil)
 
     public init(inputURL: URL, action: ConversionAction) {
         self.inputURL = inputURL
@@ -101,6 +110,7 @@ public final class JobStatusRowView: NSView {
     private var currentOutputURL: URL?
 
     public func update(state: State) {
+        self.currentState = state
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             switch state {
@@ -112,15 +122,21 @@ public final class JobStatusRowView: NSView {
                 self.statusIcon.contentTintColor = .secondaryLabelColor
                 self.statusLabel.stringValue = "Queued"
                 self.statusLabel.textColor = .secondaryLabelColor
-                self.actionButton.isHidden = true
+                self.actionButton.title = "Cancel"
+                self.actionButton.isHidden = false
 
-            case .running:
+            case .running(let eta):
                 self.spinner.isHidden = false
                 self.spinner.startAnimation(nil)
                 self.statusIcon.isHidden = true
-                self.statusLabel.stringValue = "Converting..."
+                if let eta = eta, eta > 0 {
+                    self.statusLabel.stringValue = String(format: "Converting... ~%.0fs left", eta)
+                } else {
+                    self.statusLabel.stringValue = "Converting..."
+                }
                 self.statusLabel.textColor = .secondaryLabelColor
-                self.actionButton.isHidden = true
+                self.actionButton.title = "Cancel"
+                self.actionButton.isHidden = false
 
             case .completed(let url):
                 self.currentOutputURL = url
@@ -130,15 +146,21 @@ public final class JobStatusRowView: NSView {
                 self.statusIcon.image = NSImage(systemSymbolName: "checkmark.circle.fill", accessibilityDescription: nil)
                 self.statusIcon.contentTintColor = .systemGreen
 
-                // Safe to swallow: file size comparison for status display is informational; fallback to 0 yields standard completion string
                 let inSize = (try? FileManager.default.attributesOfItem(atPath: self.inputURL.path)[.size] as? Int64) ?? 0
                 let outSize = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? 0
 
-                if inSize > 0 && outSize > 0 && outSize < inSize {
-                    let savedPct = Int(round((1.0 - Double(outSize) / Double(inSize)) * 100.0))
-                    let inMB = String(format: "%.1f MB", Double(inSize) / 1_048_576.0)
-                    let outMB = String(format: "%.1f MB", Double(outSize) / 1_048_576.0)
-                    self.statusLabel.stringValue = "Done · Saved \(savedPct)% (\(inMB) → \(outMB))"
+                if inSize > 0 && outSize > 0 {
+                    let inStr = self.formatByteSize(inSize)
+                    let outStr = self.formatByteSize(outSize)
+                    if outSize < inSize {
+                        let savedPct = Int(round((1.0 - Double(outSize) / Double(inSize)) * 100.0))
+                        self.statusLabel.stringValue = "Done · Saved \(savedPct)% (\(inStr) → \(outStr))"
+                    } else if outSize > inSize {
+                        let incPct = Int(round((Double(outSize) / Double(inSize) - 1.0) * 100.0))
+                        self.statusLabel.stringValue = "Done · (\(inStr) → \(outStr) [+\(incPct)%])"
+                    } else {
+                        self.statusLabel.stringValue = "Done · \(outStr)"
+                    }
                 } else {
                     self.statusLabel.stringValue = "Done: \(url.lastPathComponent)"
                 }
@@ -148,6 +170,7 @@ public final class JobStatusRowView: NSView {
                 self.actionButton.isHidden = false
 
             case .failed(let error):
+                self.lastError = error
                 self.spinner.stopAnimation(nil)
                 self.spinner.isHidden = true
                 self.statusIcon.isHidden = false
@@ -155,18 +178,45 @@ public final class JobStatusRowView: NSView {
                 self.statusIcon.contentTintColor = .systemRed
                 self.statusLabel.stringValue = error
                 self.statusLabel.textColor = .systemRed
-                self.actionButton.title = "Dismiss"
+                self.actionButton.title = "Copy Details"
                 self.actionButton.isHidden = false
             }
         }
     }
 
     @objc private func actionButtonClicked() {
-        if let out = currentOutputURL {
-            NSWorkspace.shared.activateFileViewerSelecting([out])
-        } else {
+        switch currentState {
+        case .running:
+            onCancel?()
+            update(state: .failed("Conversion cancelled by user"))
+        case .completed(let url):
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        case .failed(let err):
+            copyErrorDetails(err)
+        case .queued:
+            onCancel?()
             onDismiss?()
             removeFromSuperview()
         }
+    }
+
+    public func copyErrorDetails(_ errorText: String) {
+        let details = """
+        Pasta Error Report
+        File: \(inputURL.path)
+        Action: \(action.displayName) (\(action.id))
+        Error: \(errorText)
+        Timestamp: \(ISO8601DateFormatter().string(from: Date()))
+        """
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(details, forType: .string)
+        statusLabel.stringValue = "Error copied to clipboard ✓"
+    }
+
+    public func formatByteSize(_ bytes: Int64) -> String {
+        let b = Double(bytes)
+        if b < 1024 { return "\(bytes) B" }
+        if b < 1024 * 1024 { return String(format: "%.1f KB", b / 1024.0) }
+        return String(format: "%.1f MB", b / 1_048_576.0)
     }
 }

@@ -21,6 +21,7 @@
 | **Phase 10B Step 3** | Wheel Redesign (Circular Backplate, 8 Slots, 64pt Glass Nodes, Hub, More Section, Customize Sheet, WheelLayoutModel) | **Complete** | 453/453 Unit/Integration tests passed; 33/33 Section 8 tests passed; 0 leaks, 0 network |
 | **Phase 10B Step 4** | Liquid Glass Rendering, Wallpaper Scrim, High-Contrast Modes, VoiceOver & Keyboard Nav | **Complete** | 508/508 Unit/Integration tests passed; 33/33 Section 8 tests passed; 0 leaks, 0 network |
 | **Phase 10B Step 5** | Brand Presence (MenuBarIcon 18pt Template, Pasta Icon in Hub/Settings/About, AppIcon.icns, CFBundleIconFile) | **Complete** | 529/529 Unit/Integration tests passed; 33/33 Section 8 tests passed; 0 leaks, 0 network |
+| **Phase 10B Step 6** | Results, Errors, Size Changes, Reveal in Finder, Copy Details, Accessibility Onboarding & Settings | **Complete** | 549/549 Unit/Integration tests passed; 33/33 Section 8 tests passed; 0 leaks, 0 network |
 
 ---
 
@@ -93,7 +94,8 @@
 | **Section 22** | Phase 10B Step 2: Anti-clipping, 520x560 panel, WheelGeometry, 18pt glow, screen edge repositioning for all 4 edges & corners | `233e400` | 402/402 Unit, 33/33 Sec8 | **Complete** |
 | **Section 23** | Phase 10B Step 3: Circular backplate (400pt/128pt), 8 slots, 64pt nodes, hub, More paged search, Customize sheet, WheelLayoutModel | `5d42c0b` | 453/453 Unit, 33/33 Sec8 | **Complete** |
 | **Section 24** | Phase 10B Step 4: Liquid Glass rendering, wallpaper adaptivity scrim, accessibility modes, VoiceOver, keyboard nav | `0664ab6` | 508/508 Unit, 33/33 Sec8 | **Complete** |
-| **Section 25** | Phase 10B Step 5: Brand presence (MenuBarIcon 18pt template, hub idle icon, Settings header, About panel, AppIcon.icns) | In Progress (Step 5) | 529/529 Unit, 33/33 Sec8 | **Complete** |
+| **Section 25** | Phase 10B Step 5: Brand presence (MenuBarIcon 18pt template, hub idle icon, Settings header, About panel, AppIcon.icns) | `dd3acb1` | 529/529 Unit, 33/33 Sec8 | **Complete** |
+| **Section 26** | Phase 10B Step 6: Results, errors, real size changes, Reveal in Finder, Copy Details, Accessibility Onboarding & Settings | In Progress (Step 6) | 549/549 Unit, 33/33 Sec8 | **Complete** |
 
 ---
 
@@ -192,6 +194,13 @@
 | Idle wheel hub displays rigatoni Pasta icon tinted with accent color | Phase 10B Step 5 | Hub Brand | **DONE** | `25.5 Center disc empty state displays rigatoni Pasta icon` |
 | SettingsWindowController header contains brand icon, 'Pasta' title, and subtitle | Phase 10B Step 5 | Settings UI | **DONE** | `25.6 SettingsWindowController header contains brand icon and title` |
 | Bundle assets valid (AppIcon.icns > 50KB, MenuBarIcon.pdf vector template < 5KB) | Phase 10B Step 5 | Bundle Assets | **DONE** | `25.7 Bundle assets existence and size check` |
+| Progress rows with ETA and active Cancel button | Phase 10B Step 6 | Results & Progress | **DONE** | `26.1 JobStatusRowView shows ETA in running state and Cancel button` |
+| Real size change computation and formatting (`inMB → outMB [-XX%]`) | Phase 10B Step 6 | Results & Progress | **DONE** | `26.2 formatByteSize handles bytes, KB, and MB` |
+| Readable errors with 'Copy Details' clipboard reporting | Phase 10B Step 6 | Error Reporting | **DONE** | `26.3 Copy Details copied error report header to pasteboard` |
+| BatchProgressRowView ETA estimation during multi-file conversion | Phase 10B Step 6 | Batch Progress | **DONE** | `26.4 BatchProgressRow completed count and summary label` |
+| First-run Accessibility onboarding view & permission detection polling | Phase 10B Step 6 | Onboarding | **DONE** | `26.5–26.6 AccessibilityOnboardingView UI and permission detection` |
+| Unsupported file and empty states in Wheel and Drop Window | Phase 10B Step 6 | Empty States | **DONE** | `26.7 Center disc and DropWindow unsupported file states` |
+
 
 
 
