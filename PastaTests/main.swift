@@ -1215,6 +1215,7 @@ do {
     }
 
     let delRangeOut = testTempDir.appendingPathComponent("del_range_test.pdf")
+    try? FileManager.default.removeItem(at: delRangeOut)
     do {
         try PDFTools.shared.reorganize(input: threeNumberedPdf, output: delRangeOut, pages: "1-3", rotate: "0", deletePages: "2-3", runner: JobRunner.shared, jobId: UUID())
         let totalDel = try PDFTools.shared.totalPages(url: delRangeOut)

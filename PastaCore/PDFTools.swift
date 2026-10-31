@@ -7,10 +7,19 @@ public final class PDFTools {
     public func totalPages(url: URL) throws -> Int {
         let inv = Invocation(toolName: "qpdf", arguments: ["--show-npages", "--", url.path])
         let (outStr, _) = try JobRunner.shared.executeCapture(invocation: inv, timeoutSeconds: 30)
-        guard let count = Int(outStr.trimmingCharacters(in: .whitespacesAndNewlines)), count > 0 else {
-            throw PastaError.executionFailed(tool: "qpdf", exitCode: 1, output: "Failed to determine page count for '\(url.lastPathComponent)'")
+        let lines = outStr.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        for line in lines.reversed() {
+            if let count = Int(line), count > 0 {
+                return count
+            }
         }
-        return count
+        let tokens = outStr.components(separatedBy: .whitespacesAndNewlines)
+        for tok in tokens.reversed() {
+            if let count = Int(tok), count > 0 {
+                return count
+            }
+        }
+        throw PastaError.executionFailed(tool: "qpdf", exitCode: 1, output: "Failed to determine page count for '\(url.lastPathComponent)': \(outStr.trimmingCharacters(in: .whitespacesAndNewlines))")
     }
 
     public func reorganize(
