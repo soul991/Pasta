@@ -454,13 +454,6 @@ public final class ParameterFormModel {
             return false
         }
 
-        if let err = probeError, parameters.contains(where: { $0.id == "rectangle" || $0.id == "end" || $0.kind == .timeRange }) {
-            let msg = "Could not probe media: \(err)"
-            validationErrors["probe"] = msg
-            isValid = false
-            return false
-        }
-
         for f in fields {
             do {
                 try InputValidator.validateParameters(
