@@ -2000,6 +2000,116 @@ do {
     }
 }
 
+// MARK: - 18. Probed Trim Defaults, Duration Validation & Target-Size Warnings (Phase 10 Fix 2)
+print("\n--- 18. Probed Trim Defaults, Duration Validation & Target-Size Warnings (Phase 10 Fix 2) ---")
+do {
+    let videoFile = URL(fileURLWithPath: "clip.mp4")
+    let audioFile = URL(fileURLWithPath: "song.mp3")
+    let imgFile = URL(fileURLWithPath: "photo.jpg")
+
+    let fakeProbe = FakeMediaProbe(results: [
+        "clip.mp4": MediaProbeResult(width: 1920, height: 1080, duration: 45.0, fileSize: 12_000_000),
+        "song.mp3": MediaProbeResult(duration: 180.5, fileSize: 4_000_000),
+        "photo.jpg": MediaProbeResult(width: 2000, height: 1500, fileSize: 2_000_000) // 2 MB
+    ])
+
+    // 18.1 Trim defaults: video.trim initializes end = probed duration (45.0s)
+    if let vTrimAction = FormatRegistry.shared.action(for: videoFile, actionID: "video.trim") {
+        let vTrimModel = ParameterFormModel(action: vTrimAction, loadLastUsed: false, inputFile: videoFile, probe: fakeProbe)
+        assertTest(vTrimModel.isValid, "18.1 video.trim model initially valid")
+        assertTest(vTrimModel.values["start"] == .number(0.0), "18.1 Default start time is 0.0s")
+        assertTest(vTrimModel.values["end"] == .number(45.0), "18.1 Default end time uses probed duration (45.0s)")
+
+        // 18.2 Trim validation: end <= start rejected
+        vTrimModel.updateValue(.number(20.0), for: "start")
+        vTrimModel.updateValue(.number(10.0), for: "end")
+        assertTest(!vTrimModel.isValid, "18.2 End time <= start time is invalid")
+        assertTest(vTrimModel.validationErrors["end"]?.contains("must be greater than start") == true,
+                   "18.2 Error explains end time must be greater than start time")
+
+        // 18.3 Trim validation: end exceeding duration rejected
+        vTrimModel.updateValue(.number(50.0), for: "end")
+        assertTest(!vTrimModel.isValid, "18.3 End time exceeding probed duration (50.0s > 45.0s) is invalid")
+        assertTest(vTrimModel.validationErrors["end"]?.contains("exceeds media duration") == true,
+                   "18.3 Error explains end time exceeds media duration")
+
+        // 18.4 Trim validation: valid start/end within duration accepted
+        vTrimModel.updateValue(.number(5.0), for: "start")
+        vTrimModel.updateValue(.number(30.0), for: "end")
+        assertTest(vTrimModel.isValid, "18.4 Valid start/end within probed duration is valid")
+    } else {
+        assertTest(false, "18.1 video.trim action not found")
+    }
+
+    // 18.5 Audio trim defaults: audio.trim initializes end = probed duration (180.5s)
+    if let aTrimAction = FormatRegistry.shared.action(for: audioFile, actionID: "audio.trim") {
+        let aTrimModel = ParameterFormModel(action: aTrimAction, loadLastUsed: false, inputFile: audioFile, probe: fakeProbe)
+        assertTest(aTrimModel.isValid, "18.5 audio.trim model initially valid")
+        assertTest(aTrimModel.values["end"] == .number(180.5), "18.5 audio.trim default end time uses probed duration (180.5s)")
+
+        // Start time exceeding duration rejected
+        aTrimModel.updateValue(.number(200.0), for: "start")
+        aTrimModel.updateValue(.number(210.0), for: "end")
+        assertTest(!aTrimModel.isValid, "18.5 Start time exceeding duration is invalid")
+        assertTest(aTrimModel.validationErrors["start"]?.contains("exceeds media duration") == true,
+                   "18.5 Error explains start time exceeds media duration")
+    } else {
+        assertTest(false, "18.5 audio.trim action not found")
+    }
+
+    // 18.6 Target-size warning: preset larger than source file produces inline warning
+    if let compAction = FormatRegistry.shared.action(for: imgFile, actionID: "image.compress") {
+        let compModel = ParameterFormModel(action: compAction, loadLastUsed: false, inputFile: imgFile, probe: fakeProbe)
+        assertTest(compModel.isValid, "18.6 image.compress model initially valid")
+
+        // photo.jpg is 2 MB (2,000,000 bytes). size_5mb preset is 5 MB (5,242,880 bytes).
+        if let p5mb = compModel.presets.first(where: { $0.id == "size_5mb" }) {
+            compModel.applyPreset(p5mb)
+            // 18.7 Target-size warning: warning present, but model remains valid and Run stays enabled
+            assertTest(compModel.warnings["targetSize"] == "already smaller than this target",
+                       "18.7 Target-size larger than source file produces 'already smaller than this target' warning")
+            assertTest(compModel.isValid, "18.7 Run stays enabled (isValid == true) when target-size warning is present")
+            assertTest(compModel.validationErrors.isEmpty, "18.7 validationErrors is empty despite target-size warning")
+
+            // Test UI panel shows warning and leaves Run button enabled
+            let compPanel = ParameterPanelView(model: compModel, action: compAction)
+            assertTest(compPanel.subviews.count > 0, "18.7 ParameterPanelView renders compression controls")
+
+            func findLabel(identifier: String, in view: NSView) -> NSTextField? {
+                if let tf = view as? NSTextField, tf.identifier?.rawValue == identifier {
+                    return tf
+                }
+                for sub in view.subviews {
+                    if let found = findLabel(identifier: identifier, in: sub) {
+                        return found
+                    }
+                }
+                return nil
+            }
+
+            let statusLabel = findLabel(identifier: "ParameterPanel.errorLabel", in: compPanel)
+            let inlineWarnLabel = findLabel(identifier: "ParameterPanel.inlineWarning.targetSize", in: compPanel)
+
+            assertTest(statusLabel?.stringValue.contains("already smaller than this target") == true,
+                       "18.8 ParameterPanel bottom status displays warning message")
+            assertTest(inlineWarnLabel?.stringValue.contains("already smaller than this target") == true,
+                       "18.8 ParameterPanel field shows inline warning 'already smaller than this target'")
+
+            // When updated to smaller size (e.g. 1 MB), warning disappears
+            compModel.updateValue(.integer(1024 * 1024), for: "targetSize")
+            compPanel.refreshAllFields()
+            assertTest(compModel.warnings["targetSize"] == nil,
+                       "18.9 Target-size smaller than source file clears warning")
+            assertTest(inlineWarnLabel?.isHidden == true,
+                       "18.9 Inline warning label is hidden when target size is smaller than source file")
+        } else {
+            assertTest(false, "18.6 size_5mb preset not found")
+        }
+    } else {
+        assertTest(false, "18.6 image.compress action not found")
+    }
+}
+
 print("\n==================================================")
 print("Test Suite Summary: \(passedTests)/\(totalTests) Passed, \(failedTests) Failed")
 print("==================================================")

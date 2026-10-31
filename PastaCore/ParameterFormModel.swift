@@ -31,6 +31,7 @@ public final class ParameterFormField: Equatable {
 
     public var currentValue: ParameterValue
     public var errorMessage: String?
+    public var warningMessage: String?
 
     public var currentStringValue: String {
         get { currentValue.asString }
@@ -81,6 +82,7 @@ public final class ParameterFormModel {
     public private(set) var presets: [ParameterPreset] = []
     public private(set) var isValid: Bool = true
     public private(set) var validationErrors: [String: String] = [:]
+    public private(set) var warnings: [String: String] = [:]
 
     public var values: ParameterValues {
         var result: ParameterValues = [:]
@@ -150,6 +152,12 @@ public final class ParameterFormModel {
             if lastUsed == nil, param.id == "rectangle", let p = self.probeResult, let cw = p.width, let ch = p.height, cw > 0, ch > 0 {
                 let full = CropCalculator.computeCrop(containerWidth: cw, containerHeight: ch, ratioWidth: cw, ratioHeight: ch)
                 initial = .rectangle(x: full.x, y: full.y, width: full.width, height: full.height)
+            }
+            if lastUsed == nil, param.id == "end", let p = self.probeResult, let dur = p.duration, dur > 0 {
+                initial = .number(dur)
+            }
+            if lastUsed == nil, param.kind == .timeRange, let p = self.probeResult, let dur = p.duration, dur > 0 {
+                initial = .timeRange(start: 0.0, end: dur)
             }
             return ParameterFormField(parameter: param, initialValue: initial)
         }
@@ -265,6 +273,77 @@ public final class ParameterFormModel {
                         validationErrors["rectangle"] = error.localizedDescription
                         field(for: "rectangle")?.errorMessage = error.localizedDescription
                     }
+                }
+            }
+        }
+
+        // Validate start/end trim against probed duration
+        if ids.contains("start") && ids.contains("end") {
+            let startVal = values["start"]?.asDouble ?? 0.0
+            let endVal = values["end"]?.asDouble ?? 0.0
+            if startVal < 0 {
+                let msg = "Start time cannot be negative: \(startVal)s"
+                validationErrors["start"] = msg
+                field(for: "start")?.errorMessage = msg
+            }
+            if endVal <= startVal {
+                let msg = "End time (\(endVal)s) must be greater than start time (\(startVal)s)"
+                validationErrors["end"] = msg
+                field(for: "end")?.errorMessage = msg
+            }
+            if let max = probeResult?.duration, max > 0 {
+                if startVal > max {
+                    let msg = "Start time (\(startVal)s) exceeds media duration (\(max)s)"
+                    validationErrors["start"] = msg
+                    field(for: "start")?.errorMessage = msg
+                }
+                if endVal > max {
+                    let msg = "End time (\(endVal)s) exceeds media duration (\(max)s)"
+                    validationErrors["end"] = msg
+                    field(for: "end")?.errorMessage = msg
+                }
+            }
+        }
+
+        for param in parameters {
+            if param.kind == .timeRange, let val = values[param.id], case .timeRange(let s, let e) = val {
+                if s < 0 {
+                    let msg = "Start time cannot be negative: \(s)s"
+                    validationErrors[param.id] = msg
+                    field(for: param.id)?.errorMessage = msg
+                }
+                if e <= s {
+                    let msg = "End time (\(e)s) must be greater than start time (\(s)s)"
+                    validationErrors[param.id] = msg
+                    field(for: param.id)?.errorMessage = msg
+                }
+                if let max = probeResult?.duration, max > 0 {
+                    if s > max {
+                        let msg = "Start time (\(s)s) exceeds media duration (\(max)s)"
+                        validationErrors[param.id] = msg
+                        field(for: param.id)?.errorMessage = msg
+                    }
+                    if e > max {
+                        let msg = "End time (\(e)s) exceeds media duration (\(max)s)"
+                        validationErrors[param.id] = msg
+                        field(for: param.id)?.errorMessage = msg
+                    }
+                }
+            }
+        }
+
+        // Check target size against probed file size (warning only, Run stays enabled)
+        warnings.removeAll()
+        for f in fields {
+            f.warningMessage = nil
+        }
+        let targetSizeKey = ids.contains("targetSize") ? "targetSize" : (ids.contains("target_size") ? "target_size" : nil)
+        if let key = targetSizeKey, let val = values[key]?.asInt64, val > 0 {
+            if let p = probeResult, let srcSize = p.fileSize, srcSize > 0 {
+                if val > srcSize {
+                    let msg = "already smaller than this target"
+                    warnings[key] = msg
+                    field(for: key)?.warningMessage = msg
                 }
             }
         }

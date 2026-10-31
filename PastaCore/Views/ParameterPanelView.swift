@@ -183,6 +183,7 @@ public final class ParameterPanelView: NSVisualEffectView {
 
     private func setupErrorLabel() {
         errorLabel.translatesAutoresizingMaskIntoConstraints = false
+        errorLabel.identifier = NSUserInterfaceItemIdentifier("ParameterPanel.errorLabel")
         errorLabel.font = NSFont.systemFont(ofSize: 11, weight: .medium)
         errorLabel.textColor = NSColor.systemRed
         errorLabel.maximumNumberOfLines = 2
@@ -358,12 +359,29 @@ public final class ParameterPanelView: NSVisualEffectView {
             row.addArrangedSubview(sizeRow)
             sizeRow.widthAnchor.constraint(equalTo: row.widthAnchor).isActive = true
 
-            let updater: () -> Void = { [weak self, weak input] in
+            let warningLabel = NSTextField(labelWithString: "")
+            warningLabel.font = NSFont.systemFont(ofSize: 10, weight: .medium)
+            warningLabel.textColor = NSColor.systemOrange
+            warningLabel.identifier = NSUserInterfaceItemIdentifier("ParameterPanel.inlineWarning.\(param.id)")
+            warningLabel.setAccessibilityElement(true)
+            warningLabel.setAccessibilityLabel("Target size warning")
+            warningLabel.isHidden = true
+            row.addArrangedSubview(warningLabel)
+
+            let updater: () -> Void = { [weak self, weak input, weak warningLabel] in
                 guard let self = self, let bytes = self.model.values[param.id]?.asInt64 else { return }
                 let mb = Double(bytes) / (1024.0 * 1024.0)
                 input?.stringValue = (mb > 0) ? String(format: "%.1f", mb) : "0"
+                if let warn = self.model.warnings[param.id] {
+                    warningLabel?.stringValue = "⚠️ " + warn
+                    warningLabel?.isHidden = false
+                } else {
+                    warningLabel?.stringValue = ""
+                    warningLabel?.isHidden = true
+                }
             }
             fieldRefreshers.append(updater)
+            updater()
 
         case .number:
             if let min = param.minValue, let max = param.maxValue {
@@ -707,6 +725,11 @@ public final class ParameterPanelView: NSVisualEffectView {
 
         if !valid, let firstError = model.validationErrors.values.first {
             errorLabel.stringValue = firstError
+            errorLabel.textColor = NSColor.systemRed
+            errorLabel.isHidden = false
+        } else if let firstWarning = model.warnings.values.first {
+            errorLabel.stringValue = "⚠️ " + firstWarning
+            errorLabel.textColor = NSColor.systemOrange
             errorLabel.isHidden = false
         } else {
             errorLabel.stringValue = ""

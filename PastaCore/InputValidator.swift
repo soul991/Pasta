@@ -19,12 +19,20 @@ public struct InputValidator {
         }
     }
 
-    public static func validateTimeRange(start: Double, end: Double) throws {
+    public static func validateTimeRange(start: Double, end: Double, maxDuration: Double? = nil) throws {
         guard start >= 0 else {
             throw PastaError.invalidInput("Start time cannot be negative: \(start)")
         }
         guard end > start else {
             throw PastaError.invalidInput("End time (\(end)s) must be greater than start time (\(start)s)")
+        }
+        if let max = maxDuration, max > 0 {
+            if start > max {
+                throw PastaError.invalidInput("Start time (\(start)s) exceeds media duration (\(max)s)")
+            }
+            if end > max {
+                throw PastaError.invalidInput("End time (\(end)s) exceeds media duration (\(max)s)")
+            }
         }
     }
 
