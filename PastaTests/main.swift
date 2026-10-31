@@ -2665,7 +2665,7 @@ do {
 
     // 20.13 Fix D: When async probe fails, Run remains disabled and readable error is displayed
     let asyncErrProbe = AsyncControlledProbe(
-        error: PastaError.commandFailed("Unrecognized media format or header damaged", exitCode: 1)
+        error: PastaError.invalidInput("Unrecognized media format or header damaged")
     )
     let failProbeSema = DispatchSemaphore(value: 0)
 

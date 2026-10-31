@@ -687,7 +687,7 @@ public final class ParameterPanelView: NSVisualEffectView {
                 } else if self.model.isProbing {
                     sourceLabel?.stringValue = "Reading file info..."
                     sourceLabel?.textColor = ThemeManager.shared.accentColor
-                } else if let err = self.model.probeError {
+                } else if self.model.probeError != nil {
                     sourceLabel?.stringValue = "Source: probe error"
                     sourceLabel?.textColor = NSColor.systemRed
                 } else if let p = self.model.probeResult, let cw = p.width, let ch = p.height, cw > 0, ch > 0 {
