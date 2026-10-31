@@ -3258,6 +3258,78 @@ do {
     } else {
         assertTest(false, "24.7 Missing liquidGlass tokens structure")
     }
+
+    // =======================================================
+    // 25. Phase 10B Step 5: Brand Presence Tests
+    // =======================================================
+    print("\n--- 25. Phase 10B Step 5: Brand Presence Tests ---")
+
+    // 25.1 Menu bar icon loads as template with 18x18 size
+    let menuBarIcon = BrandAssetManager.loadMenuBarIcon(size: NSSize(width: 18, height: 18))
+    assertTest(menuBarIcon != nil, "25.1 BrandAssetManager.loadMenuBarIcon loads successfully")
+    assertTest(menuBarIcon?.isTemplate == true, "25.1 Menu bar icon is marked as template")
+    assertTest(menuBarIcon?.size.width == 18 && menuBarIcon?.size.height == 18, "25.1 Menu bar icon is sized 18x18 pt")
+
+    // 25.2 Status item button verification helper
+    let dummyButton = NSStatusBarButton()
+    dummyButton.image = menuBarIcon
+    let vSuccess = BrandAssetManager.verifyStatusItemImage(button: dummyButton)
+    assertTest(vSuccess.isSet == true, "25.2 Status item button verification detects set image")
+    assertTest(vSuccess.isTemplate == true, "25.2 Status item button verification detects template image")
+    assertTest(vSuccess.size.width == 18 && vSuccess.size.height == 18, "25.2 Status item button verification detects 18x18 size")
+
+    // 25.3 Status item button verification with nil/missing image logs descriptive reason
+    let emptyButton = NSStatusBarButton()
+    emptyButton.image = nil
+    let vFail = BrandAssetManager.verifyStatusItemImage(button: emptyButton)
+    assertTest(vFail.isSet == false, "25.3 Empty status item button detects missing image")
+    assertTest(vFail.logReason.contains("nil"), "25.3 Empty status item button reports descriptive reason")
+
+    // 25.4 App icon loads with non-zero dimensions
+    let appIcon = BrandAssetManager.loadAppIcon(size: NSSize(width: 64, height: 64))
+    assertTest(appIcon != nil, "25.4 BrandAssetManager.loadAppIcon loads successfully")
+    assertTest((appIcon?.size.width ?? 0) > 0 && (appIcon?.size.height ?? 0) > 0, "25.4 App icon has positive dimensions")
+
+    // 25.5 Wheel center disc empty/idle state displays rigatoni Pasta icon
+    let discEmpty = RadialWheelCenterDiscView()
+    discEmpty.configureEmpty()
+    assertTest(discEmpty.hasImage == true, "25.5 Center disc empty state has non-nil image")
+    assertTest(discEmpty.hasImageTintColor == true, "25.5 Center disc empty state tints icon with accent color")
+    assertTest(discEmpty.displayedDetail == "PASTA", "25.5 Center disc displays PASTA detail label")
+    assertTest(discEmpty.displayedFileName == "Drag a file onto the wheel", "25.5 Center disc displays idle instructions")
+
+    // 25.6 SettingsWindowController header contains brand icon and title
+    let settingsController = SettingsWindowController()
+    assertTest(settingsController.window != nil, "25.6 SettingsWindowController window created")
+    assertTest(settingsController.headerView.iconImageView.image != nil, "25.6 Settings header contains non-nil app icon")
+    assertTest(settingsController.headerView.titleLabel.stringValue == "Pasta", "25.6 Settings header displays 'Pasta' title")
+    assertTest(settingsController.headerView.subtitleLabel.stringValue.contains("Settings"), "25.6 Settings header displays descriptive subtitle")
+    assertTest(settingsController.customizeSheet.superview != nil, "25.6 SettingsWindowController embeds Customize sheet")
+
+    // 25.7 Bundle assets existence and size check
+    let appIconPath = "assets/AppIcon.icns"
+    if FileManager.default.fileExists(atPath: appIconPath) {
+        if let attrs = try? FileManager.default.attributesOfItem(atPath: appIconPath),
+           let fileSize = attrs[.size] as? Int64 {
+            assertTest(fileSize > 50000, "25.7 assets/AppIcon.icns size is valid (\(fileSize) bytes > 50KB)")
+        } else {
+            assertTest(false, "25.7 Failed to read AppIcon.icns attributes")
+        }
+    } else {
+        assertTest(false, "25.7 assets/AppIcon.icns missing")
+    }
+
+    let menuBarIconPath = "assets/MenuBarIcon.pdf"
+    if FileManager.default.fileExists(atPath: menuBarIconPath) {
+        if let attrs = try? FileManager.default.attributesOfItem(atPath: menuBarIconPath),
+           let fileSize = attrs[.size] as? Int64 {
+            assertTest(fileSize > 0 && fileSize < 5000, "25.7 assets/MenuBarIcon.pdf size is valid vector template (\(fileSize) bytes < 5KB)")
+        } else {
+            assertTest(false, "25.7 Failed to read MenuBarIcon.pdf attributes")
+        }
+    } else {
+        assertTest(false, "25.7 assets/MenuBarIcon.pdf missing")
+    }
 }
 
 print("\n==================================================")

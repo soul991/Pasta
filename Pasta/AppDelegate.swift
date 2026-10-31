@@ -7,6 +7,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var popover: NSPopover!
     private var dropWindowController: DropWindowViewController!
     private var wheelPanel: RadialWheelOverlayPanel!
+    private var settingsWindowController: SettingsWindowController?
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -65,9 +66,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         // Initialize Status Item with Rigatoni silhouette icon
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusItem.button {
-            if let customIcon = NSImage(named: "MenuBarIcon") {
+            if let customIcon = BrandAssetManager.loadMenuBarIcon(size: NSSize(width: 18, height: 18)) {
                 customIcon.isTemplate = true
-                customIcon.size = NSSize(width: 18, height: 18)
                 button.image = customIcon
             } else if let img = NSImage(systemSymbolName: "circle.circle", accessibilityDescription: "Pasta") {
                 img.isTemplate = true
@@ -75,6 +75,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             } else {
                 button.title = "Pasta"
             }
+
+            let verification = BrandAssetManager.verifyStatusItemImage(button: button)
+            PastaLogger.shared.log("StatusItem verification: set=\(verification.isSet), template=\(verification.isTemplate), size=\(verification.size.width)x\(verification.size.height) - \(verification.logReason)")
+
             button.target = self
             button.action = #selector(statusItemClicked(_:))
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
@@ -91,6 +95,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             } else {
                 menu.addItem(NSMenuItem(title: "Show Wheel", action: #selector(showWheel), keyEquivalent: "w"))
             }
+            menu.addItem(NSMenuItem.separator())
+            menu.addItem(NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ","))
             menu.addItem(NSMenuItem.separator())
             if !DragMonitor.isAccessibilityTrusted() {
                 menu.addItem(NSMenuItem(title: "Enable Accessibility Permission...", action: #selector(requestAccessibility), keyEquivalent: ""))
@@ -145,11 +151,22 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    @objc private func openSettings() {
+        if settingsWindowController == nil {
+            settingsWindowController = SettingsWindowController()
+        }
+        settingsWindowController?.showWindow(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
     @objc private func showAbout() {
         let alert = NSAlert()
         alert.messageText = "Pasta File Converter"
         alert.informativeText = "Version 1.0\nA fast, offline macOS file converter with dynamic radial wheel."
         alert.alertStyle = .informational
+        if let appIcon = BrandAssetManager.loadAppIcon(size: NSSize(width: 64, height: 64)) {
+            alert.icon = appIcon
+        }
         alert.runModal()
     }
 

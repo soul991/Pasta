@@ -24,6 +24,14 @@ public final class RadialWheelCenterDiscView: NSView {
         return detailLabel.stringValue
     }
 
+    public var hasImage: Bool {
+        return iconImageView.image != nil
+    }
+
+    public var hasImageTintColor: Bool {
+        return iconImageView.contentTintColor != nil
+    }
+
     public override init(frame frameRect: NSRect) {
         super.init(frame: NSRect(x: 0, y: 0, width: 128, height: 128))
         setupView()
@@ -154,15 +162,19 @@ public final class RadialWheelCenterDiscView: NSView {
 
     public func configureEmpty() {
         countBadge.isHidden = true
-        if let pastaIcon = NSImage(named: "MenuBarIcon") {
+        if let pastaIcon = BrandAssetManager.loadMenuBarIcon(size: NSSize(width: 44, height: 44)) {
             pastaIcon.isTemplate = true
             iconImageView.image = pastaIcon
+            iconImageView.contentTintColor = ThemeManager.shared.accentColor
+        } else if let appIcon = BrandAssetManager.loadAppIcon(size: NSSize(width: 44, height: 44)) {
+            iconImageView.image = appIcon
+            iconImageView.contentTintColor = nil
         } else {
             let img = NSImage(systemSymbolName: "arrow.down.doc", accessibilityDescription: "Drag file")
             img?.isTemplate = true
             iconImageView.image = img
+            iconImageView.contentTintColor = ThemeManager.shared.accentColor
         }
-        iconImageView.contentTintColor = ThemeManager.shared.accentColor
         fileNameLabel.stringValue = "Drag a file onto the wheel"
         detailLabel.stringValue = "PASTA"
     }

@@ -171,6 +171,29 @@ CI tests verify the mathematical state machine against simulated clock timestamp
 
 ---
 
+## 4.4 Brand Presence & Rigatoni Glyphs (Phase 10B Step 5)
+
+- [ ] **Menu Bar Rigatoni Glyph (18 pt Template)**:
+  - Inspect the Pasta item in the macOS Menu Bar.
+  - **Expected:** The status item displays the solid monochrome diagonal rigatoni tube silhouette (`MenuBarIcon.pdf`, 18x18 pt).
+  - Toggle between Light Mode and Dark Mode in System Settings.
+  - **Expected:** The icon automatically flips between dark ink and crisp white without artifacts (`isTemplate = true`).
+  - Right-click status item: "Settings..." option is present with shortcut <kbd>⌘</kbd> + <kbd>,</kbd>.
+- [ ] **Wheel Hub Brand Mark (Idle State)**:
+  - Open the wheel manually via menu bar ("Show Wheel") or without files.
+  - **Expected:** The center hub displays the rigatoni brand mark glyph tinted with the current theme accent color, the label "PASTA", and "Drag a file onto the wheel".
+- [ ] **Settings Window Header**:
+  - Open Settings (via menu bar "Settings..." or <kbd>⌘</kbd> + <kbd>,</kbd>).
+  - **Expected:** The window header prominently features the Pasta App Icon (48x48 pt squircle), title "Pasta" (18 pt bold), and subtitle "Preferences & Radial Wheel Settings".
+- [ ] **About Panel App Icon**:
+  - Choose "About Pasta" from the menu bar menu.
+  - **Expected:** The About alert dialog displays the high-resolution Pasta App Icon alongside version and description text.
+- [ ] **Application Bundle Icon Verification**:
+  - Inspect `Pasta.app` in Finder and Dock.
+  - **Expected:** Shows the high-resolution tangerine squircle with ridged rigatoni; `Info.plist` defines `CFBundleIconFile = AppIcon` and `AppIcon.icns` is 321 KB.
+
+---
+
 ## 5. Mode Toggling: Convert vs. Advanced Mode (<kbd>⌥</kbd>)
 
 - [ ] **Quick Option Tap (< 250 ms)**:
@@ -189,10 +212,10 @@ CI tests verify the mathematical state machine against simulated clock timestamp
 
 - [ ] **Light Mode Appearance**:
   - Set macOS to Light Appearance.
-  - **Expected:** The menu bar bowtie glyph (`MenuBarIcon.pdf`) renders in dark graphite/black, matching standard macOS menu bar items.
+  - **Expected:** The menu bar rigatoni glyph (`MenuBarIcon.pdf`) renders in dark graphite/black, matching standard macOS menu bar items.
 - [ ] **Dark Mode Appearance**:
   - Set macOS to Dark Appearance.
-  - **Expected:** The menu bar bowtie glyph renders in crisp white/light gray with automatic template tinting (`NSImage.isTemplate = true`).
+  - **Expected:** The menu bar rigatoni glyph renders in crisp white/light gray with automatic template tinting (`NSImage.isTemplate = true`).
 - [ ] **Accent Color Tinting**:
   - If a custom menu bar highlight is applied, verify template tinting respects system accent highlights without artifacting.
 
@@ -203,13 +226,13 @@ CI tests verify the mathematical state machine against simulated clock timestamp
 Inspect `Pasta.app` on the macOS Dock, Launchpad, and Finder at standard resolutions:
 
 - [ ] **1024 x 1024 / 512 x 512 (Retina Display Master)**:
-  - Squircle shape, obsidian gradient background (`#2B2233` to `#120D18`), subtle 8-segment radial ring ticks, farfalle bowtie wings in sunset gradient (`#FFB347` to `#F2611F`), crimped scalloped wing edges, center pinch band, and contact shadow.
+  - Tangerine squircle with soft contact shadow, subtle concentric rim highlight, extruded ridged rigatoni pasta tube diagonal silhouette.
 - [ ] **128 x 128 / 64 x 64 (Finder Icon View)**:
-  - Bowtie shape remains immediately legible; sunset gradient preserves contrast against dark squircle.
+  - Rigatoni shape remains immediately legible; tangerine contrast preserves pop against dark or light wallpapers.
 - [ ] **32 x 32 / 16 x 16 (Finder List View & Dock Mini)**:
   - Evaluated out of 10:
-    - Shape legibility: > 8/10 (distinct bowtie silhouette)
-    - Depth & contrast: > 8/10 (bright pinch against obsidian backdrop)
+    - Shape legibility: > 8/10 (distinct diagonal tube silhouette)
+    - Depth & contrast: > 8/10 (bright rigatoni against tangerine backdrop)
     - No muddy artifacts or unrecognizable blur.
 
 ---

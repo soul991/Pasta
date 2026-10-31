@@ -20,6 +20,7 @@
 | **Phase 10B Step 2** | Fix Clipped Node & Rectangular Glow Boundary, Screen Edge Repositioning, Geometry Tests | **Complete** | 402/402 Unit/Integration tests passed; 33/33 Section 8 tests passed; 0 leaks, 0 network |
 | **Phase 10B Step 3** | Wheel Redesign (Circular Backplate, 8 Slots, 64pt Glass Nodes, Hub, More Section, Customize Sheet, WheelLayoutModel) | **Complete** | 453/453 Unit/Integration tests passed; 33/33 Section 8 tests passed; 0 leaks, 0 network |
 | **Phase 10B Step 4** | Liquid Glass Rendering, Wallpaper Scrim, High-Contrast Modes, VoiceOver & Keyboard Nav | **Complete** | 508/508 Unit/Integration tests passed; 33/33 Section 8 tests passed; 0 leaks, 0 network |
+| **Phase 10B Step 5** | Brand Presence (MenuBarIcon 18pt Template, Pasta Icon in Hub/Settings/About, AppIcon.icns, CFBundleIconFile) | **Complete** | 529/529 Unit/Integration tests passed; 33/33 Section 8 tests passed; 0 leaks, 0 network |
 
 ---
 
@@ -91,7 +92,8 @@
 | **Section 21** | Phase 10B Step 1: Sticky wheel, latching, sticky file context, logging to ~/Library/Logs/Pasta/pasta.log, close control (×), empty hub | `11fc0dc` | 355/355 Unit, 33/33 Sec8 | **Complete** |
 | **Section 22** | Phase 10B Step 2: Anti-clipping, 520x560 panel, WheelGeometry, 18pt glow, screen edge repositioning for all 4 edges & corners | `233e400` | 402/402 Unit, 33/33 Sec8 | **Complete** |
 | **Section 23** | Phase 10B Step 3: Circular backplate (400pt/128pt), 8 slots, 64pt nodes, hub, More paged search, Customize sheet, WheelLayoutModel | `5d42c0b` | 453/453 Unit, 33/33 Sec8 | **Complete** |
-| **Section 24** | Phase 10B Step 4: Liquid Glass rendering, wallpaper adaptivity scrim, accessibility modes, VoiceOver, keyboard nav | In Progress (Step 4) | 508/508 Unit, 33/33 Sec8 | **Complete** |
+| **Section 24** | Phase 10B Step 4: Liquid Glass rendering, wallpaper adaptivity scrim, accessibility modes, VoiceOver, keyboard nav | `0664ab6` | 508/508 Unit, 33/33 Sec8 | **Complete** |
+| **Section 25** | Phase 10B Step 5: Brand presence (MenuBarIcon 18pt template, hub idle icon, Settings header, About panel, AppIcon.icns) | In Progress (Step 5) | 529/529 Unit, 33/33 Sec8 | **Complete** |
 
 ---
 
@@ -184,6 +186,13 @@
 | VoiceOver accessibility (button roles, descriptive labels and help on all 8 slots, group on hub) | Phase 10B Step 4 | Accessibility | **DONE** | `24.5 Full VoiceOver accessibility coverage on wheel slots and hub` |
 | Full keyboard navigation (Arrow keys cyclic navigation, Tab cycle, Return/Space execute, Esc hierarchy) | Phase 10B Step 4 | Keyboard Nav | **DONE** | `24.6 Keyboard navigation cyclic focus, execution, and dismissal` |
 | Liquid glass design tokens in theme_tokens.json (specular stroke, sheen, inner shadow, scrim) | Phase 10B Step 4 | Design Tokens | **DONE** | `24.7 Liquid glass design tokens validation` |
+| Menu bar icon template glyph (`MenuBarIcon.pdf`, 18pt x 18pt, isTemplate=true) | Phase 10B Step 5 | Brand Presence | **DONE** | `25.1 Menu bar icon loads as template with 18x18 size` |
+| Status item button verification helper & diagnostic logging | Phase 10B Step 5 | Brand Presence | **DONE** | `25.2–25.3 Status item button verification and error logging` |
+| App icon loading with valid positive dimensions | Phase 10B Step 5 | Brand Presence | **DONE** | `25.4 BrandAssetManager.loadAppIcon loads successfully` |
+| Idle wheel hub displays rigatoni Pasta icon tinted with accent color | Phase 10B Step 5 | Hub Brand | **DONE** | `25.5 Center disc empty state displays rigatoni Pasta icon` |
+| SettingsWindowController header contains brand icon, 'Pasta' title, and subtitle | Phase 10B Step 5 | Settings UI | **DONE** | `25.6 SettingsWindowController header contains brand icon and title` |
+| Bundle assets valid (AppIcon.icns > 50KB, MenuBarIcon.pdf vector template < 5KB) | Phase 10B Step 5 | Bundle Assets | **DONE** | `25.7 Bundle assets existence and size check` |
+
 
 
 
