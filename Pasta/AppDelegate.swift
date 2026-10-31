@@ -56,11 +56,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
         DragMonitor.shared.startMonitoring()
 
-        // Initialize Status Item with Farfalle Bowtie icon
+        // Initialize Status Item with Rigatoni silhouette icon
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusItem.button {
             if let customIcon = NSImage(named: "MenuBarIcon") {
                 customIcon.isTemplate = true
+                customIcon.size = NSSize(width: 18, height: 18)
                 button.image = customIcon
             } else if let img = NSImage(systemSymbolName: "circle.circle", accessibilityDescription: "Pasta") {
                 img.isTemplate = true

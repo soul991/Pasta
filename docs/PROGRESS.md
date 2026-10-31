@@ -15,6 +15,7 @@
 | **Phase 6** | Shift-Drag Global Overlay, Pasteboard Filtering, Magnified Chips, Animated HUD | **Complete** | Eliminates stale pasteboard triggers; dual drop/click; smooth conversion HUD |
 | **Phase 7** | Hardening, Logging to `~/Library/Logs/Peel`, PreferencesManager, Section 8 Suite | **Complete** | 13/13 Section 8 tests passed; 0 orphan processes, 0 network calls, 0 leaks |
 | **Phase 9** | Close Feature Gaps (Formats, Compression, Media Tools, Metadata, QR, Gate) | **Complete** | 139/139 Unit/Integration tests passed (Debug/Release); 33/33 Section 8 tests passed; 0 leaks, 0 network |
+| **Phase 10** | Parameter Panels & Batch Mode (Radial Wheel, Drop Window, Per-file Probing, Concurrency Queue, Async Probe) | **Complete** | 324/324 Unit/Integration tests passed; 33/33 Section 8 tests passed (debug & app bundle); 0 leaks, 0 network |
 
 ---
 
@@ -27,7 +28,7 @@
 
 ## Running Tests
 
-- Unit & Integration Suite: `swift run PastaTests` (157 tests passed in Debug and Release, including 11 Section 12 Shift-Hold State Machine tests)
+- Unit & Integration Suite: `swift run PastaTests` (324 tests passed in Debug and Release, including Section 15–20 parameter panels, batch execution, concurrency limits, and async probing)
 - Section 8 Hardening Suite: `./scripts/run_section8_tests.sh` (33 tests passed, including hostile filename, error reporting, collision handling, temp cleanup, process leaks, and offline network verification)
 - Bundle Verification: `codesign --verify --deep --strict Pasta.app` succeeded; `AppIcon.icns`, `MenuBarIcon.pdf`, and `theme_tokens.json` verified inside bundle.
 
@@ -77,7 +78,12 @@
 | **Section 12** | Shift-hold state machine, 450 ms threshold, 120 ms charging ring, latching, Option tap toggle | `9814586` | 157/157 Unit, 33/33 Sec8 | **Complete** |
 | **Section 13** | JobRunner timeout, cancel zero leaks, SIGTERM->SIGKILL, ffmpeg inactivity watchdog | `b9c45cc` | 168/168 Unit, 33/33 Sec8 | **Complete** |
 | **Section 14** | MediaTools loudnorm measurement validation, -inf rejection, exact pass 2 args | `68dfddc` | 173/173 Unit, 33/33 Sec8 | **Complete** |
-| **Section 15** | ParameterFormModel headless model, presets, defaults, last-used, validation | *(Current)* | 195/195 Unit, 33/33 Sec8 | **Complete** |
+| **Section 15** | ParameterFormModel headless model, presets, defaults, last-used, validation | `230ec94` | 195/195 Unit, 33/33 Sec8 | **Complete** |
+| **Section 16** | Parameter panel in radial wheel (sliders, chips, crop, VoiceOver, Esc/Return) | `6667d33` | 228/228 Unit, 33/33 Sec8 | **Complete** |
+| **Section 17** | Crop presets computed from media probe (no hardcoded rectangles, bounds safety) | `4998e0f` | 252/252 Unit, 33/33 Sec8 | **Complete** |
+| **Section 18** | Probed trim defaults, duration validation & target-size warnings | `3c4c9e2` | 277/277 Unit, 33/33 Sec8 | **Complete** |
+| **Section 19** | Drop window parameter panel reuse & batch support (multi-file progress, cancel) | `6f08221` | 297/297 Unit, 33/33 Sec8 | **Complete** |
+| **Section 20** | Batch review fixes: Fix A (per-file relative crop/trim), Fix B/C (concurrency limit 2, queue, cancel, cleanup), Fix D (async probe off main thread) | `966e8e6` | 324/324 Unit, 33/33 Sec8 | **Complete** |
 
 ---
 
