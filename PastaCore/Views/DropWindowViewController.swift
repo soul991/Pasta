@@ -28,7 +28,36 @@ public final class DropWindowViewController: NSViewController {
     private let jobsScrollView = NSScrollView()
     public let jobsStack = NSStackView()
 
+    public private(set) var currentBatchQueue: BatchJobQueue?
+    private var activeSingleJobIDs: Set<UUID> = []
+    private let singleJobLock = NSLock()
+
     private var actionsContainerHeightConstraint: NSLayoutConstraint?
+
+    public override func viewWillDisappear() {
+        super.viewWillDisappear()
+        cancelAllJobs()
+    }
+
+    deinit {
+        cancelAllJobs()
+    }
+
+    public func cancelAllJobs() {
+        currentBatchQueue?.cancel()
+        currentBatchQueue = nil
+
+        singleJobLock.lock()
+        let sJobs = activeSingleJobIDs
+        activeSingleJobIDs.removeAll()
+        singleJobLock.unlock()
+
+        for jid in sJobs {
+            JobRunner.shared.cancel(jobId: jid)
+        }
+
+        BatchJobQueue.cleanLeftoverTempDirectories()
+    }
 
     public override func loadView() {
         view = NSView(frame: NSRect(x: 0, y: 0, width: 440, height: 520))
@@ -369,84 +398,53 @@ public final class DropWindowViewController: NSViewController {
         let count = files.count
 
         if count > 1 {
-            // Batch execution
+            // Batch execution using concurrent BatchJobQueue
             let batchRow = BatchProgressRowView(totalCount: count, action: action)
             jobsStack.insertArrangedSubview(batchRow, at: 0)
 
-            var completed = 0
-            var failed = 0
-            var activeJobIDs: [UUID] = []
-            let lock = NSLock()
-
-            batchRow.onCancel = {
-                lock.lock()
-                defer { lock.unlock() }
-                for jid in activeJobIDs {
-                    JobRunner.shared.cancel(jobId: jid)
+            let queue = BatchJobQueue(
+                files: files,
+                action: action,
+                formModel: formModel,
+                fallbackParams: params,
+                maxConcurrent: PreferencesManager.shared.maxConcurrentJobs,
+                makeRow: { [weak self] file in
+                    guard let self = self else { return nil }
+                    let row = JobStatusRowView(inputURL: file, action: action)
+                    self.jobsStack.insertArrangedSubview(row, at: 1)
+                    return row
                 }
+            )
+            self.currentBatchQueue = queue
+
+            batchRow.onCancel = { [weak queue, weak batchRow] in
+                queue?.cancel()
+                batchRow?.markCancelled()
             }
 
-            for file in files {
-                let jobID = UUID()
-                lock.lock()
-                activeJobIDs.append(jobID)
-                lock.unlock()
-
-                let row = JobStatusRowView(inputURL: file, action: action)
-                jobsStack.insertArrangedSubview(row, at: 1)
-                row.update(state: .running)
-
-                DispatchQueue.global(qos: .userInitiated).async {
-                    let fileParams: ParameterValues
-                    if let model = formModel {
-                        do {
-                            fileParams = try model.resolveParameters(for: file)
-                        } catch {
-                            row.update(state: .failed(error.localizedDescription))
-                            lock.lock()
-                            failed += 1
-                            let c = completed
-                            let f = failed
-                            lock.unlock()
-                            batchRow.update(completed: c, failed: f)
-                            return
-                        }
-                    } else {
-                        fileParams = params
-                    }
-
-                    do {
-                        let output = try JobRunner.shared.run(
-                            action: action,
-                            input: file,
-                            parameters: fileParams,
-                            jobId: jobID
-                        )
-                        row.update(state: .completed(output))
-                        lock.lock()
-                        completed += 1
-                        let c = completed
-                        let f = failed
-                        lock.unlock()
-                        batchRow.update(completed: c, failed: f)
-                    } catch {
-                        row.update(state: .failed(error.localizedDescription))
-                        lock.lock()
-                        failed += 1
-                        let c = completed
-                        let f = failed
-                        lock.unlock()
-                        batchRow.update(completed: c, failed: f)
-                    }
-                }
+            queue.onProgress = { [weak batchRow] comp, fail in
+                batchRow?.update(completed: comp, failed: fail)
             }
+
+            queue.start()
         } else if let file = files.first {
             // Single file execution
+            let jobID = UUID()
+            singleJobLock.lock()
+            activeSingleJobIDs.insert(jobID)
+            singleJobLock.unlock()
+
             let row = JobStatusRowView(inputURL: file, action: action)
             jobsStack.insertArrangedSubview(row, at: 0)
             row.update(state: .running)
 
-            DispatchQueue.global(qos: .userInitiated).async {
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                defer {
+                    self?.singleJobLock.lock()
+                    self?.activeSingleJobIDs.remove(jobID)
+                    self?.singleJobLock.unlock()
+                }
+
                 let fileParams: ParameterValues
                 if let model = formModel {
                     do {
@@ -463,7 +461,8 @@ public final class DropWindowViewController: NSViewController {
                     let output = try JobRunner.shared.run(
                         action: action,
                         input: file,
-                        parameters: fileParams
+                        parameters: fileParams,
+                        jobId: jobID
                     )
                     row.update(state: .completed(output))
                 } catch {

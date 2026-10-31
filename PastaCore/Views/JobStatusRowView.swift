@@ -3,6 +3,7 @@ import AppKit
 
 public final class JobStatusRowView: NSView {
     public enum State {
+        case queued
         case running
         case completed(URL)
         case failed(String)
@@ -11,6 +12,8 @@ public final class JobStatusRowView: NSView {
     public let inputURL: URL
     public let action: ConversionAction
     public var onDismiss: (() -> Void)?
+
+    public var currentStatusText: String { statusLabel.stringValue }
 
     private let titleLabel = NSTextField(labelWithString: "")
     private let statusLabel = NSTextField(labelWithString: "")
@@ -101,6 +104,16 @@ public final class JobStatusRowView: NSView {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             switch state {
+            case .queued:
+                self.spinner.stopAnimation(nil)
+                self.spinner.isHidden = true
+                self.statusIcon.isHidden = false
+                self.statusIcon.image = NSImage(systemSymbolName: "clock", accessibilityDescription: "Queued")
+                self.statusIcon.contentTintColor = .secondaryLabelColor
+                self.statusLabel.stringValue = "Queued"
+                self.statusLabel.textColor = .secondaryLabelColor
+                self.actionButton.isHidden = true
+
             case .running:
                 self.spinner.isHidden = false
                 self.spinner.startAnimation(nil)

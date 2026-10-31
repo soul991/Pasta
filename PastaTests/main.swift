@@ -2370,6 +2370,232 @@ do {
     assertTest(file1Fits, "20.4 File 1 fits manual rectangle 1280x720")
     assertTest(fileSmallThrew, "20.4 FileSmall (800x600) throws invalidInput when manual crop exceeds bounds")
     assertTest(file2Fits, "20.4 File 2 fits manual rectangle 1280x720")
+
+    // 20.5 PreferencesManager maxConcurrentJobs configuration (default: 2)
+    assertTest(PreferencesManager.shared.maxConcurrentJobs == 2, "20.5 Default maxConcurrentJobs is 2")
+    PreferencesManager.shared.maxConcurrentJobs = 3
+    assertTest(PreferencesManager.shared.maxConcurrentJobs == 3, "20.5 maxConcurrentJobs can be configured")
+    PreferencesManager.shared.maxConcurrentJobs = 2
+
+    // 20.6 JobStatusRowView pending jobs display 'Queued'
+    let qRow = JobStatusRowView(inputURL: file1, action: cropAction)
+    qRow.update(state: .queued)
+    RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+    assertTest(qRow.currentStatusText == "Queued", "20.6 JobStatusRowView displays 'Queued' in queued state")
+
+    // 20.7 Test 3: One file failing (manual crop out of bounds) does not stop others; summary shows '2 of 3 complete (1 failed)'
+    let bFile1 = outDir.appendingPathComponent("batch_b1.mp4")
+    let bFile2 = outDir.appendingPathComponent("batch_b2.mp4")
+    let bFile3 = outDir.appendingPathComponent("batch_b3.mp4")
+    try? Data("dummy video content 1".utf8).write(to: bFile1)
+    try? Data("dummy video content 2".utf8).write(to: bFile2)
+    try? Data("dummy video content 3".utf8).write(to: bFile3)
+
+    let fakeFastScript = fakeToolDir.appendingPathComponent("fake_batch_fast.sh")
+    let fastContent = "#!/bin/sh\ncp \"$1\" \"$2\" 2>/dev/null || touch \"$2\"\nexit 0\n"
+    try? fastContent.write(to: fakeFastScript, atomically: true, encoding: .utf8)
+    chmod(fakeFastScript.path, 0o755)
+    ToolLocator.shared.setOverride(tool: "fake_fast", url: fakeFastScript)
+
+    let fakeCropAction = ConversionAction(
+        id: "video.crop",
+        displayName: "Crop Video",
+        outputExtension: "mp4",
+        category: .video,
+        iconName: "crop",
+        parameters: [
+            ActionParameter(id: "rectangle", label: "Crop", kind: .rectangle, defaultValue: .rectangle(x: 0, y: 0, width: 1920, height: 1080))
+        ],
+        buildInvocations: { inUrl, outUrl, _ in
+            return [Invocation(toolName: "fake_fast", arguments: [inUrl.path, outUrl.path])]
+        }
+    )
+
+    let batchCropFailProbe = FakeMediaProbe(results: [
+        bFile1.lastPathComponent: MediaProbeResult(width: 1920, height: 1080, duration: 10.0),
+        bFile2.lastPathComponent: MediaProbeResult(width: 800, height: 600, duration: 10.0),
+        bFile3.lastPathComponent: MediaProbeResult(width: 1920, height: 1080, duration: 10.0)
+    ])
+
+    let batchFailModel = ParameterFormModel(
+        action: fakeCropAction,
+        loadLastUsed: false,
+        inputFiles: [bFile1, bFile2, bFile3],
+        probe: batchCropFailProbe
+    )
+    batchFailModel.cropIntent = CropIntent.manual(x: 0, y: 0, width: 1280, height: 720)
+
+    let batchRow3 = BatchProgressRowView(totalCount: 3, action: fakeCropAction)
+    let sema3 = DispatchSemaphore(value: 0)
+    let queue3 = BatchJobQueue(
+        files: [bFile1, bFile2, bFile3],
+        action: fakeCropAction,
+        formModel: batchFailModel,
+        probe: batchCropFailProbe,
+        maxConcurrent: 2
+    )
+    queue3.onProgress = { comp, fail in
+        batchRow3.update(completed: comp, failed: fail)
+    }
+    queue3.onAllFinished = {
+        sema3.signal()
+    }
+    queue3.start()
+    _ = sema3.wait(timeout: .now() + 5.0)
+    RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+
+    assertTest(queue3.completedCount == 2, "20.7 Batch completes 2 successful files")
+    assertTest(queue3.failedCount == 1, "20.7 Batch records 1 failed file")
+    assertTest(batchRow3.summaryLabel.stringValue == "2 of 3 complete (1 failed)",
+               "20.7 Summary shows '2 of 3 complete (1 failed)' when 1 file fails out of bounds")
+
+    // 20.8 Test 4: Concurrency queue runs at most N (default 2) jobs simultaneously
+    let fakeSlowScript = fakeToolDir.appendingPathComponent("fake_slow_overlap.sh")
+    let slowContent = "#!/bin/sh\nsleep 0.15\ncp \"$1\" \"$2\" 2>/dev/null || touch \"$2\"\nexit 0\n"
+    try? slowContent.write(to: fakeSlowScript, atomically: true, encoding: .utf8)
+    chmod(fakeSlowScript.path, 0o755)
+    ToolLocator.shared.setOverride(tool: "fake_slow_overlap", url: fakeSlowScript)
+
+    let fakeSlowAction = ConversionAction(
+        id: "video.slow",
+        displayName: "Slow Job",
+        outputExtension: "mp4",
+        category: .video,
+        iconName: "gear",
+        parameters: [],
+        buildInvocations: { inUrl, outUrl, _ in
+            return [Invocation(toolName: "fake_slow_overlap", arguments: [inUrl.path, outUrl.path])]
+        }
+    )
+
+    let fiveFiles = (1...5).map { idx -> URL in
+        let u = outDir.appendingPathComponent("five_\(idx).mp4")
+        try? Data("dummy".utf8).write(to: u)
+        return u
+    }
+
+    var currentRunning = 0
+    var maxOverlap = 0
+    let overlapLock = NSLock()
+    let semaOverlap = DispatchSemaphore(value: 0)
+
+    let queueOverlap = BatchJobQueue(
+        files: fiveFiles,
+        action: fakeSlowAction,
+        maxConcurrent: 2
+    )
+    queueOverlap.onItemStarted = { _, _ in
+        overlapLock.lock()
+        currentRunning += 1
+        if currentRunning > maxOverlap {
+            maxOverlap = currentRunning
+        }
+        overlapLock.unlock()
+    }
+    queueOverlap.onItemFinished = { _, _, _ in
+        overlapLock.lock()
+        currentRunning -= 1
+        overlapLock.unlock()
+    }
+    queueOverlap.onAllFinished = {
+        semaOverlap.signal()
+    }
+    queueOverlap.start()
+    _ = semaOverlap.wait(timeout: .now() + 10.0)
+
+    assertTest(maxOverlap == 2, "20.8 Queue runs at most 2 jobs concurrently (peak overlap == 2)")
+    assertTest(queueOverlap.completedCount == 5, "20.8 All 5 batch jobs finished successfully")
+
+    // 20.9 Test 5: Cancel with queued jobs stops running, marks queued cancelled without starting, 0 orphans, 0 temp dirs
+    let fourFiles = (1...4).map { idx -> URL in
+        let u = outDir.appendingPathComponent("four_\(idx).mp4")
+        try? Data("dummy".utf8).write(to: u)
+        return u
+    }
+
+    let fakeSleepScript = fakeToolDir.appendingPathComponent("fake_sleep_cancel.sh")
+    let sleepContent = "#!/bin/sh\nsleep 5\nexit 0\n"
+    try? sleepContent.write(to: fakeSleepScript, atomically: true, encoding: .utf8)
+    chmod(fakeSleepScript.path, 0o755)
+    ToolLocator.shared.setOverride(tool: "fake_sleep_cancel", url: fakeSleepScript)
+
+    let fakeSleepAction = ConversionAction(
+        id: "video.sleep",
+        displayName: "Sleep Action",
+        outputExtension: "mp4",
+        category: .video,
+        iconName: "moon",
+        parameters: [],
+        buildInvocations: { inUrl, outUrl, _ in
+            return [Invocation(toolName: "fake_sleep_cancel", arguments: [inUrl.path, outUrl.path])]
+        }
+    )
+
+    let queueCancel = BatchJobQueue(
+        files: fourFiles,
+        action: fakeSleepAction,
+        maxConcurrent: 2
+    )
+    let semaTwoRunning = DispatchSemaphore(value: 0)
+    var startedJobs = 0
+    let startLock = NSLock()
+
+    queueCancel.onItemStarted = { _, _ in
+        startLock.lock()
+        startedJobs += 1
+        if startedJobs == 2 {
+            semaTwoRunning.signal()
+        }
+        startLock.unlock()
+    }
+
+    queueCancel.start()
+    _ = semaTwoRunning.wait(timeout: .now() + 5.0)
+
+    // Two are running, two are queued
+    assertTest(queueCancel.runningCount == 2, "20.9 Exactly 2 jobs are actively running")
+    assertTest(queueCancel.pendingCount == 2, "20.9 Exactly 2 jobs are pending in queue")
+
+    // Now cancel
+    queueCancel.cancel()
+    Thread.sleep(forTimeInterval: 0.3)
+
+    assertTest(queueCancel.runningCount == 0, "20.9 Cancel leaves 0 running jobs")
+    assertTest(queueCancel.pendingCount == 0, "20.9 Cancel leaves 0 queued jobs")
+
+    let leftoverDirs = (try? FileManager.default.contentsOfDirectory(atPath: NSTemporaryDirectory()))?.filter { $0.hasPrefix("Pasta_") } ?? []
+    assertTest(leftoverDirs.isEmpty, "20.9 Cancel leaves zero leftover Pasta_* directories in /tmp")
+
+    // Check orphan processes
+    let pgrep = Process()
+    pgrep.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
+    pgrep.arguments = ["-f", "fake_sleep_cancel.sh"]
+    let outPipe = Pipe()
+    pgrep.standardOutput = outPipe
+    try? pgrep.run()
+    pgrep.waitUntilExit()
+    assertTest(pgrep.terminationStatus != 0, "20.9 Zero orphan fake_sleep_cancel processes remain after cancel")
+
+    // 20.10 Window close cancels running/queued batch jobs and leaves zero leftover temp dirs
+    let dropVC2 = DropWindowViewController()
+    dropVC2.loadView()
+    dropVC2.viewDidLoad()
+    dropVC2.handleFilesDropped(fourFiles)
+    dropVC2.executeConversion(action: fakeSleepAction)
+    Thread.sleep(forTimeInterval: 0.1)
+
+    // Close window via viewWillDisappear
+    dropVC2.viewWillDisappear()
+    Thread.sleep(forTimeInterval: 0.3)
+
+    assertTest(dropVC2.currentBatchQueue?.runningCount == 0, "20.10 Window close cancels all running batch jobs")
+    assertTest(dropVC2.currentBatchQueue?.pendingCount == 0, "20.10 Window close clears all queued batch jobs")
+    let leftoverAfterClose = (try? FileManager.default.contentsOfDirectory(atPath: NSTemporaryDirectory()))?.filter { $0.hasPrefix("Pasta_") } ?? []
+    assertTest(leftoverAfterClose.isEmpty, "20.10 Zero leftover Pasta_* directories after window close")
+
+    ToolLocator.shared.setOverride(tool: "fake_fast", url: nil)
+    ToolLocator.shared.setOverride(tool: "fake_slow_overlap", url: nil)
+    ToolLocator.shared.setOverride(tool: "fake_sleep_cancel", url: nil)
 }
 
 print("\n==================================================")

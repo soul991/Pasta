@@ -18,6 +18,7 @@ public final class PreferencesManager {
     private let reduceTransparencyKey = "pasta_reduce_transparency"
     private let increaseContrastKey = "pasta_increase_contrast"
     private let watchdogTimeoutKey = "pasta_watchdog_timeout_minutes"
+    private let maxConcurrentJobsKey = "pasta_max_concurrent_jobs"
 
     public init() {}
 
@@ -135,6 +136,21 @@ public final class PreferencesManager {
         set {
             let clamped = max(newValue, 1.0)
             UserDefaults.standard.set(clamped, forKey: watchdogTimeoutKey)
+        }
+    }
+
+    /// Maximum concurrent jobs for batch conversions (default: 2)
+    public var maxConcurrentJobs: Int {
+        get {
+            let val = UserDefaults.standard.integer(forKey: maxConcurrentJobsKey)
+            if val <= 0 {
+                return 2
+            }
+            return max(val, 1)
+        }
+        set {
+            let clamped = max(newValue, 1)
+            UserDefaults.standard.set(clamped, forKey: maxConcurrentJobsKey)
         }
     }
 
