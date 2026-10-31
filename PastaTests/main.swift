@@ -1713,7 +1713,7 @@ do {
     let model1 = ParameterFormModel(action: speedAction, loadLastUsed: false)
     assertTest(model1.isValid, "15.1 ParameterFormModel initially valid")
     assertTest(model1.fields.count == 1, "15.1 Speed action produces 1 parameter field")
-    assertTest(model1.field(for: "factor")?.currentValue == .number(1.0), "15.1 Default factor is 1.0")
+    assertTest(model1.field(for: "factor")?.currentValue == .number(2.0), "15.1 Default factor is 2.0")
 
     // 15.2 Presets: contains presets for factor (0.5x, 1.5x, 2.0x)
     assertTest(!model1.presets.isEmpty, "15.2 Model provides presets for speed action")
@@ -1733,9 +1733,9 @@ do {
     let model2 = ParameterFormModel(action: speedAction, loadLastUsed: true)
     assertTest(model2.values["factor"] == .number(1.5), "15.3 ParameterFormModel loads last-used values from PreferencesManager")
 
-    // 15.4 Reset to defaults: reverts to default 1.0
+    // 15.4 Reset to defaults: reverts to default 2.0
     model2.resetToDefaults()
-    assertTest(model2.values["factor"] == .number(1.0), "15.4 resetToDefaults reverts fields to declared defaults")
+    assertTest(model2.values["factor"] == .number(2.0), "15.4 resetToDefaults reverts fields to declared defaults")
 
     // 15.5 Live validation error: hostile characters rejected
     model2.updateStringValue("1.5; echo pwned", for: "factor")
@@ -1758,12 +1758,12 @@ do {
         let chanModel = ParameterFormModel(action: chanAction, loadLastUsed: false)
         assertTest(chanModel.isValid, "15.8 Channels model initially valid with default")
 
-        chanModel.updateValue(.text("stereo"), for: "layout")
-        assertTest(chanModel.isValid, "15.8 Layout 'stereo' is valid choice")
+        chanModel.updateValue(.text("stereo"), for: "channels")
+        assertTest(chanModel.isValid, "15.8 Channels 'stereo' is valid choice")
 
-        chanModel.updateValue(.text("quadraphonic"), for: "layout")
-        assertTest(!chanModel.isValid, "15.8 Layout 'quadraphonic' is invalid choice")
-        assertTest(chanModel.validationErrors["layout"]?.contains("Invalid choice") == true, "15.8 Error explains invalid choice")
+        chanModel.updateValue(.text("quadraphonic"), for: "channels")
+        assertTest(!chanModel.isValid, "15.8 Channels 'quadraphonic' is invalid choice")
+        assertTest(chanModel.validationErrors["channels"]?.contains("Invalid choice") == true, "15.8 Error explains invalid choice")
     } else {
         assertTest(false, "15.8 audio.channels action not registered")
     }

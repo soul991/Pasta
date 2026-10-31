@@ -234,38 +234,41 @@ public final class ParameterFormModel {
         let ids = Set(parameters.map { $0.id })
 
         if ids.contains("percent") && !ids.contains("start") {
+            let modeDict: [String: ParameterValue] = ids.contains("mode") ? ["mode": .text("percent")] : [:]
             presets.append(ParameterPreset(
                 id: "pct_25",
                 label: "25%",
-                values: ["percent": .number(25.0)]
+                values: modeDict.merging(["percent": .number(25.0)]) { _, new in new }
             ))
             presets.append(ParameterPreset(
                 id: "pct_50",
                 label: "50%",
-                values: ["percent": .number(50.0)]
+                values: modeDict.merging(["percent": .number(50.0)]) { _, new in new }
             ))
             presets.append(ParameterPreset(
                 id: "pct_75",
                 label: "75%",
-                values: ["percent": .number(75.0)]
+                values: modeDict.merging(["percent": .number(75.0)]) { _, new in new }
             ))
         }
 
-        if ids.contains("target_size") {
+        let targetSizeKey = ids.contains("targetSize") ? "targetSize" : (ids.contains("target_size") ? "target_size" : nil)
+        if let key = targetSizeKey {
+            let modeDict: [String: ParameterValue] = ids.contains("mode") ? ["mode": .text("targetSize")] : [:]
             presets.append(ParameterPreset(
                 id: "size_5mb",
                 label: "5 MB",
-                values: ["target_size": .integer(5 * 1024 * 1024)]
+                values: modeDict.merging([key: .integer(5 * 1024 * 1024)]) { _, new in new }
             ))
             presets.append(ParameterPreset(
                 id: "size_25mb",
                 label: "25 MB",
-                values: ["target_size": .integer(25 * 1024 * 1024)]
+                values: modeDict.merging([key: .integer(25 * 1024 * 1024)]) { _, new in new }
             ))
             presets.append(ParameterPreset(
                 id: "size_100mb",
                 label: "100 MB",
-                values: ["target_size": .integer(100 * 1024 * 1024)]
+                values: modeDict.merging([key: .integer(100 * 1024 * 1024)]) { _, new in new }
             ))
         }
 
@@ -287,20 +290,37 @@ public final class ParameterFormModel {
             ))
         }
 
-        if ids.contains("layout") {
+        let channelsKey = ids.contains("channels") ? "channels" : (ids.contains("layout") ? "layout" : nil)
+        if let chKey = channelsKey {
             presets.append(ParameterPreset(
                 id: "ch_mono",
                 label: "Mono",
-                values: ["layout": .text("mono")]
+                values: [chKey: .text("mono")]
             ))
             presets.append(ParameterPreset(
                 id: "ch_stereo",
                 label: "Stereo",
-                values: ["layout": .text("stereo")]
+                values: [chKey: .text("stereo")]
             ))
         }
 
-        if ids.contains("box") {
+        if ids.contains("rectangle") {
+            presets.append(ParameterPreset(
+                id: "crop_16_9",
+                label: "16:9",
+                values: ["rectangle": .rectangle(x: 0, y: 0, width: 1920, height: 1080)]
+            ))
+            presets.append(ParameterPreset(
+                id: "crop_1_1",
+                label: "1:1",
+                values: ["rectangle": .rectangle(x: 0, y: 0, width: 1080, height: 1080)]
+            ))
+            presets.append(ParameterPreset(
+                id: "crop_9_16",
+                label: "9:16",
+                values: ["rectangle": .rectangle(x: 0, y: 0, width: 1080, height: 1920)]
+            ))
+        } else if ids.contains("box") {
             presets.append(ParameterPreset(
                 id: "crop_16_9",
                 label: "16:9",
