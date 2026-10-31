@@ -2219,8 +2219,8 @@ do {
                "19.10 Batch execution adds BatchProgressRowView to jobsStack")
 }
 
-// MARK: - 20. Batch Parameter Resolution & Intent Tests (Phase 10 Fix A)
-print("\n--- 20. Batch Parameter Resolution & Intent Tests (Phase 10 Fix A) ---")
+// MARK: - 20. Batch Parameter Resolution, Concurrency & Async Probing Tests (Phase 10 Fixes A-D)
+print("\n--- 20. Batch Parameter Resolution, Concurrency & Async Probing Tests (Phase 10 Fixes A-D) ---")
 do {
     let file1 = URL(fileURLWithPath: "file1_1280x720.mp4")
     let file2 = URL(fileURLWithPath: "file2_1920x1080.mp4")
@@ -2599,6 +2599,103 @@ do {
     assertTest(activeQ?.pendingCount == 0, "20.10 Window close clears all queued batch jobs")
     let leftoverAfterClose = (try? FileManager.default.contentsOfDirectory(atPath: NSTemporaryDirectory()))?.filter { $0.hasPrefix("Pasta_") } ?? []
     assertTest(leftoverAfterClose.isEmpty, "20.10 Zero leftover Pasta_* directories after window close")
+
+    // 20.11 Fix D: MediaProbe calls run asynchronously on background thread; while probing, Run is disabled and errorLabel shows 'Reading file info...'
+    final class AsyncControlledProbe: MediaProbe, @unchecked Sendable {
+        var result: MediaProbeResult?
+        var error: Error?
+        var blockSemaphore: DispatchSemaphore?
+
+        init(result: MediaProbeResult? = nil, error: Error? = nil, blockSemaphore: DispatchSemaphore? = nil) {
+            self.result = result
+            self.error = error
+            self.blockSemaphore = blockSemaphore
+        }
+
+        func probe(url: URL) throws -> MediaProbeResult {
+            blockSemaphore?.wait()
+            if let err = error {
+                throw err
+            }
+            return result ?? MediaProbeResult(width: 1920, height: 1080, duration: 60.0)
+        }
+    }
+
+    let asyncBlockSema = DispatchSemaphore(value: 0)
+    let asyncControlledProbe = AsyncControlledProbe(
+        result: MediaProbeResult(width: 1280, height: 720, duration: 45.0),
+        blockSemaphore: asyncBlockSema
+    )
+
+    let asyncCropModel = ParameterFormModel(
+        action: cropAction,
+        loadLastUsed: false,
+        inputFile: file1,
+        probe: asyncControlledProbe,
+        asyncProbe: true
+    )
+    let asyncCropPanel = ParameterPanelView(model: asyncCropModel, action: cropAction)
+
+    assertTest(asyncCropModel.isProbing == true, "20.11 ParameterFormModel isProbing is true during async probe")
+    assertTest(asyncCropModel.isValid == false, "20.11 ParameterFormModel isValid is false during async probe")
+    assertTest(asyncCropPanel.runButton.isEnabled == false, "20.11 Run button is disabled while probing")
+    assertTest(asyncCropPanel.errorLabel.stringValue == "Reading file info...", "20.11 errorLabel displays 'Reading file info...' while probing")
+
+    // 20.12 Fix D: Once async probe finishes, Run is enabled and probed dimensions are applied
+    let probeFinishedSema = DispatchSemaphore(value: 0)
+    let oldProbeCallback = asyncCropModel.onProbeStateChanged
+    asyncCropModel.onProbeStateChanged = {
+        oldProbeCallback?()
+        DispatchQueue.main.async {
+            if !asyncCropModel.isProbing {
+                probeFinishedSema.signal()
+            }
+        }
+    }
+
+    asyncBlockSema.signal()
+    _ = probeFinishedSema.wait(timeout: .now() + 5.0)
+    RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+
+    assertTest(asyncCropModel.isProbing == false, "20.12 ParameterFormModel isProbing is false after completion")
+    assertTest(asyncCropModel.isValid == true, "20.12 ParameterFormModel isValid is true after completion")
+    assertTest(asyncCropPanel.runButton.isEnabled == true, "20.12 Run button is enabled once probing finishes")
+    assertTest(asyncCropModel.probeResult?.width == 1280, "20.12 Probed width is 1280")
+    assertTest(asyncCropModel.probeResult?.height == 720, "20.12 Probed height is 720")
+
+    // 20.13 Fix D: When async probe fails, Run remains disabled and readable error is displayed
+    let asyncErrProbe = AsyncControlledProbe(
+        error: PastaError.commandFailed("Unrecognized media format or header damaged", exitCode: 1)
+    )
+    let failProbeSema = DispatchSemaphore(value: 0)
+
+    let asyncFailModel = ParameterFormModel(
+        action: cropAction,
+        loadLastUsed: false,
+        inputFile: file1,
+        probe: asyncErrProbe,
+        asyncProbe: true
+    )
+    let asyncFailPanel = ParameterPanelView(model: asyncFailModel, action: cropAction)
+
+    let oldFailCallback = asyncFailModel.onProbeStateChanged
+    asyncFailModel.onProbeStateChanged = {
+        oldFailCallback?()
+        DispatchQueue.main.async {
+            if !asyncFailModel.isProbing {
+                failProbeSema.signal()
+            }
+        }
+    }
+
+    _ = failProbeSema.wait(timeout: .now() + 5.0)
+    RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+
+    assertTest(asyncFailModel.isProbing == false, "20.13 ParameterFormModel isProbing is false after error")
+    assertTest(asyncFailModel.isValid == false, "20.13 ParameterFormModel isValid is false when probe fails")
+    assertTest(asyncFailPanel.runButton.isEnabled == false, "20.13 Run button is disabled when probe fails")
+    assertTest(asyncFailPanel.errorLabel.stringValue.contains("Could not read file info:"),
+               "20.13 errorLabel displays readable error when probe fails: \(asyncFailPanel.errorLabel.stringValue)")
 
     ToolLocator.shared.setOverride(tool: "fake_fast", url: nil)
     ToolLocator.shared.setOverride(tool: "fake_slow_overlap", url: nil)

@@ -89,6 +89,9 @@ public final class ParameterFormModel {
     public var batchCount: Int { inputFiles.count }
     public var cropIntent: CropIntent?
     public var trimEndIntent: TrimEndIntent?
+    public let asyncProbe: Bool
+    public private(set) var isProbing: Bool = false
+    public var onProbeStateChanged: (() -> Void)?
     public let probe: MediaProbe
     public private(set) var probeResult: MediaProbeResult?
     public private(set) var probeError: String?
@@ -118,12 +121,14 @@ public final class ParameterFormModel {
         loadLastUsed: Bool = true,
         inputFile: URL? = nil,
         inputFiles: [URL] = [],
-        probe: MediaProbe = MediaProbeService.shared.probe
+        probe: MediaProbe = MediaProbeService.shared.probe,
+        asyncProbe: Bool = false
     ) {
         self.actionID = action.id
         self.actionDisplayName = action.displayName
         self.parameters = action.parameters
         self.preferences = preferences
+        self.asyncProbe = asyncProbe
         if !inputFiles.isEmpty {
             self.inputFiles = inputFiles
         } else if let file = inputFile {
@@ -143,12 +148,14 @@ public final class ParameterFormModel {
         loadLastUsed: Bool = true,
         inputFile: URL? = nil,
         inputFiles: [URL] = [],
-        probe: MediaProbe = MediaProbeService.shared.probe
+        probe: MediaProbe = MediaProbeService.shared.probe,
+        asyncProbe: Bool = false
     ) {
         self.actionID = actionID
         self.actionDisplayName = actionDisplayName
         self.parameters = parameters
         self.preferences = preferences
+        self.asyncProbe = asyncProbe
         if !inputFiles.isEmpty {
             self.inputFiles = inputFiles
         } else if let file = inputFile {
@@ -161,7 +168,12 @@ public final class ParameterFormModel {
     }
 
     private func setup(loadLastUsed: Bool) {
-        if let file = inputFile {
+        if asyncProbe && inputFile != nil {
+            self.isProbing = true
+            self.probeResult = nil
+            self.probeError = nil
+        } else if let file = inputFile {
+            self.isProbing = false
             do {
                 self.probeResult = try probe.probe(url: file)
                 self.probeError = nil
@@ -170,6 +182,7 @@ public final class ParameterFormModel {
                 self.probeError = error.localizedDescription
             }
         } else {
+            self.isProbing = false
             self.probeResult = nil
             self.probeError = nil
         }
@@ -205,6 +218,10 @@ public final class ParameterFormModel {
 
         self.presets = Self.defaultPresets(for: actionID, parameters: parameters, probeResult: probeResult)
         validate()
+
+        if asyncProbe && inputFile != nil {
+            loadFileInfoAsync()
+        }
     }
 
     public func field(for parameterId: String) -> ParameterFormField? {
@@ -354,9 +371,95 @@ public final class ParameterFormModel {
         return resolved
     }
 
+    public func loadFileInfoAsync() {
+        guard let file = inputFile else {
+            self.isProbing = false
+            return
+        }
+        self.isProbing = true
+        self.probeResult = nil
+        self.probeError = nil
+        self.validate()
+        onProbeStateChanged?()
+
+        let p = self.probe
+        DispatchQueue.global(qos: .userInitiated).async { [weak self, file] in
+            do {
+                let res = try p.probe(url: file)
+                DispatchQueue.main.async {
+                    guard let self = self else { return }
+                    self.probeResult = res
+                    self.probeError = nil
+                    self.isProbing = false
+                    self.applyProbeResult(res)
+                    self.validate()
+                    self.onProbeStateChanged?()
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    guard let self = self else { return }
+                    self.probeResult = nil
+                    self.probeError = error.localizedDescription
+                    self.isProbing = false
+                    self.validate()
+                    self.onProbeStateChanged?()
+                }
+            }
+        }
+    }
+
+    public func applyProbeResult(_ p: MediaProbeResult) {
+        let ids = Set(parameters.map { $0.id })
+        if ids.contains("rectangle") {
+            if let cw = p.width, let ch = p.height, cw > 0, ch > 0 {
+                let full = CropCalculator.computeCrop(containerWidth: cw, containerHeight: ch, ratioWidth: cw, ratioHeight: ch)
+                if cropIntent == nil || cropIntent == .ratio(width: 16, height: 9) {
+                    cropIntent = .ratio(width: cw, height: ch)
+                    if let field = field(for: "rectangle") {
+                        field.update(value: .rectangle(x: full.x, y: full.y, width: full.width, height: full.height))
+                    }
+                }
+            }
+        }
+        if ids.contains("end"), let dur = p.duration, dur > 0 {
+            if trimEndIntent == .endOfFile {
+                if let field = field(for: "end") {
+                    field.update(value: .number(dur))
+                }
+            }
+        }
+        for param in parameters {
+            if param.kind == .timeRange, let dur = p.duration, dur > 0 {
+                if trimEndIntent == .endOfFile {
+                    if let field = field(for: param.id) {
+                        field.update(value: .timeRange(start: 0.0, end: dur))
+                    }
+                }
+            }
+        }
+        self.presets = Self.defaultPresets(for: actionID, parameters: parameters, probeResult: p)
+    }
+
     @discardableResult
     public func validate() -> Bool {
         validationErrors.removeAll()
+        warnings.removeAll()
+        for f in fields {
+            f.errorMessage = nil
+            f.warningMessage = nil
+        }
+
+        if isProbing {
+            isValid = false
+            return false
+        }
+
+        if let err = probeError, parameters.contains(where: { $0.id == "rectangle" || $0.id == "end" || $0.kind == .timeRange }) {
+            let msg = "Could not probe media: \(err)"
+            validationErrors["probe"] = msg
+            isValid = false
+            return false
+        }
 
         for f in fields {
             do {

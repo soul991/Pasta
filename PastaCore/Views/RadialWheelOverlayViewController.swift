@@ -203,7 +203,13 @@ public final class RadialWheelOverlayViewController: NSViewController {
             hintPillContainer.alphaValue = 0.0
         }
 
-        let model = ParameterFormModel(action: action, loadLastUsed: true, inputFile: targetFiles.first, inputFiles: targetFiles)
+        let model = ParameterFormModel(
+            action: action,
+            loadLastUsed: true,
+            inputFile: targetFiles.first,
+            inputFiles: targetFiles,
+            asyncProbe: true
+        )
         let panel = ParameterPanelView(model: model, action: action)
         let panelW: CGFloat = 310.0
         let panelH: CGFloat = 340.0
@@ -212,9 +218,10 @@ public final class RadialWheelOverlayViewController: NSViewController {
         panel.onCancel = { [weak self] in
             self?.dismissParameterPanel(animated: true)
         }
-        panel.onRun = { [weak self] params in
+        panel.onRun = { [weak self, weak model] params in
+            model?.saveAsLastUsed()
             self?.dismissParameterPanel(animated: true)
-            self?.performConversion(action: action, params: params)
+            self?.performConversion(action: action, params: params, formModel: model)
         }
 
         view.addSubview(panel)
@@ -275,7 +282,7 @@ public final class RadialWheelOverlayViewController: NSViewController {
         }
     }
 
-    private func performConversion(action: ConversionAction, params: ParameterValues = [:]) {
+    private func performConversion(action: ConversionAction, params: ParameterValues = [:], formModel: ParameterFormModel? = nil) {
         guard let file = targetFiles.first else { return }
         DragMonitor.shared.actionExecuted()
 
@@ -310,8 +317,22 @@ public final class RadialWheelOverlayViewController: NSViewController {
 
         // Execute conversion in background
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let fileParams: ParameterValues
+            if let model = formModel {
+                do {
+                    fileParams = try model.resolveParameters(for: file)
+                } catch {
+                    DispatchQueue.main.async {
+                        self?.hudView.showError(error.localizedDescription)
+                    }
+                    return
+                }
+            } else {
+                fileParams = params
+            }
+
             do {
-                let output = try JobRunner.shared.run(action: action, input: file, parameters: params)
+                let output = try JobRunner.shared.run(action: action, input: file, parameters: fileParams)
                 DispatchQueue.main.async {
                     self?.hudView.showSuccess(outputURL: output)
                 }

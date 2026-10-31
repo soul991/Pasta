@@ -24,10 +24,10 @@ public final class ParameterPanelView: NSVisualEffectView {
     private let contentScrollView = NSScrollView()
     private let fieldsStack = NSStackView()
 
-    private let errorLabel = NSTextField(labelWithString: "")
+    public let errorLabel = NSTextField(labelWithString: "")
     private let actionsStack = NSStackView()
-    private let cancelButton = NSButton()
-    private let runButton = NSButton()
+    public let cancelButton = NSButton()
+    public let runButton = NSButton()
 
     // Updaters for field controls when presets are applied
     private var fieldRefreshers: [() -> Void] = []
@@ -95,6 +95,14 @@ public final class ParameterPanelView: NSVisualEffectView {
 
         // Initial validation check
         validateAndUpdate()
+
+        model.onProbeStateChanged = { [weak self] in
+            DispatchQueue.main.async {
+                self?.reloadPresets()
+                self?.refreshAllFields()
+                self?.validateAndUpdate()
+            }
+        }
     }
 
     private func setupHeader() {
@@ -544,6 +552,9 @@ public final class ParameterPanelView: NSVisualEffectView {
                 } else {
                     cropSizeLabel.stringValue = "Centered crop"
                 }
+            } else if model.isProbing {
+                sourceLabel = NSTextField(labelWithString: "Reading file info...")
+                sourceLabel.textColor = ThemeManager.shared.accentColor
             } else {
                 sourceLabel = NSTextField(labelWithString: (srcW > 0 && srcH > 0) ? "Source: \(srcW)×\(srcH)" : (model.probeError != nil ? "Source: probe error" : "Source: unknown"))
                 sourceLabel.textColor = (model.probeError != nil) ? NSColor.systemRed : ThemeManager.shared.textSecondaryColor
@@ -673,6 +684,16 @@ public final class ParameterPanelView: NSVisualEffectView {
                     } else {
                         cropSizeLabel?.stringValue = "Centered crop"
                     }
+                } else if self.model.isProbing {
+                    sourceLabel?.stringValue = "Reading file info..."
+                    sourceLabel?.textColor = ThemeManager.shared.accentColor
+                } else if let err = self.model.probeError {
+                    sourceLabel?.stringValue = "Source: probe error"
+                    sourceLabel?.textColor = NSColor.systemRed
+                } else if let p = self.model.probeResult, let cw = p.width, let ch = p.height, cw > 0, ch > 0 {
+                    sourceLabel?.stringValue = "Source: \(cw)×\(ch)"
+                    sourceLabel?.textColor = ThemeManager.shared.textSecondaryColor
+                    cropSizeLabel?.stringValue = "Crop: \(w)×\(h)"
                 } else {
                     cropSizeLabel?.stringValue = "Crop: \(w)×\(h)"
                 }
@@ -752,13 +773,46 @@ public final class ParameterPanelView: NSVisualEffectView {
         validateAndUpdate()
     }
 
+    public func reloadPresets() {
+        guard presetsScrollView.superview != nil else { return }
+        for v in presetsStack.arrangedSubviews {
+            presetsStack.removeArrangedSubview(v)
+            v.removeFromSuperview()
+        }
+        presetChips.removeAll()
+        for preset in model.presets {
+            let chip = PresetChipView(preset: preset)
+            chip.onTap = { [weak self] in
+                self?.applyPreset(preset)
+            }
+            presetsStack.addArrangedSubview(chip)
+            presetChips.append(chip)
+        }
+    }
+
     public func refreshAllFields() {
         for refresher in fieldRefreshers {
             refresher()
         }
     }
 
-    private func validateAndUpdate() {
+    public func validateAndUpdate() {
+        if model.isProbing {
+            runButton.isEnabled = false
+            errorLabel.stringValue = "Reading file info..."
+            errorLabel.textColor = ThemeManager.shared.accentColor
+            errorLabel.isHidden = false
+            return
+        }
+
+        if let probeErr = model.probeError {
+            runButton.isEnabled = false
+            errorLabel.stringValue = "Could not read file info: \(probeErr)"
+            errorLabel.textColor = NSColor.systemRed
+            errorLabel.isHidden = false
+            return
+        }
+
         let valid = model.isValid
         runButton.isEnabled = valid
 

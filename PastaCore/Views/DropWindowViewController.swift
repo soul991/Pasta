@@ -347,7 +347,8 @@ public final class DropWindowViewController: NSViewController {
             action: action,
             loadLastUsed: true,
             inputFile: selectedFiles.first,
-            inputFiles: selectedFiles
+            inputFiles: selectedFiles,
+            asyncProbe: true
         )
         let panel = ParameterPanelView(model: model, action: action)
         panel.translatesAutoresizingMaskIntoConstraints = false
