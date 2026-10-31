@@ -109,6 +109,45 @@ public final class PreferencesManager {
         }
     }
 
+    // MARK: - Last-Used Parameters Per Action
+
+    private let lastUsedPrefix = "pasta_last_used_params_"
+
+    public func lastUsedParameters(for actionID: String) -> [String: String]? {
+        let key = lastUsedPrefix + actionID
+        return UserDefaults.standard.dictionary(forKey: key) as? [String: String]
+    }
+
+    public func setLastUsedParameters(_ values: [String: String], for actionID: String) {
+        let key = lastUsedPrefix + actionID
+        UserDefaults.standard.set(values, forKey: key)
+    }
+
+    public func clearLastUsedParameters(for actionID: String) {
+        let key = lastUsedPrefix + actionID
+        UserDefaults.standard.removeObject(forKey: key)
+    }
+
+    public func lastUsedParameterValues(for actionID: String, parameters: [ActionParameter]) -> ParameterValues? {
+        guard let dict = lastUsedParameters(for: actionID) else { return nil }
+        var result: ParameterValues = [:]
+        let paramMap = Dictionary(uniqueKeysWithValues: parameters.map { ($0.id, $0) })
+        for (k, str) in dict {
+            if let param = paramMap[k] {
+                result[k] = ActionParameter.parseCLIValue(str, for: param.kind)
+            }
+        }
+        return result
+    }
+
+    public func setLastUsedParameterValues(_ values: ParameterValues, for actionID: String) {
+        var dict: [String: String] = [:]
+        for (k, v) in values {
+            dict[k] = v.asString
+        }
+        setLastUsedParameters(dict, for: actionID)
+    }
+
     public func effectiveDestination(for inputURL: URL) -> URL? {
         if outputMode == .customFolder, let path = customFolderPath, !path.isEmpty {
             let customURL = URL(fileURLWithPath: path)

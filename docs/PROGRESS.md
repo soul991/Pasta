@@ -76,7 +76,8 @@
 | **Review** | Adversarial Review & Bug Fixes: runAsync customRunner fix, two-pass video encoding, filter-complex join fallback, audio bleep eval=frame, strict metadata read-back, reverse PDF reorganization, untampered network check | `85be177` | 139/139 Unit, 33/33 Sec8 | **Complete** |
 | **Section 12** | Shift-hold state machine, 450 ms threshold, 120 ms charging ring, latching, Option tap toggle | `9814586` | 157/157 Unit, 33/33 Sec8 | **Complete** |
 | **Section 13** | JobRunner timeout, cancel zero leaks, SIGTERM->SIGKILL, ffmpeg inactivity watchdog | `b9c45cc` | 168/168 Unit, 33/33 Sec8 | **Complete** |
-| **Section 14** | MediaTools loudnorm measurement validation, -inf rejection, exact pass 2 args | *(Current)* | 173/173 Unit, 33/33 Sec8 | **Complete** |
+| **Section 14** | MediaTools loudnorm measurement validation, -inf rejection, exact pass 2 args | `68dfddc` | 173/173 Unit, 33/33 Sec8 | **Complete** |
+| **Section 15** | ParameterFormModel headless model, presets, defaults, last-used, validation | *(Current)* | 195/195 Unit, 33/33 Sec8 | **Complete** |
 
 ---
 
@@ -135,5 +136,6 @@
 | Inactivity watchdog timeout for ffmpeg | Step 0 | Watchdog | **DONE** | `Step 0: Inactivity watchdog cancels silent process within timeout window` |
 | Inactivity watchdog streaming progress reset | Step 0 | Watchdog | **DONE** | `Step 0: Inactivity watchdog resets on active progress and completes successfully` |
 | Audio loudness measurement validation (`audio.normalize`) | Step 0 (Fix) | Audio Tools | **DONE** | `14.1–14.4 audio.normalize loudness measurement validation and exact pass 2 args` |
+| ParameterFormModel (fields, defaults, presets, last-used, validation) | Phase 10 Step 1 | Architecture | **DONE** | `15.1–15.9 ParameterFormModel headless unit tests` |
 
 

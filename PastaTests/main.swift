@@ -1701,6 +1701,88 @@ do {
     assertTest(argsMatch, "14.4 audio.normalize passes exact measured argument string to pass 2", details: "Got: '\(capturedArgs.trimmingCharacters(in: .whitespacesAndNewlines))'")
 }
 
+// MARK: - 15. ParameterFormModel Headless Tests (Phase 10 Step 1)
+print("\n--- 15. ParameterFormModel Headless Tests (Phase 10 Step 1) ---")
+do {
+    let dummyFile = URL(fileURLWithPath: "sample.mp4")
+    guard let speedAction = FormatRegistry.shared.action(for: dummyFile, actionID: "video.speed") else {
+        fatalError("video.speed action not registered")
+    }
+
+    // 15.1 Defaults: initializes with declared default values and is valid
+    let model1 = ParameterFormModel(action: speedAction, loadLastUsed: false)
+    assertTest(model1.isValid, "15.1 ParameterFormModel initially valid")
+    assertTest(model1.fields.count == 1, "15.1 Speed action produces 1 parameter field")
+    assertTest(model1.field(for: "factor")?.currentValue == .number(1.0), "15.1 Default factor is 1.0")
+
+    // 15.2 Presets: contains presets for factor (0.5x, 1.5x, 2.0x)
+    assertTest(!model1.presets.isEmpty, "15.2 Model provides presets for speed action")
+    if let preset2x = model1.presets.first(where: { $0.id == "spd_20" }) {
+        model1.applyPreset(preset2x)
+        assertTest(model1.values["factor"] == .number(2.0), "15.2 applyPreset updates factor to 2.0")
+        assertTest(model1.isValid, "15.2 Model remains valid after applying preset")
+    } else {
+        assertTest(false, "15.2 spd_20 preset not found")
+    }
+
+    // 15.3 Last-used: saveAsLastUsed persists values to PreferencesManager and loads on next model
+    model1.updateValue(.number(1.5), for: "factor")
+    model1.saveAsLastUsed()
+    defer { model1.clearLastUsed() }
+
+    let model2 = ParameterFormModel(action: speedAction, loadLastUsed: true)
+    assertTest(model2.values["factor"] == .number(1.5), "15.3 ParameterFormModel loads last-used values from PreferencesManager")
+
+    // 15.4 Reset to defaults: reverts to default 1.0
+    model2.resetToDefaults()
+    assertTest(model2.values["factor"] == .number(1.0), "15.4 resetToDefaults reverts fields to declared defaults")
+
+    // 15.5 Live validation error: hostile characters rejected
+    model2.updateStringValue("1.5; echo pwned", for: "factor")
+    assertTest(!model2.isValid, "15.5 Hostile characters make model invalid")
+    assertTest(model2.validationErrors["factor"]?.contains("Hostile character") == true, "15.5 Validation error explains hostile character")
+
+    // 15.6 Out-of-range below minimum rejected
+    model2.updateValue(.number(0.1), for: "factor")
+    assertTest(!model2.isValid, "15.6 Speed factor 0.1 below minimum 0.25 is invalid")
+    assertTest(model2.validationErrors["factor"]?.contains("below minimum") == true, "15.6 Error explains value is below minimum")
+
+    // 15.7 Out-of-range above maximum rejected
+    model2.updateValue(.number(5.0), for: "factor")
+    assertTest(!model2.isValid, "15.7 Speed factor 5.0 above maximum 4.0 is invalid")
+    assertTest(model2.validationErrors["factor"]?.contains("exceeds maximum") == true, "15.7 Error explains value exceeds maximum")
+
+    // 15.8 Choice validation on audio.channels
+    let wavFile = URL(fileURLWithPath: "sample.wav")
+    if let chanAction = FormatRegistry.shared.action(for: wavFile, actionID: "audio.channels") {
+        let chanModel = ParameterFormModel(action: chanAction, loadLastUsed: false)
+        assertTest(chanModel.isValid, "15.8 Channels model initially valid with default")
+
+        chanModel.updateValue(.text("stereo"), for: "layout")
+        assertTest(chanModel.isValid, "15.8 Layout 'stereo' is valid choice")
+
+        chanModel.updateValue(.text("quadraphonic"), for: "layout")
+        assertTest(!chanModel.isValid, "15.8 Layout 'quadraphonic' is invalid choice")
+        assertTest(chanModel.validationErrors["layout"]?.contains("Invalid choice") == true, "15.8 Error explains invalid choice")
+    } else {
+        assertTest(false, "15.8 audio.channels action not registered")
+    }
+
+    // 15.9 Compression target_size presets and percent validation
+    let pngFile = URL(fileURLWithPath: "sample.png")
+    if let compAction = FormatRegistry.shared.action(for: pngFile, actionID: "image.compress") {
+        let compModel = ParameterFormModel(action: compAction, loadLastUsed: false)
+        assertTest(compModel.presets.contains(where: { $0.id == "size_5mb" }), "15.9 Compression model has 5 MB preset")
+        assertTest(compModel.presets.contains(where: { $0.id == "pct_50" }), "15.9 Compression model has 50% preset")
+
+        compModel.updateValue(.number(150.0), for: "percent")
+        assertTest(!compModel.isValid, "15.9 Percent 150% is outside 0-100 range")
+        assertTest(compModel.validationErrors["percent"]?.contains("outside allowed range") == true, "15.9 Error explains percentage range")
+    } else {
+        assertTest(false, "15.9 image.compress action not registered")
+    }
+}
+
 print("\n==================================================")
 print("Test Suite Summary: \(passedTests)/\(totalTests) Passed, \(failedTests) Failed")
 print("==================================================")
