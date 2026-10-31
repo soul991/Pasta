@@ -149,6 +149,17 @@ public final class MediaTools {
         }
     }
 
+    private static func isInvalidLoudnessValue(_ val: String) -> Bool {
+        let trimmed = val.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if trimmed.isEmpty || trimmed.contains("inf") || trimmed.contains("nan") {
+            return true
+        }
+        guard let d = Double(trimmed) else {
+            return true
+        }
+        return d.isInfinite || d.isNaN
+    }
+
     public func normalizeAudio(
         input: URL,
         output: URL,
@@ -162,29 +173,47 @@ public final class MediaTools {
         )
         let (_, errStr) = try runner.executeCapture(invocation: p1Inv, jobId: jobId)
 
-        var measuredI = "-16.0"
-        var measuredTP = "-1.5"
-        var measuredLRA = "11.0"
-        var measuredThresh = "-26.0"
-        var targetOffset = "0.0"
+        guard let jsonStart = errStr.range(of: "{", options: .backwards),
+              let jsonEnd = errStr.range(of: "}", options: .backwards),
+              jsonStart.lowerBound < jsonEnd.upperBound else {
+            throw PastaError.invalidInput("Could not measure loudness; the file may be silent or unsupported")
+        }
 
-        if let jsonStart = errStr.range(of: "{", options: .backwards),
-           let jsonEnd = errStr.range(of: "}", options: .backwards) {
-            let jsonSubstring = String(errStr[jsonStart.lowerBound...jsonEnd.upperBound])
-            if let data = jsonSubstring.data(using: .utf8) {
-                do {
-                    if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                        measuredI = (json["input_i"] as? String) ?? measuredI
-                        measuredTP = (json["input_tp"] as? String) ?? measuredTP
-                        measuredLRA = (json["input_lra"] as? String) ?? measuredLRA
-                        measuredThresh = (json["input_thresh"] as? String) ?? measuredThresh
-                        targetOffset = (json["target_offset"] as? String) ?? targetOffset
-                    }
-                } catch {
-                    // Safe fallback: if JSON parsing fails, retain standard EBU R128 integrated loudness default values (-16 LUFS)
-                    PastaLogger.shared.debug("Could not parse loudnorm measurement JSON: \(error.localizedDescription), using default target offsets")
-                }
+        let jsonSubstring = String(errStr[jsonStart.lowerBound...jsonEnd.upperBound])
+        guard let data = jsonSubstring.data(using: .utf8) else {
+            throw PastaError.invalidInput("Could not measure loudness; the file may be silent or unsupported")
+        }
+
+        let json: [String: Any]
+        do {
+            guard let parsed = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                throw PastaError.invalidInput("Could not measure loudness; the file may be silent or unsupported")
             }
+            json = parsed
+        } catch {
+            throw PastaError.invalidInput("Could not measure loudness; the file may be silent or unsupported")
+        }
+
+        func extractString(_ key: String) -> String? {
+            if let s = json[key] as? String { return s }
+            if let n = json[key] as? NSNumber { return n.stringValue }
+            return nil
+        }
+
+        guard let measuredI = extractString("input_i"),
+              let measuredTP = extractString("input_tp"),
+              let measuredLRA = extractString("input_lra"),
+              let measuredThresh = extractString("input_thresh"),
+              let targetOffset = extractString("target_offset") else {
+            throw PastaError.invalidInput("Could not measure loudness; the file may be silent or unsupported")
+        }
+
+        if Self.isInvalidLoudnessValue(measuredI) ||
+           Self.isInvalidLoudnessValue(measuredTP) ||
+           Self.isInvalidLoudnessValue(measuredLRA) ||
+           Self.isInvalidLoudnessValue(measuredThresh) ||
+           Self.isInvalidLoudnessValue(targetOffset) {
+            throw PastaError.invalidInput("Could not measure loudness; the file may be silent or unsupported")
         }
 
         let af = "loudnorm=I=-16:TP=-1.5:LRA=11:measured_I=\(measuredI):measured_TP=\(measuredTP):measured_LRA=\(measuredLRA):measured_thresh=\(measuredThresh):offset=\(targetOffset):linear=true"

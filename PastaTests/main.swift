@@ -1562,6 +1562,145 @@ do {
     assertTest(streamSucceeded, "Step 0: Inactivity watchdog resets on active progress and completes successfully")
 }
 
+// MARK: - 14. MediaTools audio.normalize Loudness Measurement Tests
+print("\n--- 14. MediaTools audio.normalize Loudness Measurement Tests ---")
+do {
+    let scriptURL = URL(fileURLWithPath: "/tmp/fake_ffmpeg_loudnorm.sh")
+    let modeURL = URL(fileURLWithPath: "/tmp/loudnorm_test_mode.txt")
+    let argsURL = URL(fileURLWithPath: "/tmp/loudnorm_pass2_args.txt")
+
+    let scriptContent = """
+    #!/bin/sh
+    MODE_FILE="/tmp/loudnorm_test_mode.txt"
+    ARGS_FILE="/tmp/loudnorm_pass2_args.txt"
+    MODE=$(cat "$MODE_FILE" 2>/dev/null || echo "missing_json")
+
+    if echo "$@" | grep -q "print_format=json"; then
+        case "$MODE" in
+            "missing_json")
+                echo "ffmpeg banner output without any json block" >&2
+                exit 0
+                ;;
+            "missing_key")
+                cat << 'EOF' >&2
+    [Parsed_loudnorm_0 @ 0x123] 
+    {
+        "input_i" : "-21.50",
+        "input_tp" : "-1.20",
+        "input_lra" : "7.80",
+        "target_offset" : "+0.20"
+    }
+    EOF
+                exit 0
+                ;;
+            "inf_value")
+                cat << 'EOF' >&2
+    [Parsed_loudnorm_0 @ 0x123] 
+    {
+        "input_i" : "-inf",
+        "input_tp" : "-inf",
+        "input_lra" : "0.00",
+        "input_thresh" : "-inf",
+        "target_offset" : "0.00"
+    }
+    EOF
+                exit 0
+                ;;
+            "valid")
+                cat << 'EOF' >&2
+    [Parsed_loudnorm_0 @ 0x123] 
+    {
+        "input_i" : "-21.50",
+        "input_tp" : "-1.20",
+        "input_lra" : "7.80",
+        "input_thresh" : "-31.50",
+        "target_offset" : "+0.20"
+    }
+    EOF
+                exit 0
+                ;;
+        esac
+    else
+        echo "$@" > "$ARGS_FILE"
+        for last_arg in "$@"; do :; done
+        touch "$last_arg"
+        exit 0
+    fi
+    """
+
+    try scriptContent.write(to: scriptURL, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
+
+    ToolLocator.shared.setOverride(tool: "ffmpeg", url: scriptURL)
+    defer {
+        ToolLocator.shared.setOverride(tool: "ffmpeg", url: nil)
+        try? FileManager.default.removeItem(at: scriptURL)
+        try? FileManager.default.removeItem(at: modeURL)
+        try? FileManager.default.removeItem(at: argsURL)
+    }
+
+    let dummyInput = URL(fileURLWithPath: "/tmp/fake_input.wav")
+    let dummyOutput = URL(fileURLWithPath: "/tmp/fake_output.wav")
+    try? Data("RIFF....WAVE".utf8).write(to: dummyInput)
+    defer {
+        try? FileManager.default.removeItem(at: dummyInput)
+        try? FileManager.default.removeItem(at: dummyOutput)
+    }
+
+    // 14.1 Missing JSON throws PastaError.invalidInput
+    try "missing_json".write(to: modeURL, atomically: true, encoding: .utf8)
+    var missingJsonThrew = false
+    var missingJsonMsg = ""
+    do {
+        try MediaTools.shared.normalizeAudio(input: dummyInput, output: dummyOutput, runner: JobRunner.shared, jobId: UUID())
+    } catch PastaError.invalidInput(let msg) {
+        missingJsonThrew = true
+        missingJsonMsg = msg
+    } catch {}
+    assertTest(missingJsonThrew && missingJsonMsg.contains("Could not measure loudness"), "14.1 audio.normalize throws when pass 1 produces no JSON")
+
+    // 14.2 Missing key throws PastaError.invalidInput
+    try "missing_key".write(to: modeURL, atomically: true, encoding: .utf8)
+    var missingKeyThrew = false
+    var missingKeyMsg = ""
+    do {
+        try MediaTools.shared.normalizeAudio(input: dummyInput, output: dummyOutput, runner: JobRunner.shared, jobId: UUID())
+    } catch PastaError.invalidInput(let msg) {
+        missingKeyThrew = true
+        missingKeyMsg = msg
+    } catch {}
+    assertTest(missingKeyThrew && missingKeyMsg.contains("Could not measure loudness"), "14.2 audio.normalize throws when loudnorm JSON key is missing")
+
+    // 14.3 "-inf" value throws PastaError.invalidInput
+    try "inf_value".write(to: modeURL, atomically: true, encoding: .utf8)
+    var infThrew = false
+    var infMsg = ""
+    do {
+        try MediaTools.shared.normalizeAudio(input: dummyInput, output: dummyOutput, runner: JobRunner.shared, jobId: UUID())
+    } catch PastaError.invalidInput(let msg) {
+        infThrew = true
+        infMsg = msg
+    } catch {}
+    assertTest(infThrew && infMsg.contains("Could not measure loudness"), "14.3 audio.normalize throws when loudness measurement contains -inf")
+
+    // 14.4 Valid JSON passes measured values to pass 2 with exact argument string
+    try "valid".write(to: modeURL, atomically: true, encoding: .utf8)
+    try? FileManager.default.removeItem(at: argsURL)
+    var validThrew = false
+    do {
+        try MediaTools.shared.normalizeAudio(input: dummyInput, output: dummyOutput, runner: JobRunner.shared, jobId: UUID())
+    } catch {
+        validThrew = true
+    }
+    assertTest(!validThrew, "14.4 audio.normalize succeeds on valid loudnorm JSON")
+
+    let capturedArgs = (try? String(contentsOf: argsURL, encoding: .utf8)) ?? ""
+    let expectedAf = "loudnorm=I=-16:TP=-1.5:LRA=11:measured_I=-21.50:measured_TP=-1.20:measured_LRA=7.80:measured_thresh=-31.50:offset=+0.20:linear=true"
+    let expectedArgs = "-nostdin -y -i \(dummyInput.path) -af \(expectedAf) \(dummyOutput.path)"
+    let argsMatch = capturedArgs.trimmingCharacters(in: .whitespacesAndNewlines) == expectedArgs
+    assertTest(argsMatch, "14.4 audio.normalize passes exact measured argument string to pass 2", details: "Got: '\(capturedArgs.trimmingCharacters(in: .whitespacesAndNewlines))'")
+}
+
 print("\n==================================================")
 print("Test Suite Summary: \(passedTests)/\(totalTests) Passed, \(failedTests) Failed")
 print("==================================================")

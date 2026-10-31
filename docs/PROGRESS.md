@@ -76,6 +76,7 @@
 | **Review** | Adversarial Review & Bug Fixes: runAsync customRunner fix, two-pass video encoding, filter-complex join fallback, audio bleep eval=frame, strict metadata read-back, reverse PDF reorganization, untampered network check | `85be177` | 139/139 Unit, 33/33 Sec8 | **Complete** |
 | **Section 12** | Shift-hold state machine, 450 ms threshold, 120 ms charging ring, latching, Option tap toggle | `9814586` | 157/157 Unit, 33/33 Sec8 | **Complete** |
 | **Section 13** | JobRunner timeout, cancel zero leaks, SIGTERM->SIGKILL, ffmpeg inactivity watchdog | `b9c45cc` | 168/168 Unit, 33/33 Sec8 | **Complete** |
+| **Section 14** | MediaTools loudnorm measurement validation, -inf rejection, exact pass 2 args | *(Current)* | 173/173 Unit, 33/33 Sec8 | **Complete** |
 
 ---
 
@@ -133,5 +134,6 @@
 | `SIGTERM` to `SIGKILL` process escalation | Step 0 | Hardening | **DONE** | `Step 0: SIGTERM-ignoring process is killed by SIGKILL escalation` |
 | Inactivity watchdog timeout for ffmpeg | Step 0 | Watchdog | **DONE** | `Step 0: Inactivity watchdog cancels silent process within timeout window` |
 | Inactivity watchdog streaming progress reset | Step 0 | Watchdog | **DONE** | `Step 0: Inactivity watchdog resets on active progress and completes successfully` |
+| Audio loudness measurement validation (`audio.normalize`) | Step 0 (Fix) | Audio Tools | **DONE** | `14.1–14.4 audio.normalize loudness measurement validation and exact pass 2 args` |
 
 
