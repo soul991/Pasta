@@ -14,6 +14,7 @@ public final class PreferencesManager {
     private let stayOpenKey = "pasta_stay_open_after_release"
     private let showRingKey = "pasta_show_charging_ring"
     private let reduceMotionKey = "pasta_reduce_motion"
+    private let watchdogTimeoutKey = "pasta_watchdog_timeout_minutes"
 
     public init() {}
 
@@ -90,6 +91,21 @@ public final class PreferencesManager {
         }
         set {
             UserDefaults.standard.set(newValue, forKey: reduceMotionKey)
+        }
+    }
+
+    /// Inactivity watchdog timeout in minutes for long-running tools like ffmpeg (default: 10 minutes)
+    public var watchdogTimeoutMinutes: Double {
+        get {
+            let val = UserDefaults.standard.double(forKey: watchdogTimeoutKey)
+            if val <= 0 {
+                return 10.0
+            }
+            return max(val, 1.0)
+        }
+        set {
+            let clamped = max(newValue, 1.0)
+            UserDefaults.standard.set(clamped, forKey: watchdogTimeoutKey)
         }
     }
 

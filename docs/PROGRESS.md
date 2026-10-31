@@ -66,13 +66,72 @@
 
 | Step | Scope | Commit | Tests | Status |
 | :--- | :--- | :--- | :--- | :--- |
-| **Step 0** | Re-verify baseline & repair Phase 8 leftovers | `2d59b93` | 51/51 | **Complete** |
+| **Step 0** | Re-verify baseline, repair Phase 8 leftovers, add timeout/cancel/watchdog tests | *(Current)* | 166/166 Unit, 33/33 Sec8 | **Complete** |
 | **Step 1** | Parameterized actions foundation, ActionParameter, OutputKind, CLI `--param` | `66ac489` | 67/67 | **Complete** |
 | **Step 2** | Missing formats: AVI, WMV, OGG, AIFF, GZIP, Image to PDF, PDF Merge, EPUB, LibreOffice detect | `e0ad753` | 89/89 | **Complete** |
 | **Step 3** | Compression modes: Percent & exact size for Image (binary search/palette), Video (bitrate/two-pass), Audio, PDF (Ghostscript) | `cb0cd56` | 99/99 | **Complete** |
 | **Step 4** | Video & Audio tools: Speed (0.25x–4x), Crop, Split, Join, Snapshot, EBU R128 Normalize, Channels, Bleep tone, Trim | `5756563` | 117/117 | **Complete** |
 | **Step 5** | Metadata Read (exiftool/ffprobe), Non-destructive Edit, PDF Reorganize, Image Collage, Vision Offline QR Decode | `3796891` | 131/131 | **Complete** |
 | **Step 6** | Section 8 Gate Verification: hostile filename tests, doctor verification, app signing, zero network, zero leaks | `9510a60` | 131/131 Unit, 30/30 Sec8 | **Complete** |
-| **Review** | Adversarial Review & Bug Fixes: runAsync customRunner fix, two-pass video encoding, filter-complex join fallback, audio bleep eval=frame, strict metadata read-back, reverse PDF reorganization, untampered network check | *(Current)* | 139/139 Unit, 33/33 Sec8 | **Complete** |
+| **Review** | Adversarial Review & Bug Fixes: runAsync customRunner fix, two-pass video encoding, filter-complex join fallback, audio bleep eval=frame, strict metadata read-back, reverse PDF reorganization, untampered network check | `85be177` | 139/139 Unit, 33/33 Sec8 | **Complete** |
+| **Section 12** | Shift-hold state machine, 450 ms threshold, 120 ms charging ring, latching, Option tap toggle | `9814586` | 157/157 Unit, 33/33 Sec8 | **Complete** |
+| **Section 13** | JobRunner timeout, cancel zero leaks, SIGTERM->SIGKILL, ffmpeg inactivity watchdog | *(Current)* | 166/166 Unit, 33/33 Sec8 | **Complete** |
+
+---
+
+## Phase 9 Itemized Audit Table (Steps 1 to 5: Formats, Tools, Modes)
+
+| Item / Capability | Step | Category | Status | CI Verification Test Name |
+| :--- | :--- | :--- | :--- | :--- |
+| `ActionParameter` & `ParameterValues` definitions | Step 1 | Foundation | **DONE** | `Step 1: video.trim respects custom start and end parameters` |
+| Action parameter defaults reproduce old behavior | Step 1 | Foundation | **DONE** | `Step 1: video.trim default parameters reproduce 10-second trim exactly` |
+| Action aliases (`trim10`, `resize_50`) | Step 1 | Foundation | **DONE** | `Step 1: video.advanced.trim10 alias resolves` |
+| Parameter min/max range validation | Step 1 | Validation | **DONE** | `Step 1: Out-of-range negative start time is rejected` |
+| Unknown parameter name rejection | Step 1 | Validation | **DONE** | `Step 1: Unknown parameter name is rejected` |
+| Hostile shell parameter character rejection | Step 1 | Security | **DONE** | `Step 1: Hostile characters (; & \| \` $ \n \r \" ' \0) rejected before process runs` |
+| `OutputKind` (file vs folder) on actions | Step 1 | Architecture | **DONE** | `Step 1: pdf.to.images has OutputKind .folder(suffix: 'pages')` |
+| CLI `--param` flag parser | Step 1 | CLI | **DONE** | `video.speed handled hostile filename '-speedy clip.mp4' safely` |
+| Video output: AVI (`video.to.avi`) | Step 2 | Video Formats | **DONE** | `Step 2: Convert sample.mp4 -> video.to.avi produces file and preserves source` |
+| Video output: WMV (`video.to.wmv`) | Step 2 | Video Formats | **DONE** | `Step 2: Convert sample.mp4 -> video.to.wmv produces file and preserves source` |
+| Audio output: OGG Vorbis (`audio.to.ogg`) | Step 2 | Audio Formats | **DONE** | `Step 2: Convert sample.mp3 -> audio.to.ogg produces file and preserves source` |
+| Audio output: AIFF (`audio.to.aiff`) | Step 2 | Audio Formats | **DONE** | `Step 2: Convert sample.mp3 -> audio.to.aiff produces file and preserves source` |
+| Archives: GZIP single file creation (`archive.create.gzip`) | Step 2 | Archives | **DONE** | `Step 2: GZIP of single file produces .gz archive` |
+| Archives: GZIP `.gz` extraction input (`archive.extract`) | Step 2 | Archives | **DONE** | `Step 2: Extraction of .gz archive produces uncompressed file` |
+| Image to PDF: single image (`image.to.pdf`) | Step 2 | Documents | **DONE** | `Step 2: Single image to PDF produces PDF` |
+| Image to PDF: batch images (`image.to.pdf`) | Step 2 | Documents | **DONE** | `Step 2: Batch images to PDF produces merged PDF` |
+| PDF merge: multi-file batch action (`pdf.merge`) | Step 2 | Documents | **DONE** | `Step 2: pdf.merge produces combined PDF` |
+| Documents: DOCX &harr; EPUB (`docx.to.epub`, `epub.to.docx`) | Step 2 | Documents | **DONE** | `Step 2: Convert docx -> epub produces valid file` |
+| Documents: Markdown &harr; EPUB (`md.to.epub`, `epub.to.md`) | Step 2 | Documents | **DONE** | `Step 2: md.to.epub action is registered` |
+| Documents: HTML &harr; EPUB (`html.to.epub`, `epub.to.html`) | Step 2 | Documents | **DONE** | `Step 2: html.to.epub action is registered` |
+| Documents: TXT &harr; EPUB (`epub.to.txt`) | Step 2 | Documents | **DONE** | `Step 2: epub conversions to docx, md, html, txt are registered` |
+| LibreOffice (`soffice`) optional detection & doctor | Step 2 | Tools | **DONE** | `Step 2: soffice is correctly reported as missing optional tool without failure` |
+| Image compression by percent (`image.compress`) | Step 3 | Compression | **DONE** | `Step 3: Image compression by 50% produces file <= 50% original` |
+| Image compression by exact target size (`image.compress`) | Step 3 | Compression | **DONE** | `Step 3: Image compression by target size 25000 bytes produces file <= 25000` |
+| Video compression by percent (`video.compress`) | Step 3 | Compression | **DONE** | `Step 3: Video compression by 60% produces file within tolerance` |
+| Video compression by exact target size (`video.compress`) | Step 3 | Compression | **DONE** | `video.compress handled hostile filename '-compress video.mp4' safely` |
+| Audio compression by percent (`audio.compress`) | Step 3 | Compression | **DONE** | `Step 3: Audio compression by 50% produces file <= 50% original` |
+| Audio compression by exact target size (`audio.compress`) | Step 3 | Compression | **DONE** | `audio.compress handled hostile filename '-compress audio.mp3' safely` |
+| PDF compression by target size (`pdf.compress`) | Step 3 | Compression | **DONE** | `Step 3: PDF compression reduces file size` |
+| Impossible target size fallback handling | Step 3 | Compression | **DONE** | `Step 3: Impossible target size produces smallest valid file without crashing` |
+| Batch compression | Step 3 | Compression | **DONE** | `Step 3: Batch compression produces folder containing all compressed items` |
+| Video speed change 0.25x–4x (`video.speed`) | Step 4 | Video Tools | **DONE** | `Step 4: video.speed 2.0x halves duration to ~1.0s` |
+| Video crop with ffprobe bounds validation (`video.crop`) | Step 4 | Video Tools | **DONE** | `Step 4: video.crop crops to 160x120` & `rejects rectangle exceeding container` |
+| Video split at timestamps into folder (`video.split`) | Step 4 | Video Tools | **DONE** | `Step 4: video.split splits into 2 parts in folder` |
+| Video join concat demuxer + fallback (`video.join`) | Step 4 | Video Tools | **DONE** | `Step 4: video.join sums duration of 2 clips to ~4.0s` |
+| Video snapshot frame extraction (`video.snapshot`) | Step 4 | Video Tools | **DONE** | `Step 4: video.snapshot extracts 320x240 frame at 1.0s` |
+| Audio EBU R128 normalization (`audio.normalize`) | Step 4 | Audio Tools | **DONE** | `Step 4: audio.normalize produces normalized audio file` |
+| Audio channel layout change mono/stereo (`audio.channels`)| Step 4 | Audio Tools | **DONE** | `Step 4: audio.channels produces 2 channels (stereo)` |
+| Audio bleep tone insertion (`audio.bleep`) | Step 4 | Audio Tools | **DONE** | `Step 4: audio.bleep keeps duration intact (~2.0s)` |
+| Audio trim with start and end times (`audio.trim`) | Step 4 | Audio Tools | **DONE** | `Step 4: audio.trim trims to ~1.0s` |
+| Non-destructive metadata read text/JSON (`metadata.read`) | Step 5 | Metadata | **DONE** | `Step 5: metadata.read produces readable metadata text report` |
+| Metadata edit on copy with tag whitelist (`metadata.edit`) | Step 5 | Metadata | **DONE** | `Step 5: metadata.edit produces output copy` & `rejects unallowed tag name` |
+| PDF reorganize/reorder/extract pages (`pdf.reorganize`) | Step 5 | Documents | **DONE** | `Step 5: pdf.reorganize verifies Page 3, Page 1, Page 2 sequence` |
+| Image collage montage grid (`image.collage`) | Step 5 | Image Tools | **DONE** | `Step 5: image.collage combines images into grid` |
+| Offline QR code decode via Vision (`image.qr.read`) | Step 5 | Vision | **DONE** | `Step 5: image.qr.read decodes QR fixture correctly to 'Hello Pasta QR'` |
+| `JobRunner` explicit invocation timeout | Step 0 | Hardening | **DONE** | `Step 0: JobRunner explicit timeout throws PastaError.timedOut` |
+| `cancel(jobId:)` zero orphan processes & temp cleanup | Step 0 | Hardening | **DONE** | `Step 0: cancel(jobId:) throws PastaError.cancelled` & `leaves zero leftover` |
+| `SIGTERM` to `SIGKILL` process escalation | Step 0 | Hardening | **DONE** | `Step 0: SIGTERM-ignoring process is killed by SIGKILL escalation` |
+| Inactivity watchdog timeout for ffmpeg | Step 0 | Watchdog | **DONE** | `Step 0: Inactivity watchdog cancels silent process within timeout window` |
+| Inactivity watchdog streaming progress reset | Step 0 | Watchdog | **DONE** | `Step 0: Inactivity watchdog resets on active progress and completes successfully` |
 
 

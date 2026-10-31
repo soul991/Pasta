@@ -58,11 +58,17 @@ public final class JobRunner {
         }
     }
 
-    private func terminateGracefully(_ proc: Process) {
+    public func isJobRunning(_ jobId: UUID) -> Bool {
+        processLock.lock()
+        defer { processLock.unlock() }
+        return runningProcesses[jobId]?.isRunning ?? false
+    }
+
+    public func terminateGracefully(_ proc: Process, gracePeriod: TimeInterval = 2.0) {
         guard proc.isRunning else { return }
         proc.terminate()
         let pid = proc.processIdentifier
-        DispatchQueue.global().asyncAfter(deadline: .now() + 2.0) {
+        DispatchQueue.global().asyncAfter(deadline: .now() + gracePeriod) {
             if proc.isRunning && pid > 0 {
                 kill(pid, SIGKILL)
             }
@@ -76,6 +82,7 @@ public final class JobRunner {
         destinationDirectory: URL? = nil,
         parameters: ParameterValues = [:],
         timeoutSeconds: TimeInterval? = nil,
+        inactivityTimeoutSeconds: TimeInterval? = nil,
         jobId: UUID = UUID()
     ) throws -> URL {
         processLock.lock()
@@ -145,7 +152,7 @@ public final class JobRunner {
 
             // Run each invocation in sequence
             for inv in invocations {
-                try execute(invocation: inv, timeoutSeconds: timeoutSeconds, jobId: jobId)
+                try execute(invocation: inv, timeoutSeconds: timeoutSeconds, inactivityTimeoutSeconds: inactivityTimeoutSeconds, jobId: jobId)
             }
         }
 
@@ -207,6 +214,7 @@ public final class JobRunner {
         destinationDirectory: URL? = nil,
         parameters: ParameterValues = [:],
         timeoutSeconds: TimeInterval? = nil,
+        inactivityTimeoutSeconds: TimeInterval? = nil,
         jobId: UUID = UUID()
     ) throws -> URL {
         processLock.lock()
@@ -294,7 +302,7 @@ public final class JobRunner {
             }
 
             for inv in invocations {
-                try execute(invocation: inv, timeoutSeconds: timeoutSeconds, jobId: jobId)
+                try execute(invocation: inv, timeoutSeconds: timeoutSeconds, inactivityTimeoutSeconds: inactivityTimeoutSeconds, jobId: jobId)
             }
         }
 
@@ -382,7 +390,12 @@ private final class PipeCollector {
 
 extension JobRunner {
     @discardableResult
-    public func executeCapture(invocation: Invocation, timeoutSeconds: TimeInterval? = nil, jobId: UUID = UUID()) throws -> (stdout: String, stderr: String) {
+    public func executeCapture(
+        invocation: Invocation,
+        timeoutSeconds: TimeInterval? = nil,
+        inactivityTimeoutSeconds: TimeInterval? = nil,
+        jobId: UUID = UUID()
+    ) throws -> (stdout: String, stderr: String) {
         processLock.lock()
         if cancelledJobIds.contains(jobId) {
             processLock.unlock()
@@ -420,11 +433,17 @@ extension JobRunner {
 
         let collector = PipeCollector()
 
+        let activityLock = NSLock()
+        var lastActivityTime = Date().timeIntervalSinceReferenceDate
+
         if redirectHandle == nil {
             outPipe.fileHandleForReading.readabilityHandler = { handle in
                 let chunk = handle.availableData
                 if !chunk.isEmpty {
                     collector.appendOut(chunk)
+                    activityLock.lock()
+                    lastActivityTime = Date().timeIntervalSinceReferenceDate
+                    activityLock.unlock()
                 }
             }
         }
@@ -433,6 +452,9 @@ extension JobRunner {
             let chunk = handle.availableData
             if !chunk.isEmpty {
                 collector.appendErr(chunk)
+                activityLock.lock()
+                lastActivityTime = Date().timeIntervalSinceReferenceDate
+                activityLock.unlock()
             }
         }
 
@@ -459,17 +481,45 @@ extension JobRunner {
             effectiveTimeout = invocation.timeoutSeconds
         }
 
+        let effectiveInactivityTimeout: TimeInterval?
+        if let explicit = inactivityTimeoutSeconds, explicit > 0 {
+            effectiveInactivityTimeout = explicit
+        } else if let explicit = inactivityTimeoutSeconds, explicit <= 0 {
+            effectiveInactivityTimeout = nil
+        } else {
+            effectiveInactivityTimeout = invocation.inactivityTimeoutSeconds
+        }
+
         var timer: DispatchSourceTimer?
         var timedOut = false
         if let timeout = effectiveTimeout, timeout > 0 {
             let t = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .default))
             t.schedule(deadline: .now() + timeout)
-            t.setEventHandler {
+            t.setEventHandler { [weak process] in
                 timedOut = true
-                process.terminate()
+                process?.terminate()
             }
             t.resume()
             timer = t
+        }
+
+        var watchdogTimer: DispatchSourceTimer?
+        var watchdogTimedOut = false
+        if let inact = effectiveInactivityTimeout, inact > 0 {
+            let wt = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .default))
+            let checkInterval = max(min(0.2, inact / 4.0), 0.05)
+            wt.schedule(deadline: .now() + checkInterval, repeating: checkInterval)
+            wt.setEventHandler { [weak process] in
+                activityLock.lock()
+                let elapsed = Date().timeIntervalSinceReferenceDate - lastActivityTime
+                activityLock.unlock()
+                if elapsed >= inact {
+                    watchdogTimedOut = true
+                    process?.terminate()
+                }
+            }
+            wt.resume()
+            watchdogTimer = wt
         }
 
         let sema = DispatchSemaphore(value: 0)
@@ -481,11 +531,13 @@ extension JobRunner {
             try process.run()
         } catch {
             timer?.cancel()
+            watchdogTimer?.cancel()
             throw PastaError.executionFailed(tool: invocation.toolName, exitCode: 1, output: error.localizedDescription)
         }
 
         sema.wait()
         timer?.cancel()
+        watchdogTimer?.cancel()
 
         outPipe.fileHandleForReading.readabilityHandler = nil
         errPipe.fileHandleForReading.readabilityHandler = nil
@@ -510,6 +562,10 @@ extension JobRunner {
             throw PastaError.timedOut(tool: invocation.toolName)
         }
 
+        if watchdogTimedOut {
+            throw PastaError.timedOut(tool: "\(invocation.toolName) (inactivity watchdog)")
+        }
+
         let exitCode = process.terminationStatus
         let (outData, errData) = collector.results
         let outStr = String(data: outData, encoding: .utf8) ?? ""
@@ -524,8 +580,18 @@ extension JobRunner {
         return (outStr, errStr)
     }
 
-    public func execute(invocation: Invocation, timeoutSeconds: TimeInterval? = nil, jobId: UUID = UUID()) throws {
-        _ = try executeCapture(invocation: invocation, timeoutSeconds: timeoutSeconds, jobId: jobId)
+    public func execute(
+        invocation: Invocation,
+        timeoutSeconds: TimeInterval? = nil,
+        inactivityTimeoutSeconds: TimeInterval? = nil,
+        jobId: UUID = UUID()
+    ) throws {
+        _ = try executeCapture(
+            invocation: invocation,
+            timeoutSeconds: timeoutSeconds,
+            inactivityTimeoutSeconds: inactivityTimeoutSeconds,
+            jobId: jobId
+        )
     }
 
     @discardableResult
@@ -535,6 +601,7 @@ extension JobRunner {
         destinationDirectory: URL? = nil,
         parameters: ParameterValues = [:],
         timeoutSeconds: TimeInterval? = nil,
+        inactivityTimeoutSeconds: TimeInterval? = nil,
         jobId: UUID = UUID()
     ) async throws -> URL {
         try await withTaskCancellationHandler {
@@ -599,7 +666,12 @@ extension JobRunner {
                 }
 
                 for inv in invocations {
-                    try await executeAsync(invocation: inv, timeoutSeconds: timeoutSeconds, jobId: jobId)
+                    try await executeAsync(
+                        invocation: inv,
+                        timeoutSeconds: timeoutSeconds,
+                        inactivityTimeoutSeconds: inactivityTimeoutSeconds,
+                        jobId: jobId
+                    )
                 }
             }
 
@@ -654,7 +726,12 @@ extension JobRunner {
         }
     }
 
-    public func executeAsync(invocation: Invocation, timeoutSeconds: TimeInterval? = nil, jobId: UUID = UUID()) async throws {
+    public func executeAsync(
+        invocation: Invocation,
+        timeoutSeconds: TimeInterval? = nil,
+        inactivityTimeoutSeconds: TimeInterval? = nil,
+        jobId: UUID = UUID()
+    ) async throws {
         try Task.checkCancellation()
         if isJobCancelled(jobId) {
             throw PastaError.cancelled
@@ -690,22 +767,6 @@ extension JobRunner {
 
         let collector = PipeCollector()
 
-        if redirectHandle == nil {
-            outPipe.fileHandleForReading.readabilityHandler = { handle in
-                let chunk = handle.availableData
-                if !chunk.isEmpty {
-                    collector.appendOut(chunk)
-                }
-            }
-        }
-
-        errPipe.fileHandleForReading.readabilityHandler = { handle in
-            let chunk = handle.availableData
-            if !chunk.isEmpty {
-                collector.appendErr(chunk)
-            }
-        }
-
         let effectiveTimeout: TimeInterval?
         if let explicit = timeoutSeconds, explicit > 0 {
             effectiveTimeout = explicit
@@ -715,23 +776,66 @@ extension JobRunner {
             effectiveTimeout = invocation.timeoutSeconds
         }
 
+        let effectiveInactivityTimeout: TimeInterval?
+        if let explicit = inactivityTimeoutSeconds, explicit > 0 {
+            effectiveInactivityTimeout = explicit
+        } else if let explicit = inactivityTimeoutSeconds, explicit <= 0 {
+            effectiveInactivityTimeout = nil
+        } else {
+            effectiveInactivityTimeout = invocation.inactivityTimeoutSeconds
+        }
+
         final class Box: @unchecked Sendable {
             let lock = NSLock()
             var timer: DispatchSourceTimer?
+            var watchdogTimer: DispatchSourceTimer?
             var didTimeout = false
+            var didWatchdogTimeout = false
+            var lastActivity = Date().timeIntervalSinceReferenceDate
+
             func setTimer(_ t: DispatchSourceTimer) { lock.lock(); defer { lock.unlock() }; timer = t }
-            func cancelTimer() { lock.lock(); defer { lock.unlock() }; timer?.cancel() }
+            func setWatchdogTimer(_ t: DispatchSourceTimer) { lock.lock(); defer { lock.unlock() }; watchdogTimer = t }
+            func cancelTimers() {
+                lock.lock(); defer { lock.unlock() }
+                timer?.cancel()
+                watchdogTimer?.cancel()
+            }
             func markTimeout() { lock.lock(); defer { lock.unlock() }; didTimeout = true }
+            func markWatchdogTimeout() { lock.lock(); defer { lock.unlock() }; didWatchdogTimeout = true }
+            func touchActivity() { lock.lock(); defer { lock.unlock() }; lastActivity = Date().timeIntervalSinceReferenceDate }
+            func timeSinceActivity() -> TimeInterval {
+                lock.lock(); defer { lock.unlock() }
+                return Date().timeIntervalSinceReferenceDate - lastActivity
+            }
             var timedOut: Bool { lock.lock(); defer { lock.unlock() }; return didTimeout }
+            var watchdogTimedOut: Bool { lock.lock(); defer { lock.unlock() }; return didWatchdogTimeout }
         }
         let box = Box()
+
+        if redirectHandle == nil {
+            outPipe.fileHandleForReading.readabilityHandler = { handle in
+                let chunk = handle.availableData
+                if !chunk.isEmpty {
+                    collector.appendOut(chunk)
+                    box.touchActivity()
+                }
+            }
+        }
+
+        errPipe.fileHandleForReading.readabilityHandler = { handle in
+            let chunk = handle.availableData
+            if !chunk.isEmpty {
+                collector.appendErr(chunk)
+                box.touchActivity()
+            }
+        }
 
         let rHandle = redirectHandle
 
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
                 process.terminationHandler = { proc in
-                    box.cancelTimer()
+                    box.cancelTimers()
                     outPipe.fileHandleForReading.readabilityHandler = nil
                     errPipe.fileHandleForReading.readabilityHandler = nil
                     if rHandle == nil {
@@ -752,6 +856,11 @@ extension JobRunner {
 
                     if box.timedOut {
                         continuation.resume(throwing: PastaError.timedOut(tool: invocation.toolName))
+                        return
+                    }
+
+                    if box.watchdogTimedOut {
+                        continuation.resume(throwing: PastaError.timedOut(tool: "\(invocation.toolName) (inactivity watchdog)"))
                         return
                     }
 
@@ -785,10 +894,24 @@ extension JobRunner {
                     box.setTimer(t)
                 }
 
+                if let inact = effectiveInactivityTimeout, inact > 0 {
+                    let wt = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .default))
+                    let checkInterval = max(min(0.2, inact / 4.0), 0.05)
+                    wt.schedule(deadline: .now() + checkInterval, repeating: checkInterval)
+                    wt.setEventHandler { [weak process] in
+                        if box.timeSinceActivity() >= inact {
+                            box.markWatchdogTimeout()
+                            process?.terminate()
+                        }
+                    }
+                    wt.resume()
+                    box.setWatchdogTimer(wt)
+                }
+
                 do {
                     try process.run()
                 } catch {
-                    box.cancelTimer()
+                    box.cancelTimers()
                     _ = self.untrackProcess(for: jobId)
                     continuation.resume(throwing: PastaError.executionFailed(tool: invocation.toolName, exitCode: 1, output: error.localizedDescription))
                 }

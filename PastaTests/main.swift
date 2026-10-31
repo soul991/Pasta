@@ -1420,7 +1420,7 @@ do {
     wheelClosed = false
     monitor.processMouseDragged(modifiers: shiftMod, location: NSPoint(x: 100, y: 100), timestamp: 1400.000)
     monitor.processMouseDragged(modifiers: shiftMod, location: NSPoint(x: 100, y: 100), timestamp: 1400.450)
-    assertTest(wheelOpened, "14.8 Wheel opened for second hold test")
+    assertTest(wheelOpened, "12.8 Wheel opened for second hold test")
     monitor.processFlagsChanged(modifiers: emptyMod, timestamp: 1400.500) // release shift
 
     // Second shift press down
@@ -1463,6 +1463,101 @@ do {
     assertTest(!wheelOpened, "12.11 Configured 600 ms duration: not opened at 450 ms")
     monitor.processMouseDragged(modifiers: shiftMod, location: NSPoint(x: 100, y: 100), timestamp: 1600.600)
     assertTest(wheelOpened, "12.11 Configured 600 ms duration: opens at 600 ms")
+}
+
+// MARK: - 13. Phase 9 Step 0 Hardening & Inactivity Watchdog Tests
+print("\n--- 13. Phase 9 Step 0 Hardening & Inactivity Watchdog Tests ---")
+do {
+    // 13.1 JobRunner timeout
+    let sleepURL = URL(fileURLWithPath: "/bin/sleep")
+    ToolLocator.shared.setOverride(tool: "fake_slow_tool", url: sleepURL)
+    defer { ToolLocator.shared.setOverride(tool: "fake_slow_tool", url: nil) }
+
+    let inv = Invocation(toolName: "fake_slow_tool", arguments: ["2"], timeout: 0.25)
+    var didTimeout = false
+    do {
+        _ = try JobRunner.shared.executeCapture(invocation: inv, timeoutSeconds: 0.25)
+    } catch PastaError.timedOut(let tool) {
+        didTimeout = (tool == "fake_slow_tool")
+    } catch {}
+    assertTest(didTimeout, "Step 0: JobRunner explicit timeout throws PastaError.timedOut")
+
+    // 13.2 cancel(jobId:) clean termination and scratch directory cleanup
+    let cancelJobId = UUID()
+    let beforeTemps = (try? FileManager.default.contentsOfDirectory(atPath: "/tmp").filter { $0.hasPrefix("Pasta_") }) ?? []
+
+    let slowInv = Invocation(toolName: "fake_slow_tool", arguments: ["10"], timeout: nil)
+
+    let semaStarted = DispatchSemaphore(value: 0)
+    let semaDone = DispatchSemaphore(value: 0)
+    var cancelErrorCaught = false
+
+    DispatchQueue.global().async {
+        semaStarted.signal()
+        do {
+            _ = try JobRunner.shared.executeCapture(invocation: slowInv, jobId: cancelJobId)
+        } catch PastaError.cancelled {
+            cancelErrorCaught = true
+        } catch {}
+        semaDone.signal()
+    }
+
+    semaStarted.wait()
+    Thread.sleep(forTimeInterval: 0.1) // Allow process to launch
+    assertTest(JobRunner.shared.isJobRunning(cancelJobId), "Step 0: Job is running before cancel")
+
+    JobRunner.shared.cancel(jobId: cancelJobId)
+    semaDone.wait()
+
+    assertTest(cancelErrorCaught, "Step 0: cancel(jobId:) throws PastaError.cancelled")
+    assertTest(!JobRunner.shared.isJobRunning(cancelJobId), "Step 0: Job process is cleanly terminated after cancel")
+
+    let afterTemps = (try? FileManager.default.contentsOfDirectory(atPath: "/tmp").filter { $0.hasPrefix("Pasta_") }) ?? []
+    let leftoverCount = afterTemps.filter { !beforeTemps.contains($0) }.count
+    assertTest(leftoverCount == 0, "Step 0: cancel(jobId:) leaves zero leftover /tmp/Pasta_* directories")
+
+    // 13.3 SIGTERM to SIGKILL escalation
+    let shURL = URL(fileURLWithPath: "/bin/sh")
+    let stubbornProc = Process()
+    stubbornProc.executableURL = shURL
+    stubbornProc.arguments = ["-c", "trap '' TERM; sleep 5"]
+    try? stubbornProc.run()
+    assertTest(stubbornProc.isRunning, "Step 0: Stubborn process launched")
+
+    // Terminate with a short grace period of 0.3s
+    JobRunner.shared.terminateGracefully(stubbornProc, gracePeriod: 0.3)
+    // Wait 0.5s for SIGKILL escalation to fire and reap
+    Thread.sleep(forTimeInterval: 0.5)
+    assertTest(!stubbornProc.isRunning, "Step 0: SIGTERM-ignoring process is killed by SIGKILL escalation")
+
+    // 13.4 ffmpeg inactivity watchdog (triggers when no output is produced within timeout)
+    let quietInv = Invocation(toolName: "fake_slow_tool", arguments: ["2"], timeout: nil, inactivityTimeout: 0.25)
+    var watchdogFired = false
+    let startWatchdog = Date()
+    do {
+        _ = try JobRunner.shared.executeCapture(invocation: quietInv, inactivityTimeoutSeconds: 0.25)
+    } catch PastaError.timedOut(let tool) {
+        watchdogFired = tool.contains("inactivity watchdog")
+    } catch {}
+    let elapsedWatchdog = Date().timeIntervalSince(startWatchdog)
+    assertTest(watchdogFired && elapsedWatchdog < 1.0, "Step 0: Inactivity watchdog cancels silent process within timeout window")
+
+    // 13.5 ffmpeg inactivity watchdog resets on streaming output
+    let streamingProcURL = URL(fileURLWithPath: "/bin/sh")
+    ToolLocator.shared.setOverride(tool: "streaming_tool", url: streamingProcURL)
+    defer { ToolLocator.shared.setOverride(tool: "streaming_tool", url: nil) }
+    let streamInv = Invocation(
+        toolName: "streaming_tool",
+        arguments: ["-c", "for i in 1 2 3; do echo $i; sleep 0.1; done"],
+        timeout: 2.0,
+        inactivityTimeout: 0.25
+    )
+    var streamSucceeded = false
+    do {
+        let (out, _) = try JobRunner.shared.executeCapture(invocation: streamInv, inactivityTimeoutSeconds: 0.25)
+        streamSucceeded = out.contains("1") && out.contains("2") && out.contains("3")
+    } catch {}
+    assertTest(streamSucceeded, "Step 0: Inactivity watchdog resets on active progress and completes successfully")
 }
 
 print("\n==================================================")

@@ -40,6 +40,9 @@ jobs:
           ./scripts/build_app.sh
           codesign --verify --deep --strict Pasta.app
 
+      - name: Run Section 8 Hardening Tests against Pasta.app
+        run: ./scripts/run_section8_tests.sh
+
       - name: Verify Bundle Contents
         run: |
           echo "=== Pasta.app Contents ==="
