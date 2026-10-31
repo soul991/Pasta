@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 
 public final class PreferencesManager {
     public static let shared = PreferencesManager()

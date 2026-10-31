@@ -296,16 +296,17 @@ public final class ParameterPanelView: NSVisualEffectView {
             sliderRow.spacing = 8
             sliderRow.translatesAutoresizingMaskIntoConstraints = false
 
-            let slider = NSSlider(value: field.currentValue.asDouble, minValue: param.minValue ?? 1.0, maxValue: param.maxValue ?? 100.0, target: nil, action: nil)
+            let curVal = field.currentValue.asDouble ?? 0.0
+            let slider = NSSlider(value: curVal, minValue: param.minValue ?? 1.0, maxValue: param.maxValue ?? 100.0, target: nil, action: nil)
             slider.isContinuous = true
             slider.translatesAutoresizingMaskIntoConstraints = false
             slider.setAccessibilityElement(true)
             slider.setAccessibilityLabel("\(param.label) percentage slider")
 
-            let readout = NSTextField(labelWithString: "\(Int(field.currentValue.asDouble))%")
+            let readout = NSTextField(labelWithString: "\(Int(curVal))%")
             readout.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium)
             readout.textColor = ThemeManager.shared.textPrimaryColor
-            readout.alignment = .right
+            readout.alignment = NSTextAlignment.right
             readout.widthAnchor.constraint(equalToConstant: 40).isActive = true
 
             slider.target = self
@@ -337,7 +338,7 @@ public final class ParameterPanelView: NSVisualEffectView {
 
             let input = NSTextField()
             input.translatesAutoresizingMaskIntoConstraints = false
-            let mbValue = Double(field.currentValue.asInteger) / (1024.0 * 1024.0)
+            let mbValue = Double(field.currentValue.asInt64 ?? 0) / (1024.0 * 1024.0)
             input.stringValue = (mbValue > 0) ? String(format: "%.1f", mbValue) : "0"
             input.font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)
             input.target = self
@@ -357,7 +358,7 @@ public final class ParameterPanelView: NSVisualEffectView {
             sizeRow.widthAnchor.constraint(equalTo: row.widthAnchor).isActive = true
 
             let updater: () -> Void = { [weak self, weak input] in
-                guard let self = self, let bytes = self.model.values[param.id]?.asInteger else { return }
+                guard let self = self, let bytes = self.model.values[param.id]?.asInt64 else { return }
                 let mb = Double(bytes) / (1024.0 * 1024.0)
                 input?.stringValue = (mb > 0) ? String(format: "%.1f", mb) : "0"
             }
@@ -372,16 +373,17 @@ public final class ParameterPanelView: NSVisualEffectView {
                 numRow.spacing = 8
                 numRow.translatesAutoresizingMaskIntoConstraints = false
 
-                let slider = NSSlider(value: field.currentValue.asDouble, minValue: min, maxValue: max, target: nil, action: nil)
+                let curVal = field.currentValue.asDouble ?? min
+                let slider = NSSlider(value: curVal, minValue: min, maxValue: max, target: nil, action: nil)
                 slider.isContinuous = true
                 slider.translatesAutoresizingMaskIntoConstraints = false
                 slider.setAccessibilityElement(true)
                 slider.setAccessibilityLabel("\(param.label) slider")
 
-                let readout = NSTextField(labelWithString: String(format: "%.2fx", field.currentValue.asDouble))
+                let readout = NSTextField(labelWithString: String(format: "%.2fx", curVal))
                 readout.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium)
                 readout.textColor = ThemeManager.shared.textPrimaryColor
-                readout.alignment = .right
+                readout.alignment = NSTextAlignment.right
                 readout.widthAnchor.constraint(equalToConstant: 45).isActive = true
 
                 slider.target = self
@@ -404,7 +406,7 @@ public final class ParameterPanelView: NSVisualEffectView {
                 // Numeric text input (e.g. trim start/end time)
                 let input = NSTextField()
                 input.translatesAutoresizingMaskIntoConstraints = false
-                input.stringValue = String(format: "%.1f", field.currentValue.asDouble)
+                input.stringValue = String(format: "%.1f", field.currentValue.asDouble ?? 0.0)
                 input.font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)
                 input.target = self
                 input.action = #selector(textInputChanged(_:))
@@ -421,6 +423,50 @@ public final class ParameterPanelView: NSVisualEffectView {
                 }
                 fieldRefreshers.append(updater)
             }
+
+        case .timeRange:
+            let timeRow = NSStackView()
+            timeRow.orientation = .horizontal
+            timeRow.alignment = .centerY
+            timeRow.spacing = 8
+            timeRow.translatesAutoresizingMaskIntoConstraints = false
+
+            let startField = NSTextField()
+            let endField = NSTextField()
+            startField.translatesAutoresizingMaskIntoConstraints = false
+            endField.translatesAutoresizingMaskIntoConstraints = false
+            startField.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+            endField.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+            startField.widthAnchor.constraint(equalToConstant: 55).isActive = true
+            endField.widthAnchor.constraint(equalToConstant: 55).isActive = true
+            startField.setAccessibilityElement(true)
+            startField.setAccessibilityLabel("\(param.label) start time")
+            endField.setAccessibilityElement(true)
+            endField.setAccessibilityLabel("\(param.label) end time")
+
+            if case .timeRange(let s, let e) = field.currentValue {
+                startField.stringValue = String(format: "%.1f", s)
+                endField.stringValue = String(format: "%.1f", e)
+            } else {
+                startField.stringValue = "0.0"
+                endField.stringValue = "10.0"
+            }
+
+            timeRow.addArrangedSubview(NSTextField(labelWithString: "Start:"))
+            timeRow.addArrangedSubview(startField)
+            timeRow.addArrangedSubview(NSTextField(labelWithString: "End:"))
+            timeRow.addArrangedSubview(endField)
+            timeRow.addArrangedSubview(NSTextField(labelWithString: "sec"))
+            row.addArrangedSubview(timeRow)
+
+            let timeUpdater: () -> Void = { [weak self, weak startField, weak endField] in
+                guard let self = self,
+                      let val = self.model.values[param.id],
+                      case .timeRange(let s, let e) = val else { return }
+                startField?.stringValue = String(format: "%.1f", s)
+                endField?.stringValue = String(format: "%.1f", e)
+            }
+            fieldRefreshers.append(timeUpdater)
 
         case .choice(let options):
             let choiceRow = NSStackView()
@@ -569,7 +615,7 @@ public final class ParameterPanelView: NSVisualEffectView {
 
         if isBytes {
             let mb = Double(sender.stringValue) ?? 0.0
-            let bytes = Int(mb * 1024.0 * 1024.0)
+            let bytes = Int64(mb * 1024.0 * 1024.0)
             model.updateValue(.integer(bytes), for: paramId)
         } else {
             model.updateStringValue(sender.stringValue, for: paramId)
@@ -680,7 +726,6 @@ public final class PresetChipView: NSView {
 
     private func updateState() {
         let isReduceMotion = PreferencesManager.shared.reduceMotionEnabled
-        let maxScale = ThemeManager.shared.maxHoverScale // 1.06
 
         if isHovered {
             layer?.backgroundColor = ThemeManager.shared.accentColorSubtle.cgColor
