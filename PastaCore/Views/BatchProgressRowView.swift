@@ -94,7 +94,7 @@ public final class BatchProgressRowView: NSView {
     }
 
     public func update(completed: Int, failed: Int = 0) {
-        DispatchQueue.main.async { [weak self] in
+        let apply = { [weak self] in
             guard let self = self, !self.isCancelled else { return }
             self.completedCount = completed
             self.failedCount = failed
@@ -124,16 +124,27 @@ public final class BatchProgressRowView: NSView {
             }
             self.setAccessibilityLabel("Batch progress: \(self.summaryLabel.stringValue)")
         }
+
+        if Thread.isMainThread {
+            apply()
+        } else {
+            DispatchQueue.main.async(execute: apply)
+        }
     }
 
     public func markCancelled() {
-        DispatchQueue.main.async { [weak self] in
+        let apply = { [weak self] in
             guard let self = self else { return }
             self.isCancelled = true
             self.cancelButton.isHidden = true
             self.summaryLabel.stringValue = "Cancelled (\(self.completedCount) of \(self.totalCount) complete)"
             self.summaryLabel.textColor = NSColor.systemOrange
             self.setAccessibilityLabel("Batch cancelled: \(self.summaryLabel.stringValue)")
+        }
+        if Thread.isMainThread {
+            apply()
+        } else {
+            DispatchQueue.main.async(execute: apply)
         }
     }
 

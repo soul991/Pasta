@@ -111,7 +111,7 @@ public final class JobStatusRowView: NSView {
 
     public func update(state: State) {
         self.currentState = state
-        DispatchQueue.main.async { [weak self] in
+        let apply = { [weak self] in
             guard let self = self else { return }
             switch state {
             case .queued:
@@ -181,6 +181,12 @@ public final class JobStatusRowView: NSView {
                 self.actionButton.title = "Copy Details"
                 self.actionButton.isHidden = false
             }
+        }
+
+        if Thread.isMainThread {
+            apply()
+        } else {
+            DispatchQueue.main.async(execute: apply)
         }
     }
 
