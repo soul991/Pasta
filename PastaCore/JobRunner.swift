@@ -178,11 +178,11 @@ public final class JobRunner {
         }
 
         if !fm.fileExists(atPath: tempWorkingOutputURL.path) {
-            let looseFiles = (try? fm.contentsOfDirectory(at: tempDir, includingPropertiesForKeys: nil))?.filter {
+            let looseFiles = try fm.contentsOfDirectory(at: tempDir, includingPropertiesForKeys: nil).filter {
                 $0.lastPathComponent != "output_items" && $0.pathExtension.lowercased() == action.outputExtension.lowercased()
-            } ?? []
+            }
             if looseFiles.count == 1 {
-                try? fm.moveItem(at: looseFiles[0], to: tempWorkingOutputURL)
+                try fm.moveItem(at: looseFiles[0], to: tempWorkingOutputURL)
             }
         }
 
@@ -332,11 +332,11 @@ public final class JobRunner {
             return finalDestinationURL
         case .file:
             if !fm.fileExists(atPath: tempWorkingOutputURL.path) {
-                let looseFiles = (try? fm.contentsOfDirectory(at: tempDir, includingPropertiesForKeys: nil))?.filter {
+                let looseFiles = try fm.contentsOfDirectory(at: tempDir, includingPropertiesForKeys: nil).filter {
                     $0.lastPathComponent != "output_items" && $0.pathExtension.lowercased() == action.outputExtension.lowercased()
-                } ?? []
+                }
                 if looseFiles.count == 1 {
-                    try? fm.moveItem(at: looseFiles[0], to: tempWorkingOutputURL)
+                    try fm.moveItem(at: looseFiles[0], to: tempWorkingOutputURL)
                 }
             }
             guard fm.fileExists(atPath: tempWorkingOutputURL.path) else {
@@ -631,11 +631,11 @@ extension JobRunner {
             }
 
             if !fm.fileExists(atPath: tempWorkingOutputURL.path) {
-                let looseFiles = (try? fm.contentsOfDirectory(at: tempDir, includingPropertiesForKeys: nil))?.filter {
+                let looseFiles = try fm.contentsOfDirectory(at: tempDir, includingPropertiesForKeys: nil).filter {
                     $0.lastPathComponent != "output_items" && $0.pathExtension.lowercased() == action.outputExtension.lowercased()
-                } ?? []
+                }
                 if looseFiles.count == 1 {
-                    try? fm.moveItem(at: looseFiles[0], to: tempWorkingOutputURL)
+                    try fm.moveItem(at: looseFiles[0], to: tempWorkingOutputURL)
                 }
             }
 

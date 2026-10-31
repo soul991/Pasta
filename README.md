@@ -2,16 +2,16 @@
 
 > **A fast, native, 100% offline macOS file converter and utility with a dynamic circular radial options wheel.**
 
-Pasta is a personal, zero-cloud file converter for macOS. Drag any supported file while holding <kbd>Shift</kbd> to bring up an interactive circular radial options wheel right at your cursor, choose your target format, and get the converted file placed right next to your original in seconds.
+Pasta is a personal, zero-cloud file converter for macOS. Drag any supported file while holding <kbd>Shift</kbd> for 450 ms to summon an interactive circular radial options wheel right at your cursor. The wheel latches open when you release Shift, lets you choose your target format or action, and places the converted file right next to your original in seconds.
 
 ---
 
 ## ✨ Features
 
 - **100% Offline & Private**: Zero network calls, no telemetry, no analytics, no cloud uploads. Everything runs locally on your Mac.
-- **Circular Radial Options Wheel**: Hold <kbd>Shift</kbd> while dragging any file across macOS to summon a floating, non-activating radial wheel at your mouse location.
-- **Advanced Tools Mode**: Hold <kbd>Option</kbd> (<kbd>⌥</kbd>) to toggle advanced tools: lossless/lossy compression, media trimming, crop/resize, PDF split/merge, and EXIF/XMP metadata stripping.
-- **Menu Bar Utility**: Persistent status bar app (`LSUIElement`) with a drag-and-drop window, progress indicators, "Reveal in Finder" actions, and customizable accent color palettes.
+- **Deliberate Shift-Hold Radial Wheel**: While a file drag is active, holding <kbd>Shift</kbd> for **450 ms** opens the radial wheel at the cursor. A quick graze or typing tap (<450 ms) is ignored. After a 120 ms delay, a thin charging progress ring fills around the cursor. Releasing Shift or pressing any other key cancels the charge. Once opened, the wheel **latches** and remains open after Shift is released. A second Shift-hold, dropping outside, or pressing <kbd>Esc</kbd> closes it. Fully configurable in Settings with a hold duration slider (300 ms to 1000 ms, default 450 ms), latch toggle, and charging ring toggle.
+- **Quick Option-Tap Mode Switch**: A quick tap of <kbd>Option</kbd> (<kbd>⌥</kbd>) (< 250 ms) while the wheel is open toggles between **Convert** mode (target file formats) and **Advanced** mode (lossless/lossy compression, media trimming, crop/speed/channels, PDF reorganize, metadata stripping). A long hold does not toggle mode.
+- **Menu Bar Utility**: Persistent status bar app (`LSUIElement`) with a native `NSPopover` drag-and-drop window, progress indicators, "Reveal in Finder" actions, and customizable accent color palettes.
 - **Finder Quick Action**: Contextual right-click menu integration (`~/Library/Services/Convert with Pasta.workflow`).
 - **Headless CLI**: Full-featured command-line interface (`pasta convert`, `pasta doctor`, `pasta list-actions`).
 - **Non-Destructive & Atomic**: Original files are never modified or overwritten; conversions write to a temporary sandbox first, handle filename collisions safely, and swap atomically into place.
@@ -105,16 +105,23 @@ pasta convert --action image.collage --param columns=2 img1.png img2.png
 
 ## 🧪 Testing & Verification
 
-Pasta includes comprehensive unit, integration, and security hardening test suites:
+Pasta includes comprehensive unit, integration, and security hardening test suites verified continuously via GitHub Actions (`.github/workflows/macos-ci.yml`) on `macos-latest`:
 
 ```bash
-# Run 131 Unit & Integration Tests (Debug & Release)
+# Run all 157 Unit, Integration & Section 12 Shift-Hold Tests (Debug & Release)
 swift run PastaTests
 swift run -c release PastaTests
 
-# Run 30 Section 8 Hardening & Hostile Filename Tests
+# Run 33 Section 8 Hardening, Resource Leak & Hostile Filename Tests
 ./scripts/run_section8_tests.sh
+
+# Build, package, and verify signed Pasta.app bundle
+./scripts/build_app.sh
+codesign --verify --deep --strict Pasta.app
 ```
+
+### GitHub Actions CI
+Every commit and pull request runs automated CI on `macos-latest` (`macos-26-arm64`), installing all 12 engines via Homebrew (`brew install ffmpeg imagemagick qpdf ghostscript poppler pandoc exiftool webp unar sevenzip librsvg`), executing `swift build`, running `PastaTests` (**157 / 157 passing**), executing `./scripts/run_section8_tests.sh` (**33 / 33 passing**), assembling `Pasta.app`, and validating code signatures and embedded bundle assets (`AppIcon.icns`, `MenuBarIcon.pdf`, `theme_tokens.json`).
 
 ---
 

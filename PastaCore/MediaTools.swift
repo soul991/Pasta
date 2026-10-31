@@ -96,7 +96,10 @@ public final class MediaTools {
         }
         let scratchDir = try OutputPlanner.makeTempDirectory()
         let fm = FileManager.default
-        defer { try? fm.removeItem(at: scratchDir) }
+        defer {
+            // Safe to swallow: best-effort temporary scratch directory removal on scope exit
+            try? fm.removeItem(at: scratchDir)
+        }
 
         let listFile = scratchDir.appendingPathComponent("concat_list.txt")
         var content = ""
@@ -123,7 +126,7 @@ public final class MediaTools {
         } catch {
             // Re-encode fallback using concat filter (handles differing video/audio codecs and sample rates)
             if fm.fileExists(atPath: output.path) {
-                try? fm.removeItem(at: output)
+                try fm.removeItem(at: output)
             }
             var reencodeArgs = ["-nostdin", "-y"]
             for inp in inputs {

@@ -53,7 +53,10 @@ public final class Compressor {
         let target = Self.targetBytes(for: sourceSize, parameters: parameters)
 
         let scratchDir = try OutputPlanner.makeTempDirectory()
-        defer { try? fm.removeItem(at: scratchDir) }
+        defer {
+            // Safe to swallow: best-effort temporary scratch directory removal on scope exit
+            try? fm.removeItem(at: scratchDir)
+        }
 
         var low = 5
         var high = 95
@@ -84,7 +87,7 @@ public final class Compressor {
             do {
                 try runner.execute(invocation: inv, jobId: jobId)
                 if fm.fileExists(atPath: iterOut.path) {
-                    let size = ((try? fm.attributesOfItem(atPath: iterOut.path)[.size] as? Int64) ?? 0)
+                    let size = ((try fm.attributesOfItem(atPath: iterOut.path)[.size] as? Int64) ?? 0)
                     if size < smallestOutputSize {
                         smallestOutputSize = size
                         smallestOutputURL = iterOut
@@ -107,7 +110,7 @@ public final class Compressor {
             throw PastaError.executionFailed(tool: "compress", exitCode: 1, output: "Image compression failed to produce an output file")
         }
 
-        let winnerSize = (try? fm.attributesOfItem(atPath: winner.path)[.size] as? Int64) ?? 0
+        let winnerSize = (try fm.attributesOfItem(atPath: winner.path)[.size] as? Int64) ?? 0
         if winnerSize > target {
             let msg = "could not reach \(target); produced \(winnerSize)"
             PastaLogger.shared.info(msg)
@@ -144,7 +147,10 @@ public final class Compressor {
         let videoBitrate = max(8000.0, totalBitrate - audioBitrate)
 
         let scratchDir = try OutputPlanner.makeTempDirectory()
-        defer { try? fm.removeItem(at: scratchDir) }
+        defer {
+            // Safe to swallow: best-effort temporary scratch directory removal on scope exit
+            try? fm.removeItem(at: scratchDir)
+        }
 
         let passlogPrefix = scratchDir.appendingPathComponent("passlog").path
         let tempOut = scratchDir.appendingPathComponent("compressed.mp4")
@@ -182,7 +188,7 @@ public final class Compressor {
         } catch {
             // Fallback to single pass if two-pass fails
             if fm.fileExists(atPath: tempOut.path) {
-                try? fm.removeItem(at: tempOut)
+                try fm.removeItem(at: tempOut)
             }
             let singlePassInv = Invocation(
                 toolName: "ffmpeg",
@@ -201,7 +207,7 @@ public final class Compressor {
             throw PastaError.executionFailed(tool: "ffmpeg", exitCode: 1, output: "Video compression produced no output")
         }
 
-        let finalSize = (try? fm.attributesOfItem(atPath: tempOut.path)[.size] as? Int64) ?? 0
+        let finalSize = (try fm.attributesOfItem(atPath: tempOut.path)[.size] as? Int64) ?? 0
         if finalSize > target {
             let msg = "could not reach \(target); produced \(finalSize)"
             PastaLogger.shared.info(msg)
@@ -236,7 +242,10 @@ public final class Compressor {
         let targetBitrate = max(16000.0, totalTargetBits / duration)
 
         let scratchDir = try OutputPlanner.makeTempDirectory()
-        defer { try? fm.removeItem(at: scratchDir) }
+        defer {
+            // Safe to swallow: best-effort temporary scratch directory removal on scope exit
+            try? fm.removeItem(at: scratchDir)
+        }
 
         let ext = output.pathExtension.isEmpty ? "mp3" : output.pathExtension
         let tempOut = scratchDir.appendingPathComponent("compressed.\(ext)")
@@ -254,7 +263,7 @@ public final class Compressor {
             throw PastaError.executionFailed(tool: "ffmpeg", exitCode: 1, output: "Audio compression produced no output")
         }
 
-        let finalSize = (try? fm.attributesOfItem(atPath: tempOut.path)[.size] as? Int64) ?? 0
+        let finalSize = (try fm.attributesOfItem(atPath: tempOut.path)[.size] as? Int64) ?? 0
         if finalSize > target {
             let msg = "could not reach \(target); produced \(finalSize)"
             PastaLogger.shared.info(msg)
@@ -285,7 +294,10 @@ public final class Compressor {
         let target = Self.targetBytes(for: sourceSize, parameters: parameters)
 
         let scratchDir = try OutputPlanner.makeTempDirectory()
-        defer { try? fm.removeItem(at: scratchDir) }
+        defer {
+            // Safe to swallow: best-effort temporary scratch directory removal on scope exit
+            try? fm.removeItem(at: scratchDir)
+        }
 
         let presets = ["/printer", "/ebook", "/screen"]
         var bestCandidateURL: URL? = nil
@@ -311,7 +323,7 @@ public final class Compressor {
             do {
                 try runner.execute(invocation: inv, jobId: jobId)
                 if fm.fileExists(atPath: iterOut.path) {
-                    let size = (try? fm.attributesOfItem(atPath: iterOut.path)[.size] as? Int64) ?? 0
+                    let size = (try fm.attributesOfItem(atPath: iterOut.path)[.size] as? Int64) ?? 0
                     if size < smallestOutputSize {
                         smallestOutputSize = size
                         smallestOutputURL = iterOut
@@ -328,7 +340,7 @@ public final class Compressor {
             throw PastaError.executionFailed(tool: "gs", exitCode: 1, output: "PDF compression failed to produce output")
         }
 
-        let winnerSize = (try? fm.attributesOfItem(atPath: winner.path)[.size] as? Int64) ?? 0
+        let winnerSize = (try fm.attributesOfItem(atPath: winner.path)[.size] as? Int64) ?? 0
         if winnerSize > target {
             let msg = "could not reach \(target); produced \(winnerSize)"
             PastaLogger.shared.info(msg)

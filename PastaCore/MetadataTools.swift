@@ -18,9 +18,9 @@ public final class MetadataTools {
                 toolName: "ffprobe",
                 arguments: ["-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", "--", url.path]
             )
-            if let (outStr, _) = try? JobRunner.shared.executeCapture(invocation: inv, timeoutSeconds: 30),
-               let data = outStr.data(using: .utf8),
-               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            let (outStr, _) = try JobRunner.shared.executeCapture(invocation: inv, timeoutSeconds: 30)
+            if let data = outStr.data(using: .utf8),
+               let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
                 return obj
             }
         } else {
@@ -28,9 +28,9 @@ public final class MetadataTools {
                 toolName: "exiftool",
                 arguments: ["-json", "--", url.path]
             )
-            if let (outStr, _) = try? JobRunner.shared.executeCapture(invocation: inv, timeoutSeconds: 30),
-               let data = outStr.data(using: .utf8),
-               let arr = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
+            let (outStr, _) = try JobRunner.shared.executeCapture(invocation: inv, timeoutSeconds: 30)
+            if let data = outStr.data(using: .utf8),
+               let arr = try JSONSerialization.jsonObject(with: data) as? [[String: Any]],
                let first = arr.first {
                 return first
             }

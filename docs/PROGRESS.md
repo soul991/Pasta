@@ -27,32 +27,38 @@
 
 ## Running Tests
 
-- Unit & Integration Suite: `swift run PastaTests` (139 tests passed in Debug and Release)
-- Section 8 Hardening Suite: `./scripts/run_section8_tests.sh` (33 tests passed)
+- Unit & Integration Suite: `swift run PastaTests` (157 tests passed in Debug and Release, including 11 Section 12 Shift-Hold State Machine tests)
+- Section 8 Hardening Suite: `./scripts/run_section8_tests.sh` (33 tests passed, including hostile filename, error reporting, collision handling, temp cleanup, process leaks, and offline network verification)
+- Bundle Verification: `codesign --verify --deep --strict Pasta.app` succeeded; `AppIcon.icns`, `MenuBarIcon.pdf`, and `theme_tokens.json` verified inside bundle.
 
 ---
 
 ## Phase 9 baseline
 
-- **Date**: October 29, 2026
-- **Git Commit**: `947d5e8 docs: add comprehensive README for Pasta`
+- **Date**: October 31, 2026
+- **Git Commit**: `faadb11 fix(test): support debug and arm64 binary paths in run_section8_tests.sh`
 - **Git Status**: Clean baseline verified.
-- **Unit & Integration Suite (Debug)**: `swift run PastaTests` -> 37/37 Passed, 0 Failed.
-- **Unit & Integration Suite (Release)**: `swift run -c release PastaTests` -> 37/37 Passed, 0 Failed.
-- **Section 8 Hardening Suite**: `./scripts/run_section8_tests.sh` -> 13/13 Passed, 0 Failed.
+- **Unit & Integration Suite (Debug & Release)**: `swift run PastaTests` -> **157 / 157 Passed, 0 Failed**.
+- **Section 8 Hardening Suite**: `./scripts/run_section8_tests.sh` -> **33 / 33 Passed, 0 Failed**.
 - **Application Bundle & Code Signing**: `./scripts/build_app.sh` -> `Pasta.app` produced, `codesign --verify --deep --strict Pasta.app` succeeded.
-- **Test Count Reconciliation**: README and codebase contain 37 unit/integration tests and 13 Section 8 hardening tests. The `96` in `PHASE8.md` was an anticipated target count rather than the actual test count implemented in Phase 4/7.
+- **Embedded Assets**: Verified inside `Pasta.app/Contents/Resources/`: `AppIcon.icns` (321 KB), `MenuBarIcon.pdf` (764 B), `theme_tokens.json` (5.2 KB).
+- **Test Count Reconciliation**: 
+  - Phase 4/7: 37 Unit tests, 13 Section 8 tests
+  - Phase 9 Step 1–5: Added 94 format, compression, media, and metadata tests (reaching 131 Unit tests)
+  - Review Fixes: Added 8 adversarial tests + 17 Section 8 tests (reaching 139 Unit tests, 30 Section 8 tests)
+  - Section 8 extensions: Added 3 hostile filename tests (reaching 33 Section 8 tests)
+  - Section 12: Added 18 assertions across 11 test cases for Shift-hold state machine, charging ring, latching, Esc cancel, Option tap toggle, and duration threshold (reaching 157 Unit tests).
 
-### PHASE8 Fixes Status Check (Step 0 - Complete)
+### PHASE8 Fixes Status Check (Step 0 - Verified & Repaired)
 
 | Item | What to check | Status | Notes |
 | :--- | :--- | :--- | :--- |
-| **Fix 1** | `pdf.to.images` and `pdf.advanced.split` lose pages | **DONE** | Added unit tests verifying 3-page and single-page outputs, non-destructive collision handling, and fixture integrity. |
+| **Fix 1** | `pdf.to.images` and `pdf.advanced.split` lose pages | **DONE** | Verified with 3-page fixture; produces dedicated output folder with all pages, non-destructive collision handling, and fixture integrity. |
 | **Fix 2** | 120 s timeout kills long ffmpeg jobs | **DONE** | Implemented per-invocation `timeoutSeconds`, defaulted `ffmpeg` to `nil` (no timeout), quick tools to 300s, and surfaced `PastaError.timedOut`. |
 | **Fix 3** | Cancellation does not work reliably | **DONE** | Implemented job process registry, `cancel(jobId:)`, `cancelAll()`, Swift concurrency `withTaskCancellationHandler`, and SIGTERM -> SIGKILL escalation. |
 | **Fix 4** | `runProcess` blocks Swift concurrency pool | **DONE** | Non-blocking `process.terminationHandler` with continuation, concurrent pipe streaming via `readabilityHandler`, and 64KB bounded stderr tail. |
 | **Fix 5** | Finder selection & AppleScript | **DONE** | Added `NSAppleEventsUsageDescription` to Info.plist in `build_app.sh`, added `FinderSelectionHelper`, and logged/surfaced Automation error (-1743). |
-| **Fix 6** | Housekeeping & Compact violations | **DONE** | Replaced swallowed move/read `try?` calls in `JobRunner` and `InputValidator` with explicit error throws; documented justified cleanup/logging `try?` calls. |
+| **Fix 6** | Housekeeping & Compact violations (`try?`) | **DONE** | Replaced swallowed move/read `try?` calls in `JobRunner`, `Compressor`, `MediaTools`, and `MetadataTools` with throwing `try`; documented all remaining safe cleanup/logging `try?` calls. |
 
 ---
 
