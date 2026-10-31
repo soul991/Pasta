@@ -317,7 +317,8 @@ public final class DropWindowViewController: NSViewController {
         let model = ParameterFormModel(
             action: action,
             loadLastUsed: true,
-            inputFile: selectedFiles.first
+            inputFile: selectedFiles.first,
+            inputFiles: selectedFiles
         )
         let panel = ParameterPanelView(model: model, action: action)
         panel.translatesAutoresizingMaskIntoConstraints = false
@@ -331,7 +332,7 @@ public final class DropWindowViewController: NSViewController {
             guard let self = self else { return }
             model?.saveAsLastUsed()
             self.hideParameterPanel()
-            self.executeConversion(action: action, params: params)
+            self.executeConversion(action: action, params: params, formModel: model)
         }
 
         parameterPanelContainer.addSubview(panel)
@@ -361,7 +362,7 @@ public final class DropWindowViewController: NSViewController {
         view.layoutSubtreeIfNeeded()
     }
 
-    public func executeConversion(action: ConversionAction, params: ParameterValues = [:]) {
+    public func executeConversion(action: ConversionAction, params: ParameterValues = [:], formModel: ParameterFormModel? = nil) {
         guard !selectedFiles.isEmpty else { return }
 
         let files = self.selectedFiles
@@ -396,11 +397,29 @@ public final class DropWindowViewController: NSViewController {
                 row.update(state: .running)
 
                 DispatchQueue.global(qos: .userInitiated).async {
+                    let fileParams: ParameterValues
+                    if let model = formModel {
+                        do {
+                            fileParams = try model.resolveParameters(for: file)
+                        } catch {
+                            row.update(state: .failed(error.localizedDescription))
+                            lock.lock()
+                            failed += 1
+                            let c = completed
+                            let f = failed
+                            lock.unlock()
+                            batchRow.update(completed: c, failed: f)
+                            return
+                        }
+                    } else {
+                        fileParams = params
+                    }
+
                     do {
                         let output = try JobRunner.shared.run(
                             action: action,
                             input: file,
-                            parameters: params,
+                            parameters: fileParams,
                             jobId: jobID
                         )
                         row.update(state: .completed(output))
@@ -428,11 +447,23 @@ public final class DropWindowViewController: NSViewController {
             row.update(state: .running)
 
             DispatchQueue.global(qos: .userInitiated).async {
+                let fileParams: ParameterValues
+                if let model = formModel {
+                    do {
+                        fileParams = try model.resolveParameters(for: file)
+                    } catch {
+                        row.update(state: .failed(error.localizedDescription))
+                        return
+                    }
+                } else {
+                    fileParams = params
+                }
+
                 do {
                     let output = try JobRunner.shared.run(
                         action: action,
                         input: file,
-                        parameters: params
+                        parameters: fileParams
                     )
                     row.update(state: .completed(output))
                 } catch {

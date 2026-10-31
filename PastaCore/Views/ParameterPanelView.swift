@@ -528,14 +528,31 @@ public final class ParameterPanelView: NSVisualEffectView {
 
             let srcW = model.probeResult?.width ?? 0
             let srcH = model.probeResult?.height ?? 0
-            let sourceLabel = NSTextField(labelWithString: (srcW > 0 && srcH > 0) ? "Source: \(srcW)×\(srcH)" : (model.probeError != nil ? "Source: probe error" : "Source: unknown"))
+            let sourceLabel: NSTextField
+            let cropSizeLabel = NSTextField(labelWithString: "Crop: 0×0")
+
+            if model.isBatch {
+                sourceLabel = NSTextField(labelWithString: "Applies to \(model.batchCount) files")
+                sourceLabel.textColor = ThemeManager.shared.accentColor
+                if let intent = model.cropIntent {
+                    switch intent {
+                    case .ratio(let rw, let rh):
+                        cropSizeLabel.stringValue = "Ratio: \(rw):\(rh)"
+                    case .manual(_, _, let w, let h):
+                        cropSizeLabel.stringValue = "Manual: \(w)×\(h)"
+                    }
+                } else {
+                    cropSizeLabel.stringValue = "Centered crop"
+                }
+            } else {
+                sourceLabel = NSTextField(labelWithString: (srcW > 0 && srcH > 0) ? "Source: \(srcW)×\(srcH)" : (model.probeError != nil ? "Source: probe error" : "Source: unknown"))
+                sourceLabel.textColor = (model.probeError != nil) ? NSColor.systemRed : ThemeManager.shared.textSecondaryColor
+            }
             sourceLabel.identifier = NSUserInterfaceItemIdentifier("ParameterPanel.sourceDimensions")
             sourceLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium)
-            sourceLabel.textColor = (model.probeError != nil) ? NSColor.systemRed : ThemeManager.shared.textSecondaryColor
             sourceLabel.setAccessibilityElement(true)
             sourceLabel.setAccessibilityLabel("Source dimensions")
 
-            let cropSizeLabel = NSTextField(labelWithString: "Crop: 0×0")
             cropSizeLabel.identifier = NSUserInterfaceItemIdentifier("ParameterPanel.cropDimensions")
             cropSizeLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
             cropSizeLabel.textColor = ThemeManager.shared.accentColor
@@ -543,7 +560,9 @@ public final class ParameterPanelView: NSVisualEffectView {
             cropSizeLabel.setAccessibilityLabel("Crop dimensions")
 
             sizeInfoRow.addArrangedSubview(sourceLabel)
-            sizeInfoRow.addArrangedSubview(NSTextField(labelWithString: "→"))
+            if !model.isBatch {
+                sizeInfoRow.addArrangedSubview(NSTextField(labelWithString: "→"))
+            }
             sizeInfoRow.addArrangedSubview(cropSizeLabel)
             row.addArrangedSubview(sizeInfoRow)
 
@@ -559,12 +578,13 @@ public final class ParameterPanelView: NSVisualEffectView {
                 let chip = ChoiceChipView(title: rName, isSelected: false)
                 chip.onTap = { [weak self] in
                     guard let self = self else { return }
+                    self.model.cropIntent = .ratio(width: rw, height: rh)
                     if let cw = self.model.probeResult?.width, let ch = self.model.probeResult?.height, cw > 0, ch > 0 {
                         let crop = CropCalculator.computeCrop(containerWidth: cw, containerHeight: ch, ratioWidth: rw, ratioHeight: rh)
                         self.model.updateValue(.rectangle(x: crop.x, y: crop.y, width: crop.width, height: crop.height), for: param.id)
-                        self.refreshAllFields()
-                        self.validateAndUpdate()
                     }
+                    self.refreshAllFields()
+                    self.validateAndUpdate()
                 }
                 ratioRow.addArrangedSubview(chip)
             }
@@ -601,8 +621,13 @@ public final class ParameterPanelView: NSVisualEffectView {
                 let h = Int(hField?.stringValue ?? "") ?? 0
                 let x = Int(xField?.stringValue ?? "") ?? 0
                 let y = Int(yField?.stringValue ?? "") ?? 0
+                self.model.cropIntent = .manual(x: x, y: y, width: w, height: h)
                 self.model.updateValue(.rectangle(x: x, y: y, width: w, height: h), for: param.id)
-                cropSizeLabel.stringValue = "Crop: \(w)×\(h)"
+                if self.model.isBatch {
+                    cropSizeLabel.stringValue = "Manual: \(w)×\(h)"
+                } else {
+                    cropSizeLabel.stringValue = "Crop: \(w)×\(h)"
+                }
                 self.validateAndUpdate()
             }
 
@@ -628,7 +653,7 @@ public final class ParameterPanelView: NSVisualEffectView {
 
             row.addArrangedSubview(coordRow)
 
-            let updater: () -> Void = { [weak self, weak wField, weak hField, weak xField, weak yField, weak cropSizeLabel] in
+            let updater: () -> Void = { [weak self, weak wField, weak hField, weak xField, weak yField, weak sourceLabel, weak cropSizeLabel] in
                 guard let self = self,
                       let rectVal = self.model.values[param.id],
                       case .rectangle(let x, let y, let w, let h) = rectVal else { return }
@@ -636,7 +661,21 @@ public final class ParameterPanelView: NSVisualEffectView {
                 hField?.stringValue = "\(h)"
                 xField?.stringValue = "\(x)"
                 yField?.stringValue = "\(y)"
-                cropSizeLabel?.stringValue = "Crop: \(w)×\(h)"
+                if self.model.isBatch {
+                    sourceLabel?.stringValue = "Applies to \(self.model.batchCount) files"
+                    if let intent = self.model.cropIntent {
+                        switch intent {
+                        case .ratio(let rw, let rh):
+                            cropSizeLabel?.stringValue = "Ratio: \(rw):\(rh)"
+                        case .manual(_, _, let mw, let mh):
+                            cropSizeLabel?.stringValue = "Manual: \(mw)×\(mh)"
+                        }
+                    } else {
+                        cropSizeLabel?.stringValue = "Centered crop"
+                    }
+                } else {
+                    cropSizeLabel?.stringValue = "Crop: \(w)×\(h)"
+                }
             }
             fieldRefreshers.append(updater)
             updater()

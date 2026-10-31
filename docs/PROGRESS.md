@@ -141,5 +141,6 @@
 | Crop presets computed from media probe (no hardcoded rectangles, even bounds, probe error handling) | Phase 10 Fix 1 | Probing / UI | **DONE** | `17.1–17.9 Crop presets and dynamic media probe tests` |
 | Probed trim defaults, duration validation & target-size warnings (inline warning, Run enabled) | Phase 10 Fix 2 | Probing / UI | **DONE** | `18.1–18.9 Trim duration validation and target-size warnings` |
 | Drop window parameter panel reuse & batch support (BatchProgressRowView, combined status, cancel) | Phase 10 Step 3 | Drop Window / Batch | **DONE** | `19.1–19.10 Drop window parameter panel and batch execution tests` |
+| Per-file parameters in batch (relative crop/trim intents, per-file probe resolution, batch UI readout) | Phase 10 Fix A | Batch Execution | **DONE** | `20.1–20.4 Batch parameter resolution and intent tests` |
 
 

@@ -12,6 +12,16 @@ public struct ParameterPreset: Equatable, Sendable, Identifiable {
     }
 }
 
+public enum CropIntent: Equatable, Sendable {
+    case ratio(width: Int, height: Int)
+    case manual(x: Int, y: Int, width: Int, height: Int)
+}
+
+public enum TrimEndIntent: Equatable, Sendable {
+    case endOfFile
+    case clamped(Double)
+}
+
 public final class ParameterFormField: Equatable {
     public let parameter: ActionParameter
 
@@ -73,7 +83,12 @@ public final class ParameterFormModel {
     public let actionDisplayName: String
     public let parameters: [ActionParameter]
     public let preferences: PreferencesManager
-    public let inputFile: URL?
+    public let inputFiles: [URL]
+    public var inputFile: URL? { inputFiles.first }
+    public var isBatch: Bool { inputFiles.count > 1 }
+    public var batchCount: Int { inputFiles.count }
+    public var cropIntent: CropIntent?
+    public var trimEndIntent: TrimEndIntent?
     public let probe: MediaProbe
     public private(set) var probeResult: MediaProbeResult?
     public private(set) var probeError: String?
@@ -102,13 +117,20 @@ public final class ParameterFormModel {
         preferences: PreferencesManager = .shared,
         loadLastUsed: Bool = true,
         inputFile: URL? = nil,
+        inputFiles: [URL] = [],
         probe: MediaProbe = MediaProbeService.shared.probe
     ) {
         self.actionID = action.id
         self.actionDisplayName = action.displayName
         self.parameters = action.parameters
         self.preferences = preferences
-        self.inputFile = inputFile
+        if !inputFiles.isEmpty {
+            self.inputFiles = inputFiles
+        } else if let file = inputFile {
+            self.inputFiles = [file]
+        } else {
+            self.inputFiles = []
+        }
         self.probe = probe
         setup(loadLastUsed: loadLastUsed)
     }
@@ -120,13 +142,20 @@ public final class ParameterFormModel {
         preferences: PreferencesManager = .shared,
         loadLastUsed: Bool = true,
         inputFile: URL? = nil,
+        inputFiles: [URL] = [],
         probe: MediaProbe = MediaProbeService.shared.probe
     ) {
         self.actionID = actionID
         self.actionDisplayName = actionDisplayName
         self.parameters = parameters
         self.preferences = preferences
-        self.inputFile = inputFile
+        if !inputFiles.isEmpty {
+            self.inputFiles = inputFiles
+        } else if let file = inputFile {
+            self.inputFiles = [file]
+        } else {
+            self.inputFiles = []
+        }
         self.probe = probe
         setup(loadLastUsed: loadLastUsed)
     }
@@ -143,6 +172,18 @@ public final class ParameterFormModel {
         } else {
             self.probeResult = nil
             self.probeError = nil
+        }
+
+        let ids = Set(parameters.map { $0.id })
+        if ids.contains("rectangle") {
+            if let p = probeResult, let cw = p.width, let ch = p.height, cw > 0, ch > 0 {
+                self.cropIntent = .ratio(width: cw, height: ch)
+            } else {
+                self.cropIntent = .ratio(width: 16, height: 9)
+            }
+        }
+        if ids.contains("end") || parameters.contains(where: { $0.kind == .timeRange }) {
+            self.trimEndIntent = .endOfFile
         }
 
         let lastUsed = loadLastUsed ? preferences.lastUsedParameterValues(for: actionID, parameters: parameters) : nil
@@ -173,16 +214,38 @@ public final class ParameterFormModel {
     public func updateValue(_ value: ParameterValue, for parameterId: String) {
         guard let field = field(for: parameterId) else { return }
         field.update(value: value)
+        if parameterId == "rectangle", case .rectangle(let x, let y, let w, let h) = value {
+            cropIntent = .manual(x: x, y: y, width: w, height: h)
+        } else if parameterId == "end", let num = value.asDouble {
+            trimEndIntent = .clamped(num)
+        }
         validate()
     }
 
     public func updateStringValue(_ stringValue: String, for parameterId: String) {
         guard let field = field(for: parameterId) else { return }
         field.update(stringValue: stringValue)
+        if parameterId == "rectangle", case .rectangle(let x, let y, let w, let h) = field.currentValue {
+            cropIntent = .manual(x: x, y: y, width: w, height: h)
+        } else if parameterId == "end", let num = field.currentValue.asDouble {
+            trimEndIntent = .clamped(num)
+        }
         validate()
     }
 
     public func applyPreset(_ preset: ParameterPreset) {
+        if preset.id == "crop_16_9" {
+            cropIntent = .ratio(width: 16, height: 9)
+        } else if preset.id == "crop_1_1" {
+            cropIntent = .ratio(width: 1, height: 1)
+        } else if preset.id == "crop_9_16" {
+            cropIntent = .ratio(width: 9, height: 16)
+        } else if preset.id.starts(with: "trim_") {
+            if let endVal = preset.values["end"]?.asDouble {
+                trimEndIntent = .clamped(endVal)
+            }
+        }
+
         for (key, val) in preset.values {
             if let f = field(for: key) {
                 f.update(value: val)
@@ -213,6 +276,82 @@ public final class ParameterFormModel {
 
     public func clearLastUsed() {
         preferences.clearLastUsedParameters(for: actionID)
+    }
+
+    public func resolveParameters(for fileURL: URL, probe: MediaProbe? = nil) throws -> ParameterValues {
+        let activeProbe = probe ?? self.probe
+        let pResult = try? activeProbe.probe(url: fileURL)
+        var resolved = self.values
+        let ids = Set(parameters.map { $0.id })
+
+        // 1. Resolve Crop Intent
+        if ids.contains("rectangle") {
+            let intent: CropIntent
+            if let existingIntent = self.cropIntent {
+                intent = existingIntent
+            } else if let val = resolved["rectangle"], case .rectangle(let rx, let ry, let rw, let rh) = val {
+                intent = .manual(x: rx, y: ry, width: rw, height: rh)
+            } else {
+                intent = .ratio(width: 16, height: 9)
+            }
+
+            switch intent {
+            case .ratio(let rw, let rh):
+                guard let p = pResult, let cw = p.width, let ch = p.height, cw > 0, ch > 0 else {
+                    throw PastaError.invalidInput("Cannot compute ratio crop: unable to probe dimensions for \(fileURL.lastPathComponent)")
+                }
+                let crop = CropCalculator.computeCrop(containerWidth: cw, containerHeight: ch, ratioWidth: rw, ratioHeight: rh)
+                resolved["rectangle"] = .rectangle(x: crop.x, y: crop.y, width: crop.width, height: crop.height)
+
+            case .manual(let rx, let ry, let rw, let rh):
+                if let p = pResult, let cw = p.width, let ch = p.height, cw > 0, ch > 0 {
+                    try InputValidator.validateCropWithinBounds(width: rw, height: rh, x: rx, y: ry, containerWidth: cw, containerHeight: ch)
+                }
+                resolved["rectangle"] = .rectangle(x: rx, y: ry, width: rw, height: rh)
+            }
+        }
+
+        // 2. Resolve Trim End Intent
+        if ids.contains("end") {
+            let intent = self.trimEndIntent ?? .endOfFile
+            let fileDur = pResult?.duration ?? 0.0
+
+            switch intent {
+            case .endOfFile:
+                if fileDur > 0 {
+                    resolved["end"] = .number(fileDur)
+                }
+            case .clamped(let targetEnd):
+                if fileDur > 0 {
+                    resolved["end"] = .number(min(targetEnd, fileDur))
+                } else {
+                    resolved["end"] = .number(targetEnd)
+                }
+            }
+        }
+
+        // 3. Resolve timeRange parameter
+        for param in parameters {
+            if param.kind == .timeRange, let val = resolved[param.id], case .timeRange(let s, _) = val {
+                let intent = self.trimEndIntent ?? .endOfFile
+                let fileDur = pResult?.duration ?? 0.0
+
+                switch intent {
+                case .endOfFile:
+                    if fileDur > 0 {
+                        resolved[param.id] = .timeRange(start: s, end: fileDur)
+                    }
+                case .clamped(let targetEnd):
+                    let endVal = fileDur > 0 ? min(targetEnd, fileDur) : targetEnd
+                    resolved[param.id] = .timeRange(start: s, end: endVal)
+                }
+            }
+        }
+
+        // Validate resolved parameters against declared definitions
+        try InputValidator.validateParameters(declared: parameters, values: resolved)
+
+        return resolved
     }
 
     @discardableResult

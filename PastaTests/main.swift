@@ -2219,6 +2219,159 @@ do {
                "19.10 Batch execution adds BatchProgressRowView to jobsStack")
 }
 
+// MARK: - 20. Batch Parameter Resolution & Intent Tests (Phase 10 Fix A)
+print("\n--- 20. Batch Parameter Resolution & Intent Tests (Phase 10 Fix A) ---")
+do {
+    let file1 = URL(fileURLWithPath: "file1_1280x720.mp4")
+    let file2 = URL(fileURLWithPath: "file2_1920x1080.mp4")
+    let file3 = URL(fileURLWithPath: "file3_1080x1920.mp4")
+    let fileSmall = URL(fileURLWithPath: "file_small_800x600.mp4")
+
+    let fakeProbe = FakeMediaProbe(results: [
+        "file1_1280x720.mp4": MediaProbeResult(width: 1280, height: 720, duration: 15.5, fileSize: 10_000_000),
+        "file2_1920x1080.mp4": MediaProbeResult(width: 1920, height: 1080, duration: 42.0, fileSize: 25_000_000),
+        "file3_1080x1920.mp4": MediaProbeResult(width: 1080, height: 1920, duration: 120.0, fileSize: 30_000_000),
+        "file_small_800x600.mp4": MediaProbeResult(width: 800, height: 600, duration: 10.0, fileSize: 5_000_000)
+    ])
+
+    let cropAction = ConversionAction(
+        id: "video.crop",
+        displayName: "Crop Video",
+        outputExtension: "mp4",
+        category: .video,
+        iconName: "crop",
+        parameters: [
+            ActionParameter(
+                id: "rectangle",
+                label: "Crop Rectangle",
+                kind: .rectangle,
+                defaultValue: .rectangle(x: 0, y: 0, width: 1920, height: 1080)
+            )
+        ],
+        buildInvocations: { inUrl, outUrl, _ in
+            return [Invocation(toolName: "ffmpeg", arguments: [inUrl.path, outUrl.path])]
+        }
+    )
+
+    let trimAction = ConversionAction(
+        id: "video.trim",
+        displayName: "Trim Video",
+        outputExtension: "mp4",
+        category: .video,
+        iconName: "scissors",
+        parameters: [
+            ActionParameter(id: "start", label: "Start Time", kind: .number(unit: "s"), defaultValue: .number(0.0)),
+            ActionParameter(id: "end", label: "End Time", kind: .number(unit: "s"), defaultValue: .number(10.0))
+        ],
+        buildInvocations: { inUrl, outUrl, _ in
+            return [Invocation(toolName: "ffmpeg", arguments: [inUrl.path, outUrl.path])]
+        }
+    )
+
+    // 20.1 Test 1: Batch with 3 files of different sizes where crop 1:1 gives the correct centered rectangle for each
+    let batchCropModel = ParameterFormModel(
+        action: cropAction,
+        loadLastUsed: false,
+        inputFiles: [file1, file2, file3],
+        probe: fakeProbe
+    )
+    assertTest(batchCropModel.isBatch, "20.1 ParameterFormModel isBatch is true for 3 files")
+    assertTest(batchCropModel.batchCount == 3, "20.1 ParameterFormModel batchCount is 3")
+
+    // Set 1:1 crop ratio intent
+    batchCropModel.cropIntent = .ratio(width: 1, height: 1)
+
+    let resCrop1 = try? batchCropModel.resolveParameters(for: file1, probe: fakeProbe)
+    let resCrop2 = try? batchCropModel.resolveParameters(for: file2, probe: fakeProbe)
+    let resCrop3 = try? batchCropModel.resolveParameters(for: file3, probe: fakeProbe)
+
+    // 1280x720 -> 720x720 at x=280, y=0
+    assertTest(resCrop1?["rectangle"] == .rectangle(x: 280, y: 0, width: 720, height: 720),
+               "20.1 1280x720 with 1:1 ratio crop gives 720x720 at x=280,y=0")
+
+    // 1920x1080 -> 1080x1080 at x=420, y=0
+    assertTest(resCrop2?["rectangle"] == .rectangle(x: 420, y: 0, width: 1080, height: 1080),
+               "20.1 1920x1080 with 1:1 ratio crop gives 1080x1080 at x=420,y=0")
+
+    // 1080x1920 -> 1080x1080 at x=0, y=420
+    assertTest(resCrop3?["rectangle"] == .rectangle(x: 0, y: 420, width: 1080, height: 1080),
+               "20.1 1080x1920 with 1:1 ratio crop gives 1080x1080 at x=0,y=420")
+
+    // 20.2 Test 2: Trim to end uses each file's own duration
+    let batchTrimModel = ParameterFormModel(
+        action: trimAction,
+        loadLastUsed: false,
+        inputFiles: [file1, file2, file3],
+        probe: fakeProbe
+    )
+    batchTrimModel.trimEndIntent = .endOfFile
+
+    let resTrim1 = try? batchTrimModel.resolveParameters(for: file1, probe: fakeProbe)
+    let resTrim2 = try? batchTrimModel.resolveParameters(for: file2, probe: fakeProbe)
+    let resTrim3 = try? batchTrimModel.resolveParameters(for: file3, probe: fakeProbe)
+
+    assertTest(resTrim1?["end"] == .number(15.5), "20.2 File 1 trim to end uses probed duration (15.5s)")
+    assertTest(resTrim2?["end"] == .number(42.0), "20.2 File 2 trim to end uses probed duration (42.0s)")
+    assertTest(resTrim3?["end"] == .number(120.0), "20.2 File 3 trim to end uses probed duration (120.0s)")
+
+    // 20.3 Batch mode UI displays 'Applies to N files' without single-file dimensions
+    let batchPanel = ParameterPanelView(model: batchCropModel, action: cropAction)
+    func findLabel(identifier: String, in view: NSView) -> NSTextField? {
+        if let tf = view as? NSTextField, tf.identifier?.rawValue == identifier {
+            return tf
+        }
+        for sub in view.subviews {
+            if let found = findLabel(identifier: identifier, in: sub) {
+                return found
+            }
+        }
+        return nil
+    }
+
+    let sourceLabel = findLabel(identifier: "ParameterPanel.sourceDimensions", in: batchPanel)
+    let cropDimLabel = findLabel(identifier: "ParameterPanel.cropDimensions", in: batchPanel)
+    assertTest(sourceLabel?.stringValue == "Applies to 3 files",
+               "20.3 ParameterPanel displays 'Applies to 3 files' in batch mode")
+    assertTest(sourceLabel?.stringValue.contains("1280×720") == false,
+               "20.3 ParameterPanel does NOT show single file dimensions as if they were all")
+    assertTest(cropDimLabel?.stringValue == "Ratio: 1:1",
+               "20.3 ParameterPanel displays 'Ratio: 1:1' for cropDimensions in batch mode")
+
+    // 20.4 Manual crop out of bounds per-file error handling
+    batchCropModel.cropIntent = .manual(x: 0, y: 0, width: 1280, height: 720)
+
+    var file1Fits = false
+    var fileSmallThrew = false
+    var file2Fits = false
+
+    do {
+        let r1 = try batchCropModel.resolveParameters(for: file1, probe: fakeProbe)
+        file1Fits = (r1["rectangle"] == .rectangle(x: 0, y: 0, width: 1280, height: 720))
+    } catch {
+        file1Fits = false
+    }
+
+    do {
+        _ = try batchCropModel.resolveParameters(for: fileSmall, probe: fakeProbe)
+        fileSmallThrew = false
+    } catch PastaError.invalidInput {
+        fileSmallThrew = true
+    } catch {
+        fileSmallThrew = false
+    }
+
+    do {
+        let r2 = try batchCropModel.resolveParameters(for: file2, probe: fakeProbe)
+        file2Fits = (r2["rectangle"] == .rectangle(x: 0, y: 0, width: 1280, height: 720))
+    } catch {
+        file2Fits = false
+    }
+
+    assertTest(file1Fits, "20.4 File 1 fits manual rectangle 1280x720")
+    assertTest(fileSmallThrew, "20.4 FileSmall (800x600) throws invalidInput when manual crop exceeds bounds")
+    assertTest(file2Fits, "20.4 File 2 fits manual rectangle 1280x720")
+}
+
 print("\n==================================================")
 print("Test Suite Summary: \(passedTests)/\(totalTests) Passed, \(failedTests) Failed")
 print("==================================================")
