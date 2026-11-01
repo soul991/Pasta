@@ -28,6 +28,12 @@ public final class RadialWheelOverlayViewController: NSViewController {
     // Floating hint pill
     public let hintPillContainer = NSVisualEffectView()
     public let hintPillLabel = NSTextField(labelWithString: "")
+    public private(set) var isHintPillAboveWheel: Bool = false
+
+    private var hintPillBottomConstraint: NSLayoutConstraint?
+    private var hintPillTopConstraint: NSLayoutConstraint?
+    private var compactProgressAbovePillConstraint: NSLayoutConstraint?
+    private var compactProgressBottomConstraint: NSLayoutConstraint?
 
     // Compact progress row below wheel (Phase 10B Step 1)
     public let compactProgressContainer = NSVisualEffectView()
@@ -103,7 +109,7 @@ public final class RadialWheelOverlayViewController: NSViewController {
         view.addSubview(hintPillContainer)
 
         hintPillLabel.translatesAutoresizingMaskIntoConstraints = false
-        hintPillLabel.stringValue = "Esc closes · ⌥ tap switches Convert / Advanced · ⇧ hold re-targets"
+        hintPillLabel.stringValue = "Esc closes · ⌥ mode · ⇧ re-targets"
         hintPillLabel.font = NSFont.systemFont(ofSize: 11, weight: .medium)
         // Calibrated 55% white to guarantee >= 4.5:1 contrast
         hintPillLabel.textColor = ThemeManager.shared.textTertiaryColor
@@ -156,9 +162,18 @@ public final class RadialWheelOverlayViewController: NSViewController {
         compactStack.spacing = 8
         compactProgressContainer.addSubview(compactStack)
 
+        let pillBottom = hintPillContainer.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -12)
+        let pillTop = hintPillContainer.topAnchor.constraint(equalTo: view.topAnchor, constant: 12)
+        let progAbovePill = compactProgressContainer.bottomAnchor.constraint(equalTo: hintPillContainer.topAnchor, constant: -8)
+        let progBottom = compactProgressContainer.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -12)
+
+        self.hintPillBottomConstraint = pillBottom
+        self.hintPillTopConstraint = pillTop
+        self.compactProgressAbovePillConstraint = progAbovePill
+        self.compactProgressBottomConstraint = progBottom
+
         NSLayoutConstraint.activate([
             hintPillContainer.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            hintPillContainer.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -12),
             hintPillContainer.heightAnchor.constraint(equalToConstant: 28),
             hintPillContainer.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor, constant: 16),
             hintPillContainer.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -16),
@@ -168,7 +183,6 @@ public final class RadialWheelOverlayViewController: NSViewController {
             hintPillLabel.centerYAnchor.constraint(equalTo: hintPillContainer.centerYAnchor),
 
             compactProgressContainer.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            compactProgressContainer.bottomAnchor.constraint(equalTo: hintPillContainer.topAnchor, constant: -8),
             compactProgressContainer.heightAnchor.constraint(equalToConstant: 32),
             compactProgressContainer.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor, constant: 20),
             compactProgressContainer.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -20),
@@ -179,7 +193,10 @@ public final class RadialWheelOverlayViewController: NSViewController {
 
             compactProgressIcon.widthAnchor.constraint(equalToConstant: 16),
             compactProgressIcon.heightAnchor.constraint(equalToConstant: 16),
-            compactProgressBar.widthAnchor.constraint(equalToConstant: 80)
+            compactProgressBar.widthAnchor.constraint(equalToConstant: 70),
+
+            pillBottom,
+            progAbovePill
         ])
 
         // Close control (×) at top-right of wheel backplate
@@ -280,6 +297,34 @@ public final class RadialWheelOverlayViewController: NSViewController {
         } else {
             DispatchQueue.main.async(execute: apply)
         }
+    }
+
+    public func setHintPillPlacement(aboveWheel: Bool) {
+        self.isHintPillAboveWheel = aboveWheel
+        if aboveWheel {
+            hintPillBottomConstraint?.isActive = false
+            compactProgressAbovePillConstraint?.isActive = false
+            hintPillTopConstraint?.isActive = true
+            compactProgressBottomConstraint?.isActive = true
+        } else {
+            hintPillTopConstraint?.isActive = false
+            compactProgressBottomConstraint?.isActive = false
+            hintPillBottomConstraint?.isActive = true
+            compactProgressAbovePillConstraint?.isActive = true
+        }
+        view.needsLayout = true
+    }
+
+    public func evaluateHintPillPlacement(screenVisibleFrame: CGRect? = nil) {
+        let visFrame = screenVisibleFrame ?? view.window?.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1920, height: 1080)
+        let panelOrigin = view.window?.frame.origin ?? .zero
+        let cramped = WheelGeometry.isBottomCramped(panelOrigin: panelOrigin, visibleFrame: visFrame)
+        setHintPillPlacement(aboveWheel: cramped)
+    }
+
+    public override func viewWillAppear() {
+        super.viewWillAppear()
+        evaluateHintPillPlacement()
     }
 
     public func toggleMode(isAdvanced: Bool) {

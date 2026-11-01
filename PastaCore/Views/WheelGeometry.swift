@@ -78,4 +78,9 @@ public struct WheelGeometry {
 
         return origin
     }
+
+    /// Determines if bottom of the wheel panel is cramped near screen bottom or dock
+    public static func isBottomCramped(panelOrigin: CGPoint, visibleFrame: CGRect, threshold: CGFloat = 60.0) -> Bool {
+        return panelOrigin.y <= (visibleFrame.minY + threshold)
+    }
 }

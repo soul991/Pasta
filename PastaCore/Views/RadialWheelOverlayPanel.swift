@@ -58,6 +58,9 @@ public final class RadialWheelOverlayPanel: NSPanel {
 
         setFrameOrigin(origin)
 
+        let isCramped = WheelGeometry.isBottomCramped(panelOrigin: origin, visibleFrame: visibleFrame)
+        wheelViewController.setHintPillPlacement(aboveWheel: isCramped)
+
         alphaValue = 0.0
         orderFront(nil)
 

@@ -3811,6 +3811,42 @@ do {
     assertTest(wheelOverlay.compactProgressBar.isHidden == true, "33.6 Compact progress bar hidden after cancel")
     assertTest(wheelOverlay.compactProgressLabel.stringValue == "Conversion cancelled", "33.6 Compact progress label shows 'Conversion cancelled'")
     assertTest(wheelOverlay.compactProgressButton.title == "Dismiss", "33.6 Compact progress button changes to 'Dismiss' after cancel")
+
+    // --- 34. Phase 10B Fix 8: P3 Hint Pill Tests ---
+    print("\n--- 34. Phase 10B Fix 8: P3 Hint Pill Tests ---")
+
+    // 34.1 Shortened hint pill text
+    let pillVC = RadialWheelOverlayViewController()
+    pillVC.loadView()
+    pillVC.viewDidLoad()
+    let pillText = pillVC.hintPillLabel.stringValue
+    assertTest(pillText.count <= 40, "34.1 Hint pill text is shortened (got \(pillText.count) chars: '\(pillText)')")
+    assertTest(pillText.contains("Esc closes"), "34.1 Hint pill text contains 'Esc closes'")
+    assertTest(pillText.contains("⌥ mode"), "34.1 Hint pill text contains '⌥ mode'")
+    assertTest(pillText.contains("⇧ re-targets"), "34.1 Hint pill text contains '⇧ re-targets'")
+    assertTest(!pillText.contains("switches Convert / Advanced"), "34.1 Hint pill text removed verbose 'switches Convert / Advanced'")
+
+    // 34.2 WheelGeometry isBottomCramped geometry check
+    let standardScreen = CGRect(x: 0, y: 0, width: 1920, height: 1080)
+    let crampedOrigin = CGPoint(x: 500, y: 30) // Within 60pt of screen bottom
+    let uncrampedOrigin = CGPoint(x: 500, y: 400) // Well above screen bottom
+    assertTest(WheelGeometry.isBottomCramped(panelOrigin: crampedOrigin, visibleFrame: standardScreen),
+               "34.2 WheelGeometry reports bottom cramped when panel near screen bottom (y=30)")
+    assertTest(!WheelGeometry.isBottomCramped(panelOrigin: uncrampedOrigin, visibleFrame: standardScreen),
+               "34.2 WheelGeometry reports NOT cramped when panel well above screen bottom (y=400)")
+
+    // 34.3 Hint pill dynamic placement (above wheel vs below wheel)
+    pillVC.setHintPillPlacement(aboveWheel: true)
+    assertTest(pillVC.isHintPillAboveWheel == true, "34.3 setHintPillPlacement(aboveWheel: true) sets isHintPillAboveWheel to true")
+
+    pillVC.setHintPillPlacement(aboveWheel: false)
+    assertTest(pillVC.isHintPillAboveWheel == false, "34.3 setHintPillPlacement(aboveWheel: false) sets isHintPillAboveWheel to false")
+
+    // 34.4 evaluateHintPillPlacement with mocked visible frame
+    let dockScreen = CGRect(x: 0, y: 80, width: 1920, height: 1000) // Screen with dock at bottom 80pt
+    let originNearDock = CGPoint(x: 300, y: 110) // 110 <= 80 + 60 = 140 -> cramped!
+    assertTest(WheelGeometry.isBottomCramped(panelOrigin: originNearDock, visibleFrame: dockScreen),
+               "34.4 WheelGeometry detects dock encroachment as cramped (y=110 near minY=80)")
 }
 
 print("\n==================================================")
