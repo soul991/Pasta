@@ -71,6 +71,9 @@ public final class RadialWheelBackplateView: NSView {
         maskLayer.path = path
         maskLayer.fillRule = .evenOdd
         visualEffect.layer?.mask = maskLayer
+        visualEffect.layer?.backgroundColor = (ThemeManager.shared.isReduceTransparency
+            ? ThemeManager.shared.reduceTransparencyBackground
+            : NSColor(red: 0.10, green: 0.10, blue: 0.11, alpha: 0.75)).cgColor
     }
 
     public override func draw(_ dirtyRect: NSRect) {
@@ -81,17 +84,18 @@ public final class RadialWheelBackplateView: NSView {
         let outerR = outerDiameter / 2.0
         let innerR = hubDiameter / 2.0
 
-        // 0. Reduce Transparency: Draw opaque dark background if enabled
-        if ThemeManager.shared.isReduceTransparency {
-            let annulusPath = CGMutablePath()
-            annulusPath.addArc(center: center, radius: outerR, startAngle: 0, endAngle: 2.0 * .pi, clockwise: false)
-            annulusPath.addArc(center: center, radius: innerR, startAngle: 0, endAngle: 2.0 * .pi, clockwise: true)
-            context.saveGState()
-            context.addPath(annulusPath)
-            context.setFillColor(ThemeManager.shared.reduceTransparencyBackground.cgColor)
-            context.fillPath(using: .evenOdd)
-            context.restoreGState()
-        }
+        // 0. Neutral dark base to eliminate wallpaper color blobs bleeding through
+        let annulusPath = CGMutablePath()
+        annulusPath.addArc(center: center, radius: outerR, startAngle: 0, endAngle: 2.0 * .pi, clockwise: false)
+        annulusPath.addArc(center: center, radius: innerR, startAngle: 0, endAngle: 2.0 * .pi, clockwise: true)
+        context.saveGState()
+        context.addPath(annulusPath)
+        let neutralDarkColor = ThemeManager.shared.isReduceTransparency
+            ? ThemeManager.shared.reduceTransparencyBackground
+            : NSColor(red: 0.10, green: 0.10, blue: 0.11, alpha: 0.75)
+        context.setFillColor(neutralDarkColor.cgColor)
+        context.fillPath(using: .evenOdd)
+        context.restoreGState()
 
         // 1. Faint Top Sheen Gradient (white 0.12 to 0.0)
         if !ThemeManager.shared.isReduceTransparency {

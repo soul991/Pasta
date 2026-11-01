@@ -138,6 +138,7 @@ public final class RadialWheelCustomizeSheet: NSView {
         setupAppearanceSection()
         setupPrimaryToolsSection()
         setupBehaviorSection()
+        applyControlAccents(accent: WheelLayoutModel.shared.currentTheme.accentColor)
     }
 
     // MARK: - Section 1: Appearance
@@ -515,6 +516,7 @@ public final class RadialWheelCustomizeSheet: NSView {
         selectedThemeNameLabel.stringValue = "Theme: \(theme.displayName)"
         selectedThemeNameLabel.textColor = theme.accentColor
         previewView.currentTheme = theme
+        applyControlAccents(accent: theme.accentColor)
 
         for (i, btn) in themeButtons.enumerated() {
             let isSel = (i == index)
@@ -523,6 +525,23 @@ public final class RadialWheelCustomizeSheet: NSView {
         }
 
         onSettingsChanged?()
+    }
+
+    private func applyControlAccents(accent: NSColor) {
+        if #available(macOS 14.0, *) {
+            glassStrengthSlider.trackFillColor = accent
+            holdDurationSlider.trackFillColor = accent
+        }
+        if #available(macOS 10.14, *) {
+            sectionSegment.selectedSegmentBezelColor = accent
+            categorySegmentRow1.selectedSegmentBezelColor = accent
+            categorySegmentRow2.selectedSegmentBezelColor = accent
+            glassStyleSegment.selectedSegmentBezelColor = accent
+            sizeSegment.selectedSegmentBezelColor = accent
+            labelModeSegment.selectedSegmentBezelColor = accent
+        }
+        keepOpenCheckbox.contentTintColor = accent
+        showRingCheckbox.contentTintColor = accent
     }
 
     @objc private func glassStyleChanged() {
@@ -663,6 +682,19 @@ public final class RadialWheelCustomizeSheet: NSView {
     public var testGlassStrengthText: String { glassStrengthLabel.stringValue }
     public var testLabelModeLabels: [String] { (0..<labelModeSegment.segmentCount).compactMap { labelModeSegment.label(forSegment: $0) } }
     public var testPreviewView: MiniatureWheelPreviewView { previewView }
+    public var testCheckboxTintColor: NSColor? { keepOpenCheckbox.contentTintColor }
+    public var testSliderTrackFillColor: NSColor? {
+        if #available(macOS 14.0, *) {
+            return glassStrengthSlider.trackFillColor
+        }
+        return nil
+    }
+    public var testSegmentedControlBezelColor: NSColor? {
+        if #available(macOS 10.14, *) {
+            return sectionSegment.selectedSegmentBezelColor
+        }
+        return nil
+    }
     public var pinnedToolRows: [PinnedToolRowView] {
         return toolsStackView.arrangedSubviews.compactMap { $0 as? PinnedToolRowView }
     }

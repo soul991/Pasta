@@ -54,6 +54,7 @@ public final class RadialWheelCenterDiscView: NSView {
         visualEffect.wantsLayer = true
         visualEffect.layer?.cornerRadius = 64
         visualEffect.layer?.masksToBounds = true
+        visualEffect.layer?.backgroundColor = NSColor(white: 0.08, alpha: 0.85).cgColor
         addSubview(visualEffect)
 
         // Accessibility attributes

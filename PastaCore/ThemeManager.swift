@@ -68,13 +68,14 @@ public final class ThemeManager {
         return NSColor(hex: "#1A0F05") ?? NSColor.black
     }
 
-    /// Calibrated tertiary text raised to 55% white to guarantee >= 4.5:1 contrast against dark materials
+    /// Calibrated tertiary text raised to 65% white to guarantee >= 4.5:1 contrast against dark materials
     public var textTertiaryColor: NSColor {
-        return NSColor(white: 1.0, alpha: 0.55)
+        return NSColor(white: 1.0, alpha: 0.65)
     }
 
+    /// Calibrated secondary text raised to 85% white to guarantee >= 4.5:1 contrast against dark sheet background
     public var textSecondaryColor: NSColor {
-        return NSColor(white: 1.0, alpha: 0.70)
+        return NSColor(white: 1.0, alpha: 0.85)
     }
 
     public var textPrimaryColor: NSColor {

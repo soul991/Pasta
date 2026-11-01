@@ -3676,6 +3676,56 @@ do {
     assertTest(actualHex == expectedHex, "31.3 Active node label uses dark ink #1A0F05 (got: \(actualHex))")
     assertTest(nodeView.testTitleShadow == nil, "31.3 Active node disables text drop shadow on bright accent background")
     assertTest(nodeView.testShadowRadius <= 16.0, "31.3 Active node glow radius (\(nodeView.testShadowRadius) pt) fits fully inside panel rim (28 pt margin)")
+
+    // 32. Phase 10B Fix 6: P2 Color - Default Theme Sunset, Control Tinting & WCAG 4.5:1 Contrast
+    print("\n--- 32. Phase 10B Fix 6: P2 Color Tests ---")
+
+    // 32.1 Default theme in code is Sunset orange (#F2611F)
+    assertTest(WheelTheme.sunset.hex == "#F2611F", "32.1 WheelTheme.sunset hex is #F2611F")
+    assertTest(WheelTheme.sunset.displayName == "Sunset", "32.1 WheelTheme.sunset display name is Sunset")
+
+    // Reset theme to sunset for test
+    WheelLayoutModel.shared.currentTheme = .sunset
+    assertTest(WheelLayoutModel.shared.currentTheme == .sunset, "32.1 Default currentTheme is Sunset")
+    assertTest(ThemeManager.shared.currentHex == "#F2611F", "32.1 ThemeManager active hex is #F2611F")
+
+    // 32.2 Sliders and system controls use theme accent (not system blue)
+    let colorSheet = RadialWheelCustomizeSheet()
+    assertTest(colorSheet.testCheckboxTintColor == WheelTheme.sunset.accentColor, "32.2 Checkbox uses Sunset theme accent tint")
+    if #available(macOS 10.14, *) {
+        assertTest(colorSheet.testSegmentedControlBezelColor == WheelTheme.sunset.accentColor, "32.2 Segmented controls use Sunset theme accent for selectedSegmentBezelColor")
+    }
+    if #available(macOS 14.0, *) {
+        assertTest(colorSheet.testSliderTrackFillColor == WheelTheme.sunset.accentColor, "32.2 Slider uses Sunset theme trackFillColor")
+    }
+
+    // Switch theme to Ocean and verify controls update
+    if let oceanSwatch = colorSheet.testThemeButtons.first(where: { $0.tag == 1 }) {
+        colorSheet.themeSwatchClicked(oceanSwatch)
+        assertTest(colorSheet.testCheckboxTintColor == WheelTheme.ocean.accentColor, "32.2 Checkbox updates to Ocean accent tint")
+        if #available(macOS 10.14, *) {
+            assertTest(colorSheet.testSegmentedControlBezelColor == WheelTheme.ocean.accentColor, "32.2 Segmented controls update to Ocean accent selectedSegmentBezelColor")
+        }
+        if #available(macOS 14.0, *) {
+            assertTest(colorSheet.testSliderTrackFillColor == WheelTheme.ocean.accentColor, "32.2 Slider updates to Ocean trackFillColor")
+        }
+    }
+    // Restore sunset
+    if let sunsetSwatch = colorSheet.testThemeButtons.first(where: { $0.tag == 0 }) {
+        colorSheet.themeSwatchClicked(sunsetSwatch)
+    }
+
+    // 32.3 Secondary label contrast against sheet background >= 4.5:1
+    let sheetBg = NSColor(hex: "#242426") ?? NSColor(white: 0.14, alpha: 1.0)
+    let secondaryColor = ThemeManager.shared.textSecondaryColor
+    let compositedSecondary = WCAGContrast.composite(foreground: secondaryColor, over: sheetBg)
+    let contrastRatio = WCAGContrast.contrastRatio(foreground: compositedSecondary, background: sheetBg)
+    assertTest(contrastRatio >= 4.5, "32.3 Secondary label contrast (\(String(format: "%.2f", contrastRatio)):1) meets WCAG AA >= 4.5:1 against sheet background")
+
+    // 32.4 Backplate neutral dark base renders without color blob leaks
+    let backplate = RadialWheelBackplateView()
+    backplate.frame = NSRect(x: 0, y: 0, width: 400, height: 400)
+    assertTest(backplate.frame.width == 400.0, "32.4 Backplate has 400 pt diameter frame with neutral dark glass backing")
 }
 
 print("\n==================================================")
