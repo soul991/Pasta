@@ -19,9 +19,17 @@ public final class RadialOptionNodeView: NSView {
     }
 
     private let visualEffect = NSVisualEffectView()
+    private let gradientLayer = CAGradientLayer()
     private let titleLabel = NSTextField(labelWithString: "")
     private let iconView = NSImageView()
-    private let scrimView = NSView()
+
+    private let defaultTextShadow: NSShadow = {
+        let s = NSShadow()
+        s.shadowColor = NSColor.black.withAlphaComponent(0.65)
+        s.shadowOffset = NSSize(width: 0, height: -1)
+        s.shadowBlurRadius = 2.0
+        return s
+    }()
 
     public var isKeyFocused: Bool = false {
         didSet {
@@ -82,6 +90,13 @@ public final class RadialOptionNodeView: NSView {
         visualEffect.layer?.masksToBounds = true
         addSubview(visualEffect)
 
+        // Gradient Layer for active node
+        gradientLayer.frame = NSRect(x: 0, y: 0, width: 64, height: 64)
+        gradientLayer.cornerRadius = 32
+        gradientLayer.masksToBounds = true
+        gradientLayer.isHidden = true
+        visualEffect.layer?.addSublayer(gradientLayer)
+
         // Icon
         iconView.translatesAutoresizingMaskIntoConstraints = false
         switch slotKind {
@@ -99,30 +114,23 @@ public final class RadialOptionNodeView: NSView {
         iconView.contentTintColor = .white
         addSubview(iconView)
 
-        // Title Label
+        // Title Label directly on glass below glyph with subtle text shadow
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         let labelText: String
         switch slotKind {
         case .action(let action):
-            labelText = action.outputExtension.isEmpty ? action.displayName : action.outputExtension.uppercased()
+            labelText = action.shortHumanName
         case .more:
             labelText = "More"
         case .customize:
             labelText = "Settings"
         }
         titleLabel.stringValue = labelText
-        titleLabel.font = NSFont.systemFont(ofSize: 11, weight: .bold)
+        titleLabel.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
         titleLabel.textColor = .white
         titleLabel.alignment = .center
         titleLabel.lineBreakMode = .byTruncatingTail
-
-        // Subtle adaptive scrim behind label for legibility over bright/red wallpapers
-        scrimView.translatesAutoresizingMaskIntoConstraints = false
-        scrimView.wantsLayer = true
-        scrimView.layer?.cornerRadius = 4
-        scrimView.layer?.masksToBounds = true
-        scrimView.layer?.backgroundColor = NSColor(white: 0.0, alpha: ThemeManager.shared.adaptiveScrimAlpha).cgColor
-        addSubview(scrimView)
+        titleLabel.shadow = defaultTextShadow
         addSubview(titleLabel)
 
         // Accessibility attributes for VoiceOver
@@ -133,11 +141,11 @@ public final class RadialOptionNodeView: NSView {
             setAccessibilityLabel(act.displayName)
             setAccessibilityHelp("Convert file to \(act.outputExtension.uppercased())")
         case .more:
-            setAccessibilityLabel("More conversion tools")
-            setAccessibilityHelp("Opens additional conversion options")
+            setAccessibilityLabel("More Tools")
+            setAccessibilityHelp("Open full categorized tools list")
         case .customize:
-            setAccessibilityLabel("Customize wheel")
-            setAccessibilityHelp("Opens appearance and tool customization sheet")
+            setAccessibilityLabel("Customize Wheel")
+            setAccessibilityHelp("Open wheel customization settings")
         }
 
         NSLayoutConstraint.activate([
@@ -148,18 +156,13 @@ public final class RadialOptionNodeView: NSView {
 
             iconView.centerXAnchor.constraint(equalTo: centerXAnchor),
             iconView.topAnchor.constraint(equalTo: topAnchor, constant: 10),
-            iconView.widthAnchor.constraint(equalToConstant: 20),
-            iconView.heightAnchor.constraint(equalToConstant: 20),
+            iconView.widthAnchor.constraint(equalToConstant: 24),
+            iconView.heightAnchor.constraint(equalToConstant: 24),
 
             titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
             titleLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
             titleLabel.topAnchor.constraint(equalTo: iconView.bottomAnchor, constant: 2),
-            titleLabel.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor, constant: -6),
-
-            scrimView.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor, constant: -2),
-            scrimView.trailingAnchor.constraint(equalTo: titleLabel.trailingAnchor, constant: 2),
-            scrimView.topAnchor.constraint(equalTo: titleLabel.topAnchor, constant: -1),
-            scrimView.bottomAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 1)
+            titleLabel.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor, constant: -6)
         ])
 
         updateState()
@@ -172,19 +175,38 @@ public final class RadialOptionNodeView: NSView {
         )
     }
 
+    public override func layout() {
+        super.layout()
+        gradientLayer.frame = bounds
+        gradientLayer.cornerRadius = bounds.width / 2.0
+    }
+
     @objc private func themeChanged() {
         updateState()
     }
 
     private func updateState() {
         let accent = ThemeManager.shared.accentColor
-        let contrastInk = WCAGContrast.contrastingLabelColor(for: accent)
+        let darkInk = NSColor(hex: "#1A0F05") ?? .black
         let maxScale = ThemeManager.shared.maxHoverScale // 1.06
         let minScale = ThemeManager.shared.minHoverScale // 1.00
 
-        let isReduceMotion = ThemeManager.shared.isReduceMotion
-        let isReduceTransparency = ThemeManager.shared.isReduceTransparency
-        let isIncreaseContrast = ThemeManager.shared.isIncreaseContrast
+        let isReduceMotion = PreferencesManager.shared.reduceMotionEnabled
+        let isIncreaseContrast = PreferencesManager.shared.increaseContrastEnabled
+        let isReduceTransparency = PreferencesManager.shared.reduceTransparencyEnabled
+
+        // Label visibility mode
+        let labelMode = WheelLayoutModel.shared.labelMode
+        switch labelMode {
+        case .always:
+            titleLabel.isHidden = false
+        case .onHover:
+            titleLabel.isHidden = !(isHovered || isDraggingOver || isKeyFocused)
+        }
+
+        if isIncreaseContrast {
+            titleLabel.isHidden = false
+        }
 
         // Reduce Transparency: Use opaque dark background
         if isReduceTransparency {
@@ -195,52 +217,41 @@ public final class RadialOptionNodeView: NSView {
             layer?.backgroundColor = NSColor.clear.cgColor
         }
 
-        // Handle label mode (Always vs On Hover)
-        if WheelLayoutModel.shared.labelMode == .onHover {
-            titleLabel.isHidden = !(isHovered || isDraggingOver || isKeyFocused)
-        } else {
-            titleLabel.isHidden = false
-        }
-
-        // Adaptive Scrim visibility
-        scrimView.isHidden = titleLabel.isHidden || isReduceTransparency
-        scrimView.layer?.backgroundColor = NSColor(white: 0.0, alpha: ThemeManager.shared.adaptiveScrimAlpha).cgColor
-
         let duration = isReduceMotion ? 0.0 : 0.16
+        let isActive = isDraggingOver || isKeyFocused || isHovered
+
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = duration
             ctx.allowsImplicitAnimation = !isReduceMotion
 
-            if isDraggingOver || isKeyFocused {
-                // Drag hover or keyboard focus: scale clamped to maximum 1.06
-                layer?.transform = CATransform3DMakeScale(maxScale, maxScale, 1.0)
-                visualEffect.layer?.backgroundColor = accent.cgColor
-                layer?.borderColor = isIncreaseContrast ? ThemeManager.shared.increaseContrastBorderColor.cgColor : NSColor.white.cgColor
-                layer?.borderWidth = isIncreaseContrast ? ThemeManager.shared.increaseContrastBorderWidth : 2.0
-                layer?.shadowColor = isReduceMotion ? nil : accent.cgColor
-                layer?.shadowOpacity = isReduceMotion ? 0.0 : 0.35 // Accent glow @ 0.35 alpha
-                layer?.shadowRadius = WheelGeometry.maxGlowRadius // 18pt accent glow
-                layer?.shadowOffset = .zero
+            if isActive {
+                // Active node: Accent gradient fill, dark ink label, glow fully inside panel
+                let scale = (isDraggingOver || isKeyFocused) ? maxScale : ((minScale + maxScale) / 2.0)
+                layer?.transform = CATransform3DMakeScale(scale, scale, 1.0)
 
-                titleLabel.textColor = contrastInk
-                iconView.contentTintColor = contrastInk
-            } else if isHovered {
-                // Subtle hover: 1.03 scale
-                let hoverScale = (minScale + maxScale) / 2.0 // 1.03
-                layer?.transform = CATransform3DMakeScale(hoverScale, hoverScale, 1.0)
-                visualEffect.layer?.backgroundColor = accent.withAlphaComponent(0.35).cgColor
-                layer?.borderColor = accent.cgColor
+                let topColor = (accent.blended(withFraction: 0.18, of: .white) ?? accent).cgColor
+                let bottomColor = (accent.blended(withFraction: 0.16, of: .black) ?? accent).cgColor
+                gradientLayer.colors = [topColor, bottomColor]
+                gradientLayer.startPoint = CGPoint(x: 0.5, y: 0.0)
+                gradientLayer.endPoint = CGPoint(x: 0.5, y: 1.0)
+                gradientLayer.isHidden = false
+
+                layer?.borderColor = isIncreaseContrast ? ThemeManager.shared.increaseContrastBorderColor.cgColor : NSColor.white.withAlphaComponent(0.90).cgColor
                 layer?.borderWidth = isIncreaseContrast ? ThemeManager.shared.increaseContrastBorderWidth : 1.5
+
+                // 14pt glow radius stays fully within the 28pt margin between node edge (172) and backplate rim (200)
                 layer?.shadowColor = isReduceMotion ? nil : accent.cgColor
-                layer?.shadowOpacity = isReduceMotion ? 0.0 : 0.30
-                layer?.shadowRadius = 8
+                layer?.shadowOpacity = isReduceMotion ? 0.0 : 0.40
+                layer?.shadowRadius = 14.0
                 layer?.shadowOffset = .zero
 
-                titleLabel.textColor = .white
-                iconView.contentTintColor = accent
+                titleLabel.textColor = darkInk
+                iconView.contentTintColor = darkInk
+                titleLabel.shadow = nil
             } else {
-                // Idle state: scale 1.00 exactly
+                // Idle state: glass disc, subtle text shadow, 1.00 scale
                 layer?.transform = CATransform3DIdentity
+                gradientLayer.isHidden = true
                 visualEffect.layer?.backgroundColor = NSColor(white: 0.12, alpha: 0.75).cgColor
                 layer?.borderColor = isIncreaseContrast ? ThemeManager.shared.increaseContrastBorderColor.cgColor : NSColor(white: 1.0, alpha: 0.20).cgColor
                 layer?.borderWidth = isIncreaseContrast ? ThemeManager.shared.increaseContrastBorderWidth : 1.0
@@ -251,6 +262,7 @@ public final class RadialOptionNodeView: NSView {
 
                 titleLabel.textColor = .white
                 iconView.contentTintColor = .white
+                titleLabel.shadow = defaultTextShadow
             }
         }
     }
@@ -305,4 +317,14 @@ public final class RadialOptionNodeView: NSView {
             return true
         }
     }
+
+    // MARK: - Testing Helpers
+    public var testTitleLabel: NSTextField { titleLabel }
+    public var testHasDarkScrimView: Bool {
+        return subviews.contains { $0 != titleLabel && $0 != iconView && $0 != visualEffect }
+    }
+    public var testGradientIsActive: Bool { !gradientLayer.isHidden }
+    public var testTitleTextColor: NSColor { titleLabel.textColor ?? .clear }
+    public var testTitleShadow: NSShadow? { titleLabel.shadow }
+    public var testShadowRadius: CGFloat { layer?.shadowRadius ?? 0 }
 }

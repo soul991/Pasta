@@ -3626,6 +3626,56 @@ do {
     assertTest(miniPreview.previewDiameter == 80.0, "30.6 Standard size yields 80 pt preview diameter")
     miniPreview.currentSize = .large
     assertTest(miniPreview.previewDiameter == 92.0, "30.6 Large size yields 92 pt preview diameter")
+
+    // 31. Phase 10B Fix 5: P1 Node Design - Transparent Glass Labels, Distinct Glyphs & Active Fill
+    print("\n--- 31. Phase 10B Fix 5: P1 Node Design Tests ---")
+
+    // 31.1 Distinct glyph per format (no two formats share same glyph)
+    var seenIcons = [String: String]()
+    var formatGlyphCollisions = [String]()
+    for (fmt, icon) in FormatRegistry.distinctFormatGlyphs {
+        if let existing = seenIcons[icon] {
+            formatGlyphCollisions.append("\(fmt) shares icon '\(icon)' with \(existing)")
+        } else {
+            seenIcons[icon] = fmt
+        }
+    }
+    assertTest(formatGlyphCollisions.isEmpty, "31.1 Every format in distinctFormatGlyphs has a unique glyph with zero collisions (collisions: \(formatGlyphCollisions))")
+    assertTest(FormatRegistry.icon(forFormat: "jpg") != FormatRegistry.icon(forFormat: "jpeg"), "31.1 Disambiguate jpg ('\(FormatRegistry.icon(forFormat: "jpg"))') and jpeg ('\(FormatRegistry.icon(forFormat: "jpeg"))')")
+    assertTest(FormatRegistry.icon(forFormat: "doc") != FormatRegistry.icon(forFormat: "docx"), "31.1 Disambiguate doc ('\(FormatRegistry.icon(forFormat: "doc"))') and docx ('\(FormatRegistry.icon(forFormat: "docx"))')")
+    assertTest(FormatRegistry.icon(forFormat: "tar") != FormatRegistry.icon(forFormat: "tar.gz"), "31.1 Disambiguate tar ('\(FormatRegistry.icon(forFormat: "tar"))') and tar.gz ('\(FormatRegistry.icon(forFormat: "tar.gz"))')")
+
+    // 31.2 Node design: No dark rectangular scrim bar, 11 pt font, subtle shadow on glass
+    let sampleAct = ConversionAction(
+        id: "video.to.mp4",
+        displayName: "Convert to MP4",
+        outputExtension: "mp4",
+        isAdvanced: false,
+        category: .video,
+        iconName: FormatRegistry.icon(forFormat: "mp4")
+    ) { _, _ in [] }
+
+    let nodeView = RadialOptionNodeView(action: sampleAct)
+    nodeView.frame = NSRect(x: 0, y: 0, width: 64, height: 64)
+    nodeView.layoutSubtreeIfNeeded()
+
+    assertTest(!nodeView.testHasDarkScrimView, "31.2 Node has no dark rectangular label bar (scrimView removed)")
+    assertTest(nodeView.testTitleLabel.font?.pointSize == 11.0, "31.2 Node label font size is exactly 11 pt")
+    assertTest(nodeView.testTitleShadow != nil, "31.2 Idle node label has subtle text shadow on glass")
+
+    // 31.3 Active node: Accent gradient fill, dark ink label, glow fully inside panel
+    assertTest(!nodeView.testGradientIsActive, "31.3 Idle node has inactive gradient layer")
+    assertTest(nodeView.testTitleTextColor == .white, "31.3 Idle node label color is white")
+
+    nodeView.isKeyFocused = true
+    assertTest(nodeView.testGradientIsActive, "31.3 Active node enables accent gradient fill")
+
+    let darkInk = NSColor(hex: "#1A0F05") ?? .black
+    let expectedHex = darkInk.hexString
+    let actualHex = nodeView.testTitleTextColor.hexString
+    assertTest(actualHex == expectedHex, "31.3 Active node label uses dark ink #1A0F05 (got: \(actualHex))")
+    assertTest(nodeView.testTitleShadow == nil, "31.3 Active node disables text drop shadow on bright accent background")
+    assertTest(nodeView.testShadowRadius <= 16.0, "31.3 Active node glow radius (\(nodeView.testShadowRadius) pt) fits fully inside panel rim (28 pt margin)")
 }
 
 print("\n==================================================")
