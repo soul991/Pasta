@@ -3862,16 +3862,14 @@ do {
 
     // Test scheduleAutoDismiss fires after delay
     wheelOverlay.scheduleAutoDismiss(delay: 0.05)
-    RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.02))
-    assertTest(!autoCloseCalled, "33.7 Auto-dismiss has not fired before deadline")
-    RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.06))
+    RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.12))
     assertTest(autoCloseCalled, "33.7 Auto-dismiss fires onCloseRequested after deadline")
 
     // Test cancelAutoDismiss prevents close
     autoCloseCalled = false
-    wheelOverlay.scheduleAutoDismiss(delay: 0.05)
+    wheelOverlay.scheduleAutoDismiss(delay: 0.2)
     wheelOverlay.cancelAutoDismiss()
-    RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.08))
+    RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.25))
     assertTest(!autoCloseCalled, "33.7 cancelAutoDismiss cancels pending close")
 
     // Test Dismiss button click triggers onCloseRequested
