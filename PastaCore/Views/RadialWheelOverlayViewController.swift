@@ -654,7 +654,7 @@ public final class RadialWheelOverlayViewController: NSViewController {
 
         let sheet = RadialWheelCustomizeSheet()
         let sheetW: CGFloat = 360.0
-        let sheetH: CGFloat = 440.0
+        let sheetH: CGFloat = 480.0
         sheet.frame = NSRect(
             x: WheelGeometry.wheelCenterX - (sheetW / 2.0),
             y: WheelGeometry.wheelCenterY - (sheetH / 2.0),

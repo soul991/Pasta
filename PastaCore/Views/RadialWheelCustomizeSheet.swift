@@ -16,6 +16,7 @@ public final class RadialWheelCustomizeSheet: NSView {
 
     // Appearance controls
     private var themeButtons: [NSButton] = []
+    private let selectedThemeNameLabel = NSTextField(labelWithString: "")
     private let glassStyleSegment = NSSegmentedControl()
     private let glassStrengthSlider = NSSlider()
     private let glassStrengthLabel = NSTextField(labelWithString: "Strength: 80%")
@@ -23,7 +24,8 @@ public final class RadialWheelCustomizeSheet: NSView {
     private let labelModeSegment = NSSegmentedControl()
 
     // Primary tools controls
-    private let categorySegment = NSSegmentedControl()
+    private let categorySegmentRow1 = NSSegmentedControl()
+    private let categorySegmentRow2 = NSSegmentedControl()
     private let toolsStackView = NSStackView()
     private let addToolPicker = NSPopUpButton()
     private var selectedCategory: ActionCategory = .image
@@ -35,7 +37,7 @@ public final class RadialWheelCustomizeSheet: NSView {
     private let showRingCheckbox = NSButton(checkboxWithTitle: "Show charging progress ring", target: nil, action: nil)
 
     public override init(frame frameRect: NSRect) {
-        super.init(frame: NSRect(x: 0, y: 0, width: 360, height: 440))
+        super.init(frame: NSRect(x: 0, y: 0, width: 360, height: 480))
         setupUI()
     }
 
@@ -145,8 +147,8 @@ public final class RadialWheelCustomizeSheet: NSView {
         let swatchesStack = NSStackView()
         swatchesStack.translatesAutoresizingMaskIntoConstraints = false
         swatchesStack.orientation = .horizontal
-        swatchesStack.spacing = 8
-        swatchesStack.distribution = .fillEqually
+        swatchesStack.spacing = 10
+        swatchesStack.alignment = .centerY
         appearanceContainer.addSubview(swatchesStack)
 
         themeButtons.removeAll()
@@ -156,7 +158,7 @@ public final class RadialWheelCustomizeSheet: NSView {
             btn.title = ""
             btn.isBordered = false
             btn.wantsLayer = true
-            btn.layer?.cornerRadius = 14
+            btn.layer?.cornerRadius = 15
             btn.layer?.backgroundColor = (NSColor(hex: theme.hex) ?? .orange).cgColor
             btn.layer?.borderWidth = (theme == WheelLayoutModel.shared.currentTheme) ? 2.5 : 1.0
             btn.layer?.borderColor = (theme == WheelLayoutModel.shared.currentTheme) ? NSColor.white.cgColor : NSColor(white: 1.0, alpha: 0.3).cgColor
@@ -164,9 +166,17 @@ public final class RadialWheelCustomizeSheet: NSView {
             btn.action = #selector(themeSwatchClicked(_:))
             btn.tag = WheelTheme.allCases.firstIndex(of: theme) ?? 0
             swatchesStack.addArrangedSubview(btn)
-            btn.heightAnchor.constraint(equalToConstant: 28).isActive = true
+            btn.widthAnchor.constraint(equalToConstant: 30).isActive = true
+            btn.heightAnchor.constraint(equalToConstant: 30).isActive = true
             themeButtons.append(btn)
         }
+
+        selectedThemeNameLabel.translatesAutoresizingMaskIntoConstraints = false
+        selectedThemeNameLabel.font = NSFont.systemFont(ofSize: 11, weight: .bold)
+        selectedThemeNameLabel.textColor = WheelLayoutModel.shared.currentTheme.accentColor
+        selectedThemeNameLabel.alignment = .center
+        selectedThemeNameLabel.stringValue = "Theme: \(WheelLayoutModel.shared.currentTheme.displayName)"
+        appearanceContainer.addSubview(selectedThemeNameLabel)
 
         let glassLabel = makeSectionLabel("Glass Style & Strength")
         appearanceContainer.addSubview(glassLabel)
@@ -176,6 +186,7 @@ public final class RadialWheelCustomizeSheet: NSView {
         glassStyleSegment.setLabel("Clear", forSegment: 0)
         glassStyleSegment.setLabel("Regular", forSegment: 1)
         glassStyleSegment.setLabel("Tinted", forSegment: 2)
+        glassStyleSegment.segmentDistribution = .fillEqually
         switch WheelLayoutModel.shared.currentGlassStyle {
         case .clear: glassStyleSegment.selectedSegment = 0
         case .regular: glassStyleSegment.selectedSegment = 1
@@ -194,8 +205,9 @@ public final class RadialWheelCustomizeSheet: NSView {
         appearanceContainer.addSubview(glassStrengthSlider)
 
         glassStrengthLabel.translatesAutoresizingMaskIntoConstraints = false
-        glassStrengthLabel.font = NSFont.systemFont(ofSize: 10, weight: .semibold)
+        glassStrengthLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
         glassStrengthLabel.textColor = ThemeManager.shared.textSecondaryColor
+        glassStrengthLabel.alignment = .right
         glassStrengthLabel.stringValue = "Strength: \(Int(WheelLayoutModel.shared.glassStrength * 100))%"
         appearanceContainer.addSubview(glassStrengthLabel)
 
@@ -207,6 +219,7 @@ public final class RadialWheelCustomizeSheet: NSView {
         sizeSegment.setLabel("340 pt", forSegment: 0)
         sizeSegment.setLabel("400 pt", forSegment: 1)
         sizeSegment.setLabel("460 pt", forSegment: 2)
+        sizeSegment.segmentDistribution = .fillEqually
         switch WheelLayoutModel.shared.currentSize {
         case .compact: sizeSegment.selectedSegment = 0
         case .standard: sizeSegment.selectedSegment = 1
@@ -223,6 +236,8 @@ public final class RadialWheelCustomizeSheet: NSView {
         labelModeSegment.segmentCount = 2
         labelModeSegment.setLabel("Always Visible", forSegment: 0)
         labelModeSegment.setLabel("On Hover", forSegment: 1)
+        labelModeSegment.segmentDistribution = .fillEqually
+        labelModeSegment.font = NSFont.systemFont(ofSize: 11, weight: .medium)
         switch WheelLayoutModel.shared.labelMode {
         case .always: labelModeSegment.selectedSegment = 0
         case .onHover: labelModeSegment.selectedSegment = 1
@@ -236,11 +251,13 @@ public final class RadialWheelCustomizeSheet: NSView {
             themeLabel.leadingAnchor.constraint(equalTo: appearanceContainer.leadingAnchor),
 
             swatchesStack.topAnchor.constraint(equalTo: themeLabel.bottomAnchor, constant: 6),
-            swatchesStack.leadingAnchor.constraint(equalTo: appearanceContainer.leadingAnchor),
-            swatchesStack.trailingAnchor.constraint(equalTo: appearanceContainer.trailingAnchor),
-            swatchesStack.heightAnchor.constraint(equalToConstant: 28),
+            swatchesStack.centerXAnchor.constraint(equalTo: appearanceContainer.centerXAnchor),
+            swatchesStack.heightAnchor.constraint(equalToConstant: 30),
 
-            glassLabel.topAnchor.constraint(equalTo: swatchesStack.bottomAnchor, constant: 14),
+            selectedThemeNameLabel.topAnchor.constraint(equalTo: swatchesStack.bottomAnchor, constant: 4),
+            selectedThemeNameLabel.centerXAnchor.constraint(equalTo: appearanceContainer.centerXAnchor),
+
+            glassLabel.topAnchor.constraint(equalTo: selectedThemeNameLabel.bottomAnchor, constant: 10),
             glassLabel.leadingAnchor.constraint(equalTo: appearanceContainer.leadingAnchor),
 
             glassStyleSegment.topAnchor.constraint(equalTo: glassLabel.bottomAnchor, constant: 6),
@@ -253,36 +270,48 @@ public final class RadialWheelCustomizeSheet: NSView {
 
             glassStrengthLabel.centerYAnchor.constraint(equalTo: glassStrengthSlider.centerYAnchor),
             glassStrengthLabel.trailingAnchor.constraint(equalTo: appearanceContainer.trailingAnchor),
-            glassStrengthLabel.widthAnchor.constraint(equalToConstant: 90),
+            glassStrengthLabel.widthAnchor.constraint(equalToConstant: 100),
 
-            sizeLabel.topAnchor.constraint(equalTo: glassStrengthSlider.bottomAnchor, constant: 14),
+            sizeLabel.topAnchor.constraint(equalTo: glassStrengthSlider.bottomAnchor, constant: 10),
             sizeLabel.leadingAnchor.constraint(equalTo: appearanceContainer.leadingAnchor),
 
             sizeSegment.topAnchor.constraint(equalTo: sizeLabel.bottomAnchor, constant: 6),
             sizeSegment.leadingAnchor.constraint(equalTo: appearanceContainer.leadingAnchor),
             sizeSegment.trailingAnchor.constraint(equalTo: appearanceContainer.trailingAnchor),
 
-            labelModeLabel.topAnchor.constraint(equalTo: sizeSegment.bottomAnchor, constant: 14),
+            labelModeLabel.topAnchor.constraint(equalTo: sizeSegment.bottomAnchor, constant: 10),
             labelModeLabel.leadingAnchor.constraint(equalTo: appearanceContainer.leadingAnchor),
 
             labelModeSegment.topAnchor.constraint(equalTo: labelModeLabel.bottomAnchor, constant: 6),
             labelModeSegment.leadingAnchor.constraint(equalTo: appearanceContainer.leadingAnchor),
-            labelModeSegment.trailingAnchor.constraint(equalTo: appearanceContainer.trailingAnchor)
+            labelModeSegment.trailingAnchor.constraint(equalTo: appearanceContainer.trailingAnchor),
+            labelModeSegment.bottomAnchor.constraint(lessThanOrEqualTo: appearanceContainer.bottomAnchor, constant: -10)
         ])
     }
 
     // MARK: - Section 2: Primary Tools
     private func setupPrimaryToolsSection() {
-        categorySegment.translatesAutoresizingMaskIntoConstraints = false
-        let categories: [ActionCategory] = [.image, .video, .audio, .pdf, .document, .archive]
-        categorySegment.segmentCount = categories.count
-        for (i, cat) in categories.enumerated() {
-            categorySegment.setLabel(cat.displayName, forSegment: i)
-        }
-        categorySegment.selectedSegment = 0
-        categorySegment.target = self
-        categorySegment.action = #selector(categorySegmentChanged)
-        primaryToolsContainer.addSubview(categorySegment)
+        categorySegmentRow1.translatesAutoresizingMaskIntoConstraints = false
+        categorySegmentRow1.segmentCount = 3
+        categorySegmentRow1.setLabel("Image", forSegment: 0)
+        categorySegmentRow1.setLabel("Video", forSegment: 1)
+        categorySegmentRow1.setLabel("Audio", forSegment: 2)
+        categorySegmentRow1.segmentDistribution = .fillEqually
+        categorySegmentRow1.selectedSegment = 0
+        categorySegmentRow1.target = self
+        categorySegmentRow1.action = #selector(categoryRow1Changed)
+        primaryToolsContainer.addSubview(categorySegmentRow1)
+
+        categorySegmentRow2.translatesAutoresizingMaskIntoConstraints = false
+        categorySegmentRow2.segmentCount = 3
+        categorySegmentRow2.setLabel("PDF", forSegment: 0)
+        categorySegmentRow2.setLabel("Document", forSegment: 1)
+        categorySegmentRow2.setLabel("Archive", forSegment: 2)
+        categorySegmentRow2.segmentDistribution = .fillEqually
+        categorySegmentRow2.selectedSegment = -1
+        categorySegmentRow2.target = self
+        categorySegmentRow2.action = #selector(categoryRow2Changed)
+        primaryToolsContainer.addSubview(categorySegmentRow2)
 
         toolsStackView.translatesAutoresizingMaskIntoConstraints = false
         toolsStackView.orientation = .vertical
@@ -301,11 +330,17 @@ public final class RadialWheelCustomizeSheet: NSView {
         primaryToolsContainer.addSubview(resetBtn)
 
         NSLayoutConstraint.activate([
-            categorySegment.topAnchor.constraint(equalTo: primaryToolsContainer.topAnchor),
-            categorySegment.leadingAnchor.constraint(equalTo: primaryToolsContainer.leadingAnchor),
-            categorySegment.trailingAnchor.constraint(equalTo: primaryToolsContainer.trailingAnchor),
+            categorySegmentRow1.topAnchor.constraint(equalTo: primaryToolsContainer.topAnchor),
+            categorySegmentRow1.leadingAnchor.constraint(equalTo: primaryToolsContainer.leadingAnchor),
+            categorySegmentRow1.trailingAnchor.constraint(equalTo: primaryToolsContainer.trailingAnchor),
+            categorySegmentRow1.heightAnchor.constraint(equalToConstant: 24),
 
-            toolsStackView.topAnchor.constraint(equalTo: categorySegment.bottomAnchor, constant: 10),
+            categorySegmentRow2.topAnchor.constraint(equalTo: categorySegmentRow1.bottomAnchor, constant: 4),
+            categorySegmentRow2.leadingAnchor.constraint(equalTo: primaryToolsContainer.leadingAnchor),
+            categorySegmentRow2.trailingAnchor.constraint(equalTo: primaryToolsContainer.trailingAnchor),
+            categorySegmentRow2.heightAnchor.constraint(equalToConstant: 24),
+
+            toolsStackView.topAnchor.constraint(equalTo: categorySegmentRow2.bottomAnchor, constant: 10),
             toolsStackView.leadingAnchor.constraint(equalTo: primaryToolsContainer.leadingAnchor),
             toolsStackView.trailingAnchor.constraint(equalTo: primaryToolsContainer.trailingAnchor),
 
@@ -455,12 +490,15 @@ public final class RadialWheelCustomizeSheet: NSView {
         behaviorContainer.isHidden = (sectionSegment.selectedSegment != 2)
     }
 
-    @objc private func themeSwatchClicked(_ sender: NSButton) {
+    @objc public func themeSwatchClicked(_ sender: NSButton) {
         let index = sender.tag
         let themes = WheelTheme.allCases
         guard index >= 0 && index < themes.count else { return }
         let theme = themes[index]
         WheelLayoutModel.shared.currentTheme = theme
+
+        selectedThemeNameLabel.stringValue = "Theme: \(theme.displayName)"
+        selectedThemeNameLabel.textColor = theme.accentColor
 
         for (i, btn) in themeButtons.enumerated() {
             let isSel = (i == index)
@@ -507,11 +545,38 @@ public final class RadialWheelCustomizeSheet: NSView {
         onSettingsChanged?()
     }
 
-    @objc private func categorySegmentChanged() {
-        let categories: [ActionCategory] = [.image, .video, .audio, .pdf, .document, .archive]
-        let idx = categorySegment.selectedSegment
-        if idx >= 0 && idx < categories.count {
-            selectedCategory = categories[idx]
+    @objc private func categoryRow1Changed() {
+        let idx = categorySegmentRow1.selectedSegment
+        let row1Categories: [ActionCategory] = [.image, .video, .audio]
+        if idx >= 0 && idx < row1Categories.count {
+            categorySegmentRow2.selectedSegment = -1
+            selectedCategory = row1Categories[idx]
+            reloadToolsList()
+        }
+    }
+
+    @objc private func categoryRow2Changed() {
+        let idx = categorySegmentRow2.selectedSegment
+        let row2Categories: [ActionCategory] = [.pdf, .document, .archive]
+        if idx >= 0 && idx < row2Categories.count {
+            categorySegmentRow1.selectedSegment = -1
+            selectedCategory = row2Categories[idx]
+            reloadToolsList()
+        }
+    }
+
+    public func selectCategory(_ category: ActionCategory) {
+        let row1: [ActionCategory] = [.image, .video, .audio]
+        let row2: [ActionCategory] = [.pdf, .document, .archive]
+        if let idx = row1.firstIndex(of: category) {
+            categorySegmentRow1.selectedSegment = idx
+            categorySegmentRow2.selectedSegment = -1
+            selectedCategory = category
+            reloadToolsList()
+        } else if let idx = row2.firstIndex(of: category) {
+            categorySegmentRow2.selectedSegment = idx
+            categorySegmentRow1.selectedSegment = -1
+            selectedCategory = category
             reloadToolsList()
         }
     }
@@ -572,6 +637,12 @@ public final class RadialWheelCustomizeSheet: NSView {
     }
 
     // MARK: - Testing Helpers
+    public var testThemeButtons: [NSButton] { themeButtons }
+    public var testSelectedThemeName: String { selectedThemeNameLabel.stringValue }
+    public var testCategoryRow1Labels: [String] { (0..<categorySegmentRow1.segmentCount).compactMap { categorySegmentRow1.label(forSegment: $0) } }
+    public var testCategoryRow2Labels: [String] { (0..<categorySegmentRow2.segmentCount).compactMap { categorySegmentRow2.label(forSegment: $0) } }
+    public var testGlassStrengthText: String { glassStrengthLabel.stringValue }
+    public var testLabelModeLabels: [String] { (0..<labelModeSegment.segmentCount).compactMap { labelModeSegment.label(forSegment: $0) } }
     public var pinnedToolRows: [PinnedToolRowView] {
         return toolsStackView.arrangedSubviews.compactMap { $0 as? PinnedToolRowView }
     }

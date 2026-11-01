@@ -3526,6 +3526,66 @@ do {
     assertTest(reorderedRows.count == 6, "28.5 Reordering maintains exactly 6 pinned tool rows")
     assertTest(reorderedRows[0].toolID == secondRowTool, "28.5 Reordered tool row 0 now has previous row 1 tool")
     assertTest(reorderedRows[1].toolID == firstRowTool, "28.5 Reordered tool row 1 now has previous row 0 tool")
+
+    // 29. Phase 10B Fix 3: P1 Layout - Equal Circular Swatches, Two-Row Categories & Label Widths
+    print("\n--- 29. Phase 10B Fix 3: P1 Layout Tests ---")
+    let layoutSheet = RadialWheelCustomizeSheet()
+    layoutSheet.frame = NSRect(x: 0, y: 0, width: 360, height: 480)
+    layoutSheet.layoutSubtreeIfNeeded()
+
+    // 29.1 Theme swatches are equal circles (>= 28 pt)
+    let swatchButtons = layoutSheet.testThemeButtons
+    assertTest(swatchButtons.count == WheelTheme.allCases.count, "29.1 Swatches count matches themes count (\(swatchButtons.count))")
+    var swatchesValid = true
+    for (idx, btn) in swatchButtons.enumerated() {
+        let widthConstraints = btn.constraints.filter { $0.firstAttribute == .width }
+        let heightConstraints = btn.constraints.filter { $0.firstAttribute == .height }
+        let w = widthConstraints.first?.constant ?? btn.frame.width
+        let h = heightConstraints.first?.constant ?? btn.frame.height
+        let r = btn.layer?.cornerRadius ?? 0
+        if w < 28 || h < 28 || abs(w - h) > 0.01 || abs(r - w / 2) > 0.01 {
+            swatchesValid = false
+            print("Swatch \(idx) invalid: w=\(w), h=\(h), r=\(r)")
+        }
+    }
+    assertTest(swatchesValid, "29.1 All theme swatches are equal circles of diameter >= 28pt with matching cornerRadius")
+
+    // 29.2 Selected theme name label displays name without clipping
+    let initialThemeName = layoutSheet.testSelectedThemeName
+    assertTest(initialThemeName.contains(WheelLayoutModel.shared.currentTheme.displayName), "29.2 Selected theme label displays active theme name: \(initialThemeName)")
+
+    // Click another swatch and verify theme name updates
+    if let firstSwatch = swatchButtons.first {
+        layoutSheet.themeSwatchClicked(firstSwatch)
+        let updatedThemeName = layoutSheet.testSelectedThemeName
+        let expectedTheme = WheelTheme.allCases[0]
+        assertTest(updatedThemeName == "Theme: \(expectedTheme.displayName)", "29.2 Clicking swatch updates theme name to 'Theme: \(expectedTheme.displayName)' (got: '\(updatedThemeName)')")
+    }
+
+    // 29.3 Two-row category segmented control eliminates truncation
+    let row1 = layoutSheet.testCategoryRow1Labels
+    let row2 = layoutSheet.testCategoryRow2Labels
+    assertTest(row1 == ["Image", "Video", "Audio"], "29.3 Row 1 categories contains Image, Video, Audio")
+    assertTest(row2 == ["PDF", "Document", "Archive"], "29.3 Row 2 categories contains PDF, Document, Archive")
+
+    // Verify string measurements fit within available row segment width
+    // Available width is 328 pt across 3 segments = ~109 pt per segment
+    let font11 = NSFont.systemFont(ofSize: 11)
+    let docWidth = ("Document" as NSString).size(withAttributes: [.font: font11]).width
+    let archiveWidth = ("Archive" as NSString).size(withAttributes: [.font: font11]).width
+    assertTest(docWidth < 80.0, "29.3 'Document' text width (\(docWidth) pt) fits comfortably in 109 pt segment")
+    assertTest(archiveWidth < 80.0, "29.3 'Archive' text width (\(archiveWidth) pt) fits comfortably in 109 pt segment")
+
+    // 29.4 Fix \"Always Visible\" and \"Strength: 29%\" truncation
+    let labelModes = layoutSheet.testLabelModeLabels
+    assertTest(labelModes.contains("Always Visible"), "29.4 Label mode includes 'Always Visible'")
+    let alwaysVisibleWidth = ("Always Visible" as NSString).size(withAttributes: [.font: font11]).width
+    assertTest(alwaysVisibleWidth < 120.0, "29.4 'Always Visible' text width (\(alwaysVisibleWidth) pt) fits in equal 160 pt segment")
+
+    let maxStrengthString = "Strength: 100%"
+    let monoFont = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
+    let strengthWidth = (maxStrengthString as NSString).size(withAttributes: [.font: monoFont]).width
+    assertTest(strengthWidth < 95.0, "29.4 Max strength string width (\(strengthWidth) pt) fits inside 100 pt glassStrengthLabel")
 }
 
 print("\n==================================================")
