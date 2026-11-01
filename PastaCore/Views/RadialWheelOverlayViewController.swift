@@ -15,6 +15,15 @@ public final class RadialWheelOverlayViewController: NSViewController {
     private var parameterPanelView: ParameterPanelView?
     private var moreView: RadialWheelMoreView?
     private var customizeSheet: RadialWheelCustomizeSheet?
+    private var savedNodeFrames: [ObjectIdentifier: NSRect] = [:]
+    public private(set) var wheelCloseButton: NSButton?
+
+    public var activeNodeViews: [RadialOptionNodeView] {
+        return nodeViews
+    }
+    public var currentCustomizeSheet: RadialWheelCustomizeSheet? {
+        return customizeSheet
+    }
 
     // Floating hint pill
     private let hintPillContainer = NSVisualEffectView()
@@ -183,6 +192,7 @@ public final class RadialWheelOverlayViewController: NSViewController {
         closeBtn.setAccessibilityLabel("Close wheel")
         closeBtn.setAccessibilityHelp("Closes the radial wheel overlay")
         view.addSubview(closeBtn)
+        self.wheelCloseButton = closeBtn
 
         DragMonitor.shared.onEscIntercepted = { [weak self] in
             return self?.handleEscKey() ?? false
@@ -319,7 +329,14 @@ public final class RadialWheelOverlayViewController: NSViewController {
                 }
             }
 
-            if !isReduceMotion {
+            if customizeSheet != nil {
+                savedNodeFrames[ObjectIdentifier(nodeView)] = nodeView.frame
+                nodeView.frame = .zero
+                nodeView.isHidden = true
+                nodeView.alphaValue = 0.0
+                view.addSubview(nodeView)
+                nodeViews.append(nodeView)
+            } else if !isReduceMotion {
                 // Staggered blooming animation with mass 1.0, stiffness 420.0, damping 28.0 physics
                 nodeView.layer?.transform = CATransform3DMakeScale(0.4, 0.4, 1.0)
                 nodeView.alphaValue = 0.0
@@ -612,10 +629,28 @@ public final class RadialWheelOverlayViewController: NSViewController {
         }
     }
 
-    private func showCustomizeSheet() {
+    public func showCustomizeSheet() {
         dismissCustomizeSheet()
         dismissMoreView()
         dismissParameterPanel(animated: false)
+
+        let isReduceMotion = PreferencesManager.shared.reduceMotionEnabled
+
+        savedNodeFrames.removeAll()
+        for node in nodeViews {
+            savedNodeFrames[ObjectIdentifier(node)] = node.frame
+            node.frame = .zero
+            node.isHidden = true
+            node.alphaValue = 0.0
+        }
+        backplateView.isHidden = true
+        backplateView.alphaValue = 0.0
+        centerDisc.isHidden = true
+        centerDisc.alphaValue = 0.0
+        hintPillContainer.isHidden = true
+        hintPillContainer.alphaValue = 0.0
+        wheelCloseButton?.isHidden = true
+        wheelCloseButton?.alphaValue = 0.0
 
         let sheet = RadialWheelCustomizeSheet()
         let sheetW: CGFloat = 360.0
@@ -634,10 +669,10 @@ public final class RadialWheelOverlayViewController: NSViewController {
             self?.dismissCustomizeSheet()
         }
 
-        view.addSubview(sheet)
+        view.addSubview(sheet, positioned: .above, relativeTo: nil)
         self.customizeSheet = sheet
 
-        if !PreferencesManager.shared.reduceMotionEnabled {
+        if !isReduceMotion {
             sheet.layer?.transform = CATransform3DMakeScale(0.92, 0.92, 1.0)
             sheet.alphaValue = 0.0
             NSAnimationContext.runAnimationGroup { ctx in
@@ -648,10 +683,32 @@ public final class RadialWheelOverlayViewController: NSViewController {
         }
     }
 
-    public func dismissCustomizeSheet() {
+    public func dismissCustomizeSheet(animated: Bool = true) {
         guard let sheet = customizeSheet else { return }
         self.customizeSheet = nil
-        if !PreferencesManager.shared.reduceMotionEnabled {
+        let isReduceMotion = PreferencesManager.shared.reduceMotionEnabled
+
+        for node in self.nodeViews {
+            if let saved = self.savedNodeFrames[ObjectIdentifier(node)], saved.width > 0 && saved.height > 0 {
+                node.frame = saved
+            }
+            node.isHidden = false
+            node.alphaValue = 1.0
+        }
+        self.savedNodeFrames.removeAll()
+        if self.nodeViews.contains(where: { $0.frame.width <= 0 || $0.frame.height <= 0 }) {
+            self.applyLayoutSettings()
+        }
+        self.backplateView.isHidden = false
+        self.backplateView.alphaValue = 1.0
+        self.centerDisc.isHidden = false
+        self.centerDisc.alphaValue = 1.0
+        self.hintPillContainer.isHidden = false
+        self.hintPillContainer.alphaValue = 1.0
+        self.wheelCloseButton?.isHidden = false
+        self.wheelCloseButton?.alphaValue = 1.0
+
+        if !isReduceMotion && animated {
             NSAnimationContext.runAnimationGroup({ ctx in
                 ctx.duration = 0.16
                 sheet.animator().alphaValue = 0.0
@@ -664,7 +721,7 @@ public final class RadialWheelOverlayViewController: NSViewController {
         }
     }
 
-    private func applyLayoutSettings() {
+    public func applyLayoutSettings() {
         let size = WheelLayoutModel.shared.currentSize
         let outerD = size.backplateDiameter
         let hubD = size.hubDiameter
@@ -687,6 +744,23 @@ public final class RadialWheelOverlayViewController: NSViewController {
         )
 
         configure(files: targetFiles, isOptionHeld: isAdvanced)
+
+        if let sheet = customizeSheet {
+            view.addSubview(sheet, positioned: .above, relativeTo: nil)
+            for node in nodeViews {
+                node.frame = .zero
+                node.isHidden = true
+                node.alphaValue = 0.0
+            }
+            backplateView.isHidden = true
+            backplateView.alphaValue = 0.0
+            centerDisc.isHidden = true
+            centerDisc.alphaValue = 0.0
+            hintPillContainer.isHidden = true
+            hintPillContainer.alphaValue = 0.0
+            wheelCloseButton?.isHidden = true
+            wheelCloseButton?.alphaValue = 0.0
+        }
     }
 
     private func performConversion(action: ConversionAction, params: ParameterValues = [:], formModel: ParameterFormModel? = nil) {

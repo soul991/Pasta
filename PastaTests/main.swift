@@ -3409,6 +3409,49 @@ do {
     dropWindowUnsupported.viewDidLoad()
     dropWindowUnsupported.handleFilesDropped([URL(fileURLWithPath: "test.xyz")])
     assertTest(dropWindowUnsupported.files.count == 1, "26.7 DropWindowViewController receives unsupported file")
+
+    // =======================================================
+    // 27. Phase 10B Fix 1: P0 Z-Order & Customize Sheet Geometry Tests
+    // =======================================================
+    print("\n--- 27. Phase 10B Fix 1: P0 Z-Order & Geometry Tests ---")
+
+    let dummySampleFile = URL(fileURLWithPath: "sample.png")
+    let zOrderVC = RadialWheelOverlayViewController()
+    zOrderVC.loadView()
+    zOrderVC.viewDidLoad()
+    zOrderVC.configure(files: [dummySampleFile], isOptionHeld: false)
+
+    assertTest(!zOrderVC.activeNodeViews.isEmpty, "27.1 Overlay VC has active node views before customize sheet opens")
+    assertTest(zOrderVC.activeNodeViews.allSatisfy { !$0.isHidden }, "27.1 All nodes initially visible")
+    assertTest(zOrderVC.wheelCloseButton != nil && zOrderVC.wheelCloseButton?.isHidden == false, "27.1 Wheel close button initially visible")
+
+    // Open Customize sheet
+    zOrderVC.showCustomizeSheet()
+    assertTest(zOrderVC.currentCustomizeSheet != nil, "27.1 Customize sheet is open")
+    if let sheet = zOrderVC.currentCustomizeSheet {
+        // Geometry test: No node frame intersects sheet frame
+        let intersectsAny = zOrderVC.activeNodeViews.contains { node in
+            node.frame.intersects(sheet.frame)
+        }
+        assertTest(!intersectsAny, "27.1 Headless geometry: no node frame intersects the sheet's content frame while the sheet is open")
+        assertTest(zOrderVC.activeNodeViews.allSatisfy { $0.isHidden && $0.alphaValue == 0.0 }, "27.1 All nodes are hidden and faded out while sheet is open")
+        assertTest(zOrderVC.wheelCloseButton?.isHidden == true && zOrderVC.wheelCloseButton?.alphaValue == 0.0, "27.1 Wheel close button is hidden while customize sheet is open")
+    } else {
+        assertTest(false, "27.1 Customize sheet failed to open")
+    }
+
+    // Verify bloom animation does not unhide nodes while sheet is open
+    zOrderVC.applyLayoutSettings()
+    RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.15))
+    assertTest(zOrderVC.activeNodeViews.allSatisfy { $0.isHidden && $0.alphaValue == 0.0 }, "27.2 Nodes remain hidden after applyLayoutSettings while sheet is open")
+    assertTest(zOrderVC.wheelCloseButton?.isHidden == true, "27.2 Wheel close button remains hidden while sheet is open")
+
+    // Dismiss Customize sheet restores wheel
+    zOrderVC.dismissCustomizeSheet()
+    assertTest(zOrderVC.currentCustomizeSheet == nil, "27.1 Customize sheet dismissed")
+    assertTest(zOrderVC.activeNodeViews.allSatisfy { !$0.isHidden && $0.alphaValue == 1.0 }, "27.1 Closing the sheet restores the wheel nodes")
+    assertTest(zOrderVC.activeNodeViews.allSatisfy { $0.frame.width > 0 && $0.frame.height > 0 }, "27.1 All restored nodes have positive dimensions")
+    assertTest(zOrderVC.wheelCloseButton?.isHidden == false && zOrderVC.wheelCloseButton?.alphaValue == 1.0, "27.1 Closing sheet restores wheel close button")
 }
 
 print("\n==================================================")

@@ -192,7 +192,7 @@ public final class WheelLayoutModel {
     // MARK: - Storage Accessors
 
     private func storageString(forKey key: String) -> String? {
-        if let s = testStorage?[key] as? String { return s }
+        if testStorage != nil { return testStorage?[key] as? String }
         return UserDefaults.standard.string(forKey: key)
     }
 
@@ -205,7 +205,7 @@ public final class WheelLayoutModel {
     }
 
     private func storageStringArray(forKey key: String) -> [String]? {
-        if let arr = testStorage?[key] as? [String] { return arr }
+        if testStorage != nil { return testStorage?[key] as? [String] }
         return UserDefaults.standard.stringArray(forKey: key)
     }
 
@@ -218,7 +218,7 @@ public final class WheelLayoutModel {
     }
 
     private func storageDouble(forKey key: String, default defaultVal: Double) -> Double {
-        if let d = testStorage?[key] as? Double { return d }
+        if testStorage != nil { return (testStorage?[key] as? Double) ?? defaultVal }
         let val = UserDefaults.standard.double(forKey: key)
         return val <= 0 ? defaultVal : val
     }
