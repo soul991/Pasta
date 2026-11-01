@@ -200,6 +200,15 @@
 | BatchProgressRowView ETA estimation during multi-file conversion | Phase 10B Step 6 | Batch Progress | **DONE** | `26.4 BatchProgressRow completed count and summary label` |
 | First-run Accessibility onboarding view & permission detection polling | Phase 10B Step 6 | Onboarding | **DONE** | `26.5–26.6 AccessibilityOnboardingView UI and permission detection` |
 | Unsupported file and empty states in Wheel and Drop Window | Phase 10B Step 6 | Empty States | **DONE** | `26.7 Center disc and DropWindow unsupported file states` |
+| Customize sheet z-order: hide nodes and backplate when sheet opens, restore on close; headless geometry test | Phase 10B Fix 1 (P0) | Customize Z-Order | **DONE** | `27.1–27.4 Zero node intersection with sheet` |
+| Tools tab human display names & glyphs, 6 pinned list with keyboard up/down, Remove control, Add tool picker | Phase 10B Fix 2 (P1) | Tools Customization | **DONE** | `28.1–28.4 Action human names, icons, pinned slots, add picker` |
+| Two-row category tabs, 32pt circular theme swatches with label, un-truncated labels with longest strings test | Phase 10B Fix 3 (P1) | Sheet Layout | **DONE** | `29.1–29.4 Category tabs, swatches, and string widths` |
+| Live miniature wheel preview in Appearance tab updating for color, glass style, strength, and size | Phase 10B Fix 4 (P1) | Live Preview | **DONE** | `30.1–30.6 MiniatureWheelPreviewView live rendering` |
+| Node design: transparent glass labels with subtle text shadow, 11pt font, distinct format glyphs, accent active fill | Phase 10B Fix 5 (P1) | Node Visual Design | **DONE** | `31.1–31.3 Distinct glyphs, glass labels, dark ink active` |
+| Glass color bleed removal (neutral dark base), Sunset default hex (#F2611F), accent-tinted controls, 4.5:1 text contrast | Phase 10B Fix 6 (P2) | Color & Contrast | **DONE** | `32.1–32.4 Backplate base, theme accent tint, WCAG 4.5:1` |
+| Results row: indeterminate & determinate progress bar, live ETA, Cancel wiring to cancel(jobId:), middle truncation | Phase 10B Fix 7 (P2) | Results & Progress | **DONE** | `33.1–33.6 Progress bar, ETA, cancel, middle truncation` |
+| Hint pill: shortened text, dynamic placement above wheel when screen bottom is cramped | Phase 10B Fix 8 (P3) | Hint Pill Placement | **DONE** | `34.1–34.4 Shortened text and dynamic above-wheel placement` |
+
 
 
 

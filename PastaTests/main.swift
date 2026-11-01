@@ -1891,7 +1891,7 @@ do {
     let wheelVC = RadialWheelOverlayViewController()
     wheelVC.loadView()
     wheelVC.viewDidLoad()
-    assertTest(wheelVC.view != nil, "16.8 RadialWheelOverlayViewController view loaded")
+    assertTest(wheelVC.isViewLoaded, "16.8 RadialWheelOverlayViewController view loaded")
     wheelVC.configure(files: [dummyFile], isOptionHeld: false)
     var closeRequested = false
     wheelVC.onCloseRequested = { closeRequested = true }
@@ -2183,8 +2183,10 @@ do {
     // 19.5 BatchProgressRowView cancellation
     var wasCancelled = false
     batchView.onCancel = { wasCancelled = true }
+    batchView.cancelButton.performClick(nil)
     batchView.markCancelled()
     RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+    assertTest(wasCancelled, "19.5 Cancel button triggers onCancel closure")
     assertTest(batchView.isCancelled, "19.5 BatchProgressRowView marked as cancelled")
     assertTest(batchView.summaryLabel.stringValue.contains("Cancelled"), "19.5 Summary label indicates cancellation")
 
@@ -2192,7 +2194,7 @@ do {
     let dropVC = DropWindowViewController()
     dropVC.loadView()
     dropVC.viewDidLoad()
-    assertTest(dropVC.view != nil, "19.6 DropWindowViewController view loaded")
+    assertTest(dropVC.isViewLoaded, "19.6 DropWindowViewController view loaded")
 
     let testFile1 = URL(fileURLWithPath: "test1.png")
     let testFile2 = URL(fileURLWithPath: "test2.png")
