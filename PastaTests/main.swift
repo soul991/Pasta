@@ -3726,6 +3726,91 @@ do {
     let backplate = RadialWheelBackplateView()
     backplate.frame = NSRect(x: 0, y: 0, width: 400, height: 400)
     assertTest(backplate.frame.width == 400.0, "32.4 Backplate has 400 pt diameter frame with neutral dark glass backing")
+
+    // --- 33. Phase 10B Fix 7: P2 Results Row Tests ---
+    print("\n--- 33. Phase 10B Fix 7: P2 Results Row Tests ---")
+    let resultsAction = ConversionAction(
+        id: "video.to.mp4",
+        displayName: "MP4",
+        outputExtension: "mp4",
+        category: .video
+    )
+    let longNameURL = URL(fileURLWithPath: "/path/to/a_very_long_file_name_that_exceeds_normal_bounds_and_needs_truncation.mov")
+    let testRow = JobStatusRowView(inputURL: longNameURL, action: resultsAction)
+
+    // 33.1 Middle truncation for filename
+    assertTest(testRow.titleLabel.lineBreakMode == .byTruncatingMiddle, "33.1 JobStatusRowView titleLabel uses .byTruncatingMiddle")
+
+    // 33.2 Real progress bar and live ETA
+    testRow.update(state: .running(etaSeconds: 8.0, progress: 0.42))
+    RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
+    assertTest(testRow.progressBar.isHidden == false, "33.2 Progress bar is visible while running")
+    assertTest(testRow.progressBar.isIndeterminate == false, "33.2 Progress bar is determinate when progress is known")
+    assertTest(abs(testRow.progressBar.doubleValue - 42.0) < 0.1, "33.2 Progress bar doubleValue reflects real progress (got: \(testRow.progressBar.doubleValue))")
+    assertTest(testRow.currentStatusText.contains("42%"), "33.2 Status text displays percentage (got: \(testRow.currentStatusText))")
+    assertTest(testRow.currentStatusText.contains("~8s left"), "33.2 Status text displays live ETA (got: \(testRow.currentStatusText))")
+    assertTest(testRow.actionButtonTitle == "Cancel", "33.2 Action button displays 'Cancel' while running")
+
+    // 33.3 Indeterminate progress bar when progress is unknown
+    testRow.update(state: .running(etaSeconds: nil, progress: nil))
+    RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
+    assertTest(testRow.progressBar.isHidden == false, "33.3 Progress bar is visible when progress is unknown")
+    assertTest(testRow.progressBar.isIndeterminate == true, "33.3 Progress bar is indeterminate when progress is unknown")
+    assertTest(testRow.currentStatusText == "Converting...", "33.3 Status text displays 'Converting...' when progress and ETA unknown")
+
+    // 33.4 Cancel button wired to cancel(jobId:)
+    let cancelJobID = UUID()
+    testRow.jobID = cancelJobID
+    var cancelActionInvoked = false
+    testRow.onCancel = { cancelActionInvoked = true }
+    testRow.actionButton.performClick(nil)
+    RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
+    assertTest(cancelActionInvoked == true, "33.4 Clicking Cancel button triggers onCancel handler")
+    assertTest(testRow.currentStatusText.contains("cancelled"), "33.4 State transitions to cancelled failure on user cancel")
+    assertTest(testRow.progressBar.isHidden == true, "33.4 Progress bar is hidden on cancel")
+
+    // 33.5 Progress bar hidden on completion
+    let compRow = JobStatusRowView(inputURL: URL(fileURLWithPath: "done.png"), action: resultsAction)
+    compRow.update(state: .running(progress: 0.9))
+    RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
+    assertTest(compRow.progressBar.isHidden == false, "33.5 Progress bar visible in running state")
+    compRow.update(state: .completed(URL(fileURLWithPath: "/tmp/done.mp4")))
+    RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
+    assertTest(compRow.progressBar.isHidden == true, "33.5 Progress bar hidden upon completion")
+    assertTest(compRow.actionButtonTitle == "Reveal", "33.5 Action button displays 'Reveal' upon completion")
+
+    // 33.6 Wheel overlay compact progress row: progress bar, ETA, Cancel wiring, middle truncation
+    let wheelOverlay = RadialWheelOverlayViewController()
+    wheelOverlay.loadView()
+    wheelOverlay.viewDidLoad()
+    assertTest(wheelOverlay.compactProgressLabel.lineBreakMode == .byTruncatingMiddle, "33.6 Wheel overlay compact progress label uses .byTruncatingMiddle")
+
+    // Known progress and ETA with filename preservation
+    wheelOverlay.currentConvertingFileName = "a_very_long_file_name_that_should_not_be_wiped_out.mov"
+    wheelOverlay.updateConvertingProgress(progress: 0.65, eta: 4.0)
+    RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
+    assertTest(wheelOverlay.compactProgressBar.isHidden == false, "33.6 Compact progress bar is visible")
+    assertTest(wheelOverlay.compactProgressBar.isIndeterminate == false, "33.6 Compact progress bar is determinate when progress known")
+    assertTest(abs(wheelOverlay.compactProgressBar.doubleValue - 65.0) < 0.1, "33.6 Compact progress bar doubleValue matches progress")
+    assertTest(wheelOverlay.compactProgressLabel.stringValue.contains("a_very_long_file_name_that_should_not_be_wiped_out.mov"), "33.6 Filename is preserved during progress update (not wiped out)")
+    assertTest(wheelOverlay.compactProgressLabel.stringValue.contains("65%"), "33.6 Compact progress label displays percentage")
+    assertTest(wheelOverlay.compactProgressLabel.stringValue.contains("~4s left"), "33.6 Compact progress label displays ETA (got: \(wheelOverlay.compactProgressLabel.stringValue))")
+
+    // Indeterminate progress
+    wheelOverlay.updateConvertingProgress(progress: nil, eta: nil)
+    RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
+    assertTest(wheelOverlay.compactProgressBar.isIndeterminate == true, "33.6 Compact progress bar is indeterminate when progress unknown")
+
+    // Cancel button in wheel overlay
+    let wheelJobID = UUID()
+    wheelOverlay.currentConversionJobID = wheelJobID
+    wheelOverlay.compactProgressButton.title = "Cancel"
+    wheelOverlay.compactProgressButton.performClick(nil)
+    RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
+    assertTest(wheelOverlay.currentConversionJobID == nil, "33.6 Wheel overlay cancel clears currentConversionJobID")
+    assertTest(wheelOverlay.compactProgressBar.isHidden == true, "33.6 Compact progress bar hidden after cancel")
+    assertTest(wheelOverlay.compactProgressLabel.stringValue == "Conversion cancelled", "33.6 Compact progress label shows 'Conversion cancelled'")
+    assertTest(wheelOverlay.compactProgressButton.title == "Dismiss", "33.6 Compact progress button changes to 'Dismiss' after cancel")
 }
 
 print("\n==================================================")

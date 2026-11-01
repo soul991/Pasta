@@ -436,6 +436,13 @@ public final class DropWindowViewController: NSViewController {
             singleJobLock.unlock()
 
             let row = JobStatusRowView(inputURL: file, action: action)
+            row.jobID = jobID
+            row.onCancel = { [weak self] in
+                JobRunner.shared.cancel(jobId: jobID)
+                self?.singleJobLock.lock()
+                self?.activeSingleJobIDs.remove(jobID)
+                self?.singleJobLock.unlock()
+            }
             jobsStack.insertArrangedSubview(row, at: 0)
             row.update(state: .running)
 

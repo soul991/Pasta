@@ -4,17 +4,18 @@ import AppKit
 public final class JobStatusRowView: NSView {
     public enum State: Equatable {
         case queued
-        case running(etaSeconds: Double?)
+        case running(etaSeconds: Double? = nil, progress: Double? = nil)
         case completed(URL)
         case failed(String)
 
         public static var running: State {
-            return .running(etaSeconds: nil)
+            return .running(etaSeconds: nil, progress: nil)
         }
     }
 
     public let inputURL: URL
     public let action: ConversionAction
+    public var jobID: UUID?
     public var onDismiss: (() -> Void)?
     public var onCancel: (() -> Void)?
 
@@ -24,8 +25,9 @@ public final class JobStatusRowView: NSView {
     public var currentStatusText: String { statusLabel.stringValue }
     public var actionButtonTitle: String { actionButton.title }
 
-    private let titleLabel = NSTextField(labelWithString: "")
+    public let titleLabel = NSTextField(labelWithString: "")
     public let statusLabel = NSTextField(labelWithString: "")
+    public let progressBar = NSProgressIndicator()
     private let spinner = NSProgressIndicator()
     private let statusIcon = NSImageView()
     public let actionButton = NSButton(title: "Reveal", target: nil, action: nil)
@@ -60,6 +62,14 @@ public final class JobStatusRowView: NSView {
         statusLabel.lineBreakMode = .byWordWrapping
         statusLabel.maximumNumberOfLines = 2
 
+        progressBar.translatesAutoresizingMaskIntoConstraints = false
+        progressBar.style = .bar
+        progressBar.controlSize = .small
+        progressBar.minValue = 0.0
+        progressBar.maxValue = 100.0
+        progressBar.isIndeterminate = true
+        progressBar.isHidden = true
+
         spinner.translatesAutoresizingMaskIntoConstraints = false
         spinner.style = .spinning
         spinner.controlSize = .small
@@ -74,14 +84,19 @@ public final class JobStatusRowView: NSView {
         actionButton.action = #selector(actionButtonClicked)
         actionButton.isHidden = true
 
-        addSubview(titleLabel)
-        addSubview(statusLabel)
+        let middleStack = NSStackView(views: [titleLabel, statusLabel, progressBar])
+        middleStack.translatesAutoresizingMaskIntoConstraints = false
+        middleStack.orientation = .vertical
+        middleStack.alignment = .leading
+        middleStack.spacing = 3
+
         addSubview(spinner)
         addSubview(statusIcon)
+        addSubview(middleStack)
         addSubview(actionButton)
 
         NSLayoutConstraint.activate([
-            heightAnchor.constraint(greaterThanOrEqualToConstant: 54),
+            heightAnchor.constraint(greaterThanOrEqualToConstant: 56),
 
             spinner.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
             spinner.topAnchor.constraint(equalTo: topAnchor, constant: 14),
@@ -93,14 +108,12 @@ public final class JobStatusRowView: NSView {
             statusIcon.widthAnchor.constraint(equalToConstant: 16),
             statusIcon.heightAnchor.constraint(equalToConstant: 16),
 
-            titleLabel.leadingAnchor.constraint(equalTo: spinner.trailingAnchor, constant: 8),
-            titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: actionButton.leadingAnchor, constant: -8),
-            titleLabel.topAnchor.constraint(equalTo: topAnchor, constant: 10),
+            middleStack.leadingAnchor.constraint(equalTo: spinner.trailingAnchor, constant: 10),
+            middleStack.trailingAnchor.constraint(equalTo: actionButton.leadingAnchor, constant: -10),
+            middleStack.topAnchor.constraint(equalTo: topAnchor, constant: 10),
+            middleStack.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor, constant: -10),
 
-            statusLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
-            statusLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
-            statusLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 2),
-            statusLabel.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -10),
+            progressBar.widthAnchor.constraint(equalTo: middleStack.widthAnchor),
 
             actionButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
             actionButton.centerYAnchor.constraint(equalTo: centerYAnchor)
@@ -110,13 +123,19 @@ public final class JobStatusRowView: NSView {
     private var currentOutputURL: URL?
 
     public func update(state: State) {
-        self.currentState = state
+        currentState = state
+
         let apply = { [weak self] in
             guard let self = self else { return }
+
             switch state {
             case .queued:
                 self.spinner.stopAnimation(nil)
                 self.spinner.isHidden = true
+                self.progressBar.stopAnimation(nil)
+                self.progressBar.isIndeterminate = false
+                self.progressBar.doubleValue = 0.0
+                self.progressBar.isHidden = true
                 self.statusIcon.isHidden = false
                 self.statusIcon.image = NSImage(systemSymbolName: "clock", accessibilityDescription: "Queued")
                 self.statusIcon.contentTintColor = .secondaryLabelColor
@@ -125,14 +144,29 @@ public final class JobStatusRowView: NSView {
                 self.actionButton.title = "Cancel"
                 self.actionButton.isHidden = false
 
-            case .running(let eta):
+            case .running(let eta, let progress):
                 self.spinner.isHidden = false
                 self.spinner.startAnimation(nil)
                 self.statusIcon.isHidden = true
-                if let eta = eta, eta > 0 {
-                    self.statusLabel.stringValue = String(format: "Converting... ~%.0fs left", eta)
+                self.progressBar.isHidden = false
+                if let p = progress {
+                    self.progressBar.isIndeterminate = false
+                    self.progressBar.minValue = 0.0
+                    self.progressBar.maxValue = 100.0
+                    self.progressBar.doubleValue = max(0.0, min(100.0, p * 100.0))
+                    if let eta = eta, eta > 0 {
+                        self.statusLabel.stringValue = String(format: "Converting (%d%%)... ~%.0fs left", Int(p * 100.0), eta)
+                    } else {
+                        self.statusLabel.stringValue = String(format: "Converting (%d%%)...", Int(p * 100.0))
+                    }
                 } else {
-                    self.statusLabel.stringValue = "Converting..."
+                    self.progressBar.isIndeterminate = true
+                    self.progressBar.startAnimation(nil)
+                    if let eta = eta, eta > 0 {
+                        self.statusLabel.stringValue = String(format: "Converting... ~%.0fs left", eta)
+                    } else {
+                        self.statusLabel.stringValue = "Converting..."
+                    }
                 }
                 self.statusLabel.textColor = .secondaryLabelColor
                 self.actionButton.title = "Cancel"
@@ -142,6 +176,8 @@ public final class JobStatusRowView: NSView {
                 self.currentOutputURL = url
                 self.spinner.stopAnimation(nil)
                 self.spinner.isHidden = true
+                self.progressBar.stopAnimation(nil)
+                self.progressBar.isHidden = true
                 self.statusIcon.isHidden = false
                 self.statusIcon.image = NSImage(systemSymbolName: "checkmark.circle.fill", accessibilityDescription: nil)
                 self.statusIcon.contentTintColor = .systemGreen
@@ -173,6 +209,8 @@ public final class JobStatusRowView: NSView {
                 self.lastError = error
                 self.spinner.stopAnimation(nil)
                 self.spinner.isHidden = true
+                self.progressBar.stopAnimation(nil)
+                self.progressBar.isHidden = true
                 self.statusIcon.isHidden = false
                 self.statusIcon.image = NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: nil)
                 self.statusIcon.contentTintColor = .systemRed
@@ -190,9 +228,16 @@ public final class JobStatusRowView: NSView {
         }
     }
 
+    public func updateProgress(_ progress: Double?, etaSeconds: Double? = nil) {
+        update(state: .running(etaSeconds: etaSeconds, progress: progress))
+    }
+
     @objc private func actionButtonClicked() {
         switch currentState {
         case .running:
+            if let jid = jobID {
+                JobRunner.shared.cancel(jobId: jid)
+            }
             onCancel?()
             update(state: .failed("Conversion cancelled by user"))
         case .completed(let url):
@@ -200,6 +245,9 @@ public final class JobStatusRowView: NSView {
         case .failed(let err):
             copyErrorDetails(err)
         case .queued:
+            if let jid = jobID {
+                JobRunner.shared.cancel(jobId: jid)
+            }
             onCancel?()
             onDismiss?()
             removeFromSuperview()

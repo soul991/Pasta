@@ -26,14 +26,17 @@ public final class RadialWheelOverlayViewController: NSViewController {
     }
 
     // Floating hint pill
-    private let hintPillContainer = NSVisualEffectView()
-    private let hintPillLabel = NSTextField(labelWithString: "")
+    public let hintPillContainer = NSVisualEffectView()
+    public let hintPillLabel = NSTextField(labelWithString: "")
 
     // Compact progress row below wheel (Phase 10B Step 1)
-    private let compactProgressContainer = NSVisualEffectView()
-    private let compactProgressIcon = NSImageView()
-    private let compactProgressLabel = NSTextField(labelWithString: "")
-    private let compactProgressButton = NSButton(title: "Reveal", target: nil, action: nil)
+    public let compactProgressContainer = NSVisualEffectView()
+    public let compactProgressIcon = NSImageView()
+    public let compactProgressLabel = NSTextField(labelWithString: "")
+    public let compactProgressBar = NSProgressIndicator()
+    public let compactProgressButton = NSButton(title: "Reveal", target: nil, action: nil)
+    public var currentConversionJobID: UUID?
+    public var currentConvertingFileName: String?
     private var lastOutputURL: URL?
     private var lastErrorMessage: String?
 
@@ -125,13 +128,19 @@ public final class RadialWheelOverlayViewController: NSViewController {
             compactProgressIcon.image = img
             compactProgressIcon.contentTintColor = ThemeManager.shared.accentColor
         }
-        compactProgressContainer.addSubview(compactProgressIcon)
 
         compactProgressLabel.translatesAutoresizingMaskIntoConstraints = false
         compactProgressLabel.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
         compactProgressLabel.textColor = .white
         compactProgressLabel.lineBreakMode = .byTruncatingMiddle
-        compactProgressContainer.addSubview(compactProgressLabel)
+
+        compactProgressBar.translatesAutoresizingMaskIntoConstraints = false
+        compactProgressBar.style = .bar
+        compactProgressBar.controlSize = .small
+        compactProgressBar.minValue = 0.0
+        compactProgressBar.maxValue = 100.0
+        compactProgressBar.isIndeterminate = true
+        compactProgressBar.isHidden = true
 
         compactProgressButton.translatesAutoresizingMaskIntoConstraints = false
         compactProgressButton.bezelStyle = .inline
@@ -139,7 +148,13 @@ public final class RadialWheelOverlayViewController: NSViewController {
         compactProgressButton.target = self
         compactProgressButton.action = #selector(revealOutputClicked)
         compactProgressButton.isHidden = true
-        compactProgressContainer.addSubview(compactProgressButton)
+
+        let compactStack = NSStackView(views: [compactProgressIcon, compactProgressLabel, compactProgressBar, compactProgressButton])
+        compactStack.translatesAutoresizingMaskIntoConstraints = false
+        compactStack.orientation = .horizontal
+        compactStack.alignment = .centerY
+        compactStack.spacing = 8
+        compactProgressContainer.addSubview(compactStack)
 
         NSLayoutConstraint.activate([
             hintPillContainer.centerXAnchor.constraint(equalTo: view.centerXAnchor),
@@ -158,17 +173,13 @@ public final class RadialWheelOverlayViewController: NSViewController {
             compactProgressContainer.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor, constant: 20),
             compactProgressContainer.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -20),
 
-            compactProgressIcon.leadingAnchor.constraint(equalTo: compactProgressContainer.leadingAnchor, constant: 10),
-            compactProgressIcon.centerYAnchor.constraint(equalTo: compactProgressContainer.centerYAnchor),
+            compactStack.leadingAnchor.constraint(equalTo: compactProgressContainer.leadingAnchor, constant: 10),
+            compactStack.trailingAnchor.constraint(equalTo: compactProgressContainer.trailingAnchor, constant: -10),
+            compactStack.centerYAnchor.constraint(equalTo: compactProgressContainer.centerYAnchor),
+
             compactProgressIcon.widthAnchor.constraint(equalToConstant: 16),
             compactProgressIcon.heightAnchor.constraint(equalToConstant: 16),
-
-            compactProgressLabel.leadingAnchor.constraint(equalTo: compactProgressIcon.trailingAnchor, constant: 8),
-            compactProgressLabel.centerYAnchor.constraint(equalTo: compactProgressContainer.centerYAnchor),
-
-            compactProgressButton.leadingAnchor.constraint(equalTo: compactProgressLabel.trailingAnchor, constant: 8),
-            compactProgressButton.trailingAnchor.constraint(equalTo: compactProgressContainer.trailingAnchor, constant: -10),
-            compactProgressButton.centerYAnchor.constraint(equalTo: compactProgressContainer.centerYAnchor)
+            compactProgressBar.widthAnchor.constraint(equalToConstant: 80)
         ])
 
         // Close control (×) at top-right of wheel backplate
@@ -207,6 +218,26 @@ public final class RadialWheelOverlayViewController: NSViewController {
     }
 
     @objc private func revealOutputClicked() {
+        if compactProgressButton.title == "Cancel" {
+            if let jid = currentConversionJobID {
+                JobRunner.shared.cancel(jobId: jid)
+            }
+            currentConversionJobID = nil
+            currentConvertingFileName = nil
+            compactProgressBar.stopAnimation(nil)
+            compactProgressBar.isHidden = true
+            compactProgressLabel.stringValue = "Conversion cancelled"
+            compactProgressButton.title = "Dismiss"
+            if let img = NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: nil) {
+                compactProgressIcon.image = img
+                compactProgressIcon.contentTintColor = .secondaryLabelColor
+            }
+            return
+        }
+        if compactProgressButton.title == "Dismiss" {
+            compactProgressContainer.isHidden = true
+            return
+        }
         if let url = lastOutputURL {
             NSWorkspace.shared.activateFileViewerSelecting([url])
         } else if let errorMsg = lastErrorMessage {
@@ -214,6 +245,40 @@ public final class RadialWheelOverlayViewController: NSViewController {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(details, forType: .string)
             compactProgressLabel.stringValue = "Error copied to clipboard ✓"
+        }
+    }
+
+    public func updateConvertingProgress(progress: Double?, eta: Double? = nil) {
+        let apply = { [weak self] in
+            guard let self = self else { return }
+            let name = self.currentConvertingFileName ?? ""
+            let namePrefix = name.isEmpty ? "Converting" : "Converting \(name)"
+            if let p = progress {
+                self.compactProgressBar.isIndeterminate = false
+                self.compactProgressBar.minValue = 0.0
+                self.compactProgressBar.maxValue = 100.0
+                self.compactProgressBar.doubleValue = max(0.0, min(100.0, p * 100.0))
+                self.compactProgressBar.isHidden = false
+                if let eta = eta, eta > 0 {
+                    self.compactProgressLabel.stringValue = String(format: "%@ (%d%%)... ~%.0fs left", namePrefix, Int(p * 100.0), eta)
+                } else {
+                    self.compactProgressLabel.stringValue = String(format: "%@ (%d%%)...", namePrefix, Int(p * 100.0))
+                }
+            } else {
+                self.compactProgressBar.isIndeterminate = true
+                self.compactProgressBar.startAnimation(nil)
+                self.compactProgressBar.isHidden = false
+                if let eta = eta, eta > 0 {
+                    self.compactProgressLabel.stringValue = String(format: "%@... ~%.0fs left", namePrefix, eta)
+                } else {
+                    self.compactProgressLabel.stringValue = "\(namePrefix)..."
+                }
+            }
+        }
+        if Thread.isMainThread {
+            apply()
+        } else {
+            DispatchQueue.main.async(execute: apply)
         }
     }
 
@@ -767,12 +832,20 @@ public final class RadialWheelOverlayViewController: NSViewController {
         guard let file = targetFiles.first else { return }
         DragMonitor.shared.actionExecuted()
 
+        let jobID = UUID()
+        self.currentConversionJobID = jobID
+        self.currentConvertingFileName = file.lastPathComponent
+
         let keepOpen = PreferencesManager.shared.keepWheelOpenAfterRunning
 
         if keepOpen {
             // Keep wheel open: keep nodes and center disc visible, show compact progress row under wheel
             compactProgressContainer.isHidden = false
-            compactProgressButton.isHidden = true
+            compactProgressButton.isHidden = false
+            compactProgressButton.title = "Cancel"
+            compactProgressBar.isHidden = false
+            compactProgressBar.isIndeterminate = true
+            compactProgressBar.startAnimation(nil)
             compactProgressLabel.stringValue = "Converting \(file.lastPathComponent)..."
             if let img = NSImage(systemSymbolName: "arrow.triangle.2.circlepath", accessibilityDescription: nil) {
                 compactProgressIcon.image = img
@@ -818,9 +891,13 @@ public final class RadialWheelOverlayViewController: NSViewController {
                 } catch {
                     DispatchQueue.main.async {
                         guard let self = self else { return }
+                        self.currentConversionJobID = nil
                         if keepOpen {
+                            self.compactProgressBar.stopAnimation(nil)
+                            self.compactProgressBar.isHidden = true
                             self.compactProgressContainer.isHidden = false
-                            self.compactProgressButton.isHidden = true
+                            self.compactProgressButton.isHidden = false
+                            self.compactProgressButton.title = "Copy Error"
                             self.compactProgressLabel.stringValue = "Error: \(error.localizedDescription)"
                             if let img = NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: nil) {
                                 self.compactProgressIcon.image = img
@@ -837,12 +914,15 @@ public final class RadialWheelOverlayViewController: NSViewController {
             }
 
             do {
-                let output = try JobRunner.shared.run(action: action, input: file, parameters: fileParams)
+                let output = try JobRunner.shared.run(action: action, input: file, parameters: fileParams, jobId: jobID)
                 DispatchQueue.main.async {
                     guard let self = self else { return }
+                    self.currentConversionJobID = nil
                     self.lastOutputURL = output
                     self.lastErrorMessage = nil
                     if keepOpen {
+                        self.compactProgressBar.stopAnimation(nil)
+                        self.compactProgressBar.isHidden = true
                         self.compactProgressContainer.isHidden = false
                         self.compactProgressButton.isHidden = false
                         self.compactProgressButton.title = "Reveal"
@@ -876,9 +956,12 @@ public final class RadialWheelOverlayViewController: NSViewController {
             } catch {
                 DispatchQueue.main.async {
                     guard let self = self else { return }
+                    self.currentConversionJobID = nil
                     self.lastOutputURL = nil
                     self.lastErrorMessage = error.localizedDescription
                     if keepOpen {
+                        self.compactProgressBar.stopAnimation(nil)
+                        self.compactProgressBar.isHidden = true
                         self.compactProgressContainer.isHidden = false
                         self.compactProgressButton.isHidden = false
                         self.compactProgressButton.title = "Copy Error"

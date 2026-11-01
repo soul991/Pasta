@@ -68,14 +68,48 @@ public final class BatchJobQueue {
         self.probe = probe
         self.maxConcurrent = max(1, maxConcurrent)
         self.pendingItems = files.map { file in
+            let itemID = UUID()
             let row = makeRow?(file)
+            row?.jobID = itemID
+            row?.onCancel = { [weak self] in
+                self?.cancelItem(itemID)
+            }
             row?.update(state: .queued)
-            return QueueItem(file: file, row: row)
+            return QueueItem(id: itemID, file: file, row: row)
         }
     }
 
     public func start() {
         scheduleNext()
+    }
+
+    public func cancelItem(_ id: UUID) {
+        lock.lock()
+        if let idx = pendingItems.firstIndex(where: { $0.id == id }) {
+            let item = pendingItems.remove(at: idx)
+            failedCount += 1
+            let comp = completedCount
+            let fail = failedCount
+            lock.unlock()
+            item.row?.update(state: .failed("Cancelled"))
+            onItemFinished?(item.id, item.file, .failure(PastaError.cancelled))
+            onProgress?(comp, fail)
+            scheduleNext()
+            return
+        }
+        if let item = runningItems.removeValue(forKey: id) {
+            failedCount += 1
+            let comp = completedCount
+            let fail = failedCount
+            lock.unlock()
+            JobRunner.shared.cancel(jobId: id)
+            item.row?.update(state: .failed("Cancelled"))
+            onItemFinished?(item.id, item.file, .failure(PastaError.cancelled))
+            onProgress?(comp, fail)
+            scheduleNext()
+            return
+        }
+        lock.unlock()
     }
 
     public func cancel() {
