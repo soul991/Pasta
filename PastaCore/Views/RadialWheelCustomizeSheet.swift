@@ -22,6 +22,7 @@ public final class RadialWheelCustomizeSheet: NSView {
     private let glassStrengthLabel = NSTextField(labelWithString: "Strength: 80%")
     private let sizeSegment = NSSegmentedControl()
     private let labelModeSegment = NSSegmentedControl()
+    public let previewView = MiniatureWheelPreviewView()
 
     // Primary tools controls
     private let categorySegmentRow1 = NSSegmentedControl()
@@ -246,6 +247,12 @@ public final class RadialWheelCustomizeSheet: NSView {
         labelModeSegment.action = #selector(labelModeChanged)
         appearanceContainer.addSubview(labelModeSegment)
 
+        let previewLabel = makeSectionLabel("Live Preview")
+        appearanceContainer.addSubview(previewLabel)
+
+        previewView.translatesAutoresizingMaskIntoConstraints = false
+        appearanceContainer.addSubview(previewView)
+
         NSLayoutConstraint.activate([
             themeLabel.topAnchor.constraint(equalTo: appearanceContainer.topAnchor),
             themeLabel.leadingAnchor.constraint(equalTo: appearanceContainer.leadingAnchor),
@@ -285,7 +292,15 @@ public final class RadialWheelCustomizeSheet: NSView {
             labelModeSegment.topAnchor.constraint(equalTo: labelModeLabel.bottomAnchor, constant: 6),
             labelModeSegment.leadingAnchor.constraint(equalTo: appearanceContainer.leadingAnchor),
             labelModeSegment.trailingAnchor.constraint(equalTo: appearanceContainer.trailingAnchor),
-            labelModeSegment.bottomAnchor.constraint(lessThanOrEqualTo: appearanceContainer.bottomAnchor, constant: -10)
+
+            previewLabel.topAnchor.constraint(equalTo: labelModeSegment.bottomAnchor, constant: 10),
+            previewLabel.leadingAnchor.constraint(equalTo: appearanceContainer.leadingAnchor),
+
+            previewView.topAnchor.constraint(equalTo: previewLabel.bottomAnchor, constant: 6),
+            previewView.leadingAnchor.constraint(equalTo: appearanceContainer.leadingAnchor),
+            previewView.trailingAnchor.constraint(equalTo: appearanceContainer.trailingAnchor),
+            previewView.heightAnchor.constraint(equalToConstant: 96),
+            previewView.bottomAnchor.constraint(lessThanOrEqualTo: appearanceContainer.bottomAnchor, constant: -4)
         ])
     }
 
@@ -499,6 +514,7 @@ public final class RadialWheelCustomizeSheet: NSView {
 
         selectedThemeNameLabel.stringValue = "Theme: \(theme.displayName)"
         selectedThemeNameLabel.textColor = theme.accentColor
+        previewView.currentTheme = theme
 
         for (i, btn) in themeButtons.enumerated() {
             let isSel = (i == index)
@@ -516,6 +532,7 @@ public final class RadialWheelCustomizeSheet: NSView {
         case 2: WheelLayoutModel.shared.currentGlassStyle = .tinted
         default: break
         }
+        previewView.currentGlassStyle = WheelLayoutModel.shared.currentGlassStyle
         onSettingsChanged?()
     }
 
@@ -523,6 +540,7 @@ public final class RadialWheelCustomizeSheet: NSView {
         let val = glassStrengthSlider.doubleValue
         WheelLayoutModel.shared.glassStrength = val
         glassStrengthLabel.stringValue = "Strength: \(Int(val * 100))%"
+        previewView.glassStrength = val
         onSettingsChanged?()
     }
 
@@ -533,6 +551,7 @@ public final class RadialWheelCustomizeSheet: NSView {
         case 2: WheelLayoutModel.shared.currentSize = .large
         default: break
         }
+        previewView.currentSize = WheelLayoutModel.shared.currentSize
         onSettingsChanged?()
     }
 
@@ -643,6 +662,7 @@ public final class RadialWheelCustomizeSheet: NSView {
     public var testCategoryRow2Labels: [String] { (0..<categorySegmentRow2.segmentCount).compactMap { categorySegmentRow2.label(forSegment: $0) } }
     public var testGlassStrengthText: String { glassStrengthLabel.stringValue }
     public var testLabelModeLabels: [String] { (0..<labelModeSegment.segmentCount).compactMap { labelModeSegment.label(forSegment: $0) } }
+    public var testPreviewView: MiniatureWheelPreviewView { previewView }
     public var pinnedToolRows: [PinnedToolRowView] {
         return toolsStackView.arrangedSubviews.compactMap { $0 as? PinnedToolRowView }
     }

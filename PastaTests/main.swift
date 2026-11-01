@@ -3586,6 +3586,46 @@ do {
     let monoFont = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
     let strengthWidth = (maxStrengthString as NSString).size(withAttributes: [.font: monoFont]).width
     assertTest(strengthWidth < 95.0, "29.4 Max strength string width (\(strengthWidth) pt) fits inside 100 pt glassStrengthLabel")
+
+    // 30. Phase 10B Fix 4: P1 Preview - Live Miniature Wheel Preview
+    print("\n--- 30. Phase 10B Fix 4: P1 Preview Tests ---")
+    let previewSheet = RadialWheelCustomizeSheet()
+    previewSheet.frame = NSRect(x: 0, y: 0, width: 360, height: 480)
+    previewSheet.layoutSubtreeIfNeeded()
+
+    let miniPreview = previewSheet.testPreviewView
+    assertTest(miniPreview.frame.height >= 90.0, "30.1 Miniature preview view is laid out with height >= 90 pt (got: \(miniPreview.frame.height))")
+
+    // 30.2 Initial state matches model
+    assertTest(miniPreview.currentTheme == WheelLayoutModel.shared.currentTheme, "30.2 Preview initial theme matches model")
+    assertTest(miniPreview.currentGlassStyle == WheelLayoutModel.shared.currentGlassStyle, "30.2 Preview initial glass style matches model")
+    assertTest(abs(miniPreview.glassStrength - WheelLayoutModel.shared.glassStrength) < 0.001, "30.2 Preview initial glass strength matches model")
+    assertTest(miniPreview.currentSize == WheelLayoutModel.shared.currentSize, "30.2 Preview initial size matches model")
+
+    // 30.3 Color update on swatch click
+    let previewSwatches = previewSheet.testThemeButtons
+    if previewSwatches.count > 1 {
+        let secondSwatch = previewSwatches[1]
+        previewSheet.themeSwatchClicked(secondSwatch)
+        let expectedTheme = WheelTheme.allCases[1]
+        assertTest(miniPreview.currentTheme == expectedTheme, "30.3 Preview theme updates live to \(expectedTheme.displayName)")
+    }
+
+    // 30.4 Glass style update
+    miniPreview.currentGlassStyle = .tinted
+    assertTest(miniPreview.currentGlassStyle == .tinted, "30.4 Preview updates to tinted glass style")
+
+    // 30.5 Glass strength update
+    miniPreview.glassStrength = 0.45
+    assertTest(abs(miniPreview.glassStrength - 0.45) < 0.001, "30.5 Preview updates to 45% glass strength")
+
+    // 30.6 Size update and scaling
+    miniPreview.currentSize = .compact
+    assertTest(miniPreview.previewDiameter == 68.0, "30.6 Compact size yields 68 pt preview diameter")
+    miniPreview.currentSize = .standard
+    assertTest(miniPreview.previewDiameter == 80.0, "30.6 Standard size yields 80 pt preview diameter")
+    miniPreview.currentSize = .large
+    assertTest(miniPreview.previewDiameter == 92.0, "30.6 Large size yields 92 pt preview diameter")
 }
 
 print("\n==================================================")
