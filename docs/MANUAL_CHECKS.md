@@ -34,6 +34,13 @@ CI cannot simulate a real interactive drag session initiated from Finder or anot
 - [ ] **Multi-File Drag (Batch)**:
   - Select 3 image files in Finder, drag them, and hold <kbd>Shift</kbd>.
   - **Expected:** Wheel opens showing batch-compatible actions (e.g., collage, images to PDF, batch convert).
+- [ ] **Typing Test (Immunity from Stale Drag Pasteboard)**:
+  - Drag any file from Finder onto the desktop or another folder to populate `NSPasteboard(name: .drag)`.
+  - Switch to Chrome, Apple Notes, and Terminal.
+  - Type capital letters (holding <kbd>Shift</kbd> naturally and deliberately) for 30 seconds across all three apps.
+  - **Expected:** The radial wheel must **never open**, no charging ring appears, and no background timers run.
+  - Next, initiate a real drag of a file from Finder and hold <kbd>Shift</kbd>.
+  - **Expected:** The real drag with Shift hold must still reliably open the radial wheel after 450 ms.
 
 ---
 

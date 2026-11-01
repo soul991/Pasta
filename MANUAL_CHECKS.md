@@ -1,0 +1,1 @@
+docs/MANUAL_CHECKS.md

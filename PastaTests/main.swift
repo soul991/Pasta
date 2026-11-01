@@ -1322,14 +1322,15 @@ do {
 print("\n--- 12. DragMonitor Shift-Hold State Machine Tests ---")
 do {
     let mockClock = MockDragMonitorClock(initialTime: 1000.0)
-    let mockPasteboard = MockDragPasteboardReader(urls: [URL(fileURLWithPath: "/tmp/test.png")])
+    let mockPasteboard = MockDragPasteboardReader(urls: [URL(fileURLWithPath: "/tmp/test.png")], changeCount: 1)
+    let mockMouse = MockMouseStateProvider(isLeftButtonDown: true)
     let prefs = PreferencesManager()
     prefs.shiftHoldDurationMs = 450.0
     prefs.stayOpenAfterRelease = true
     prefs.showChargingRing = true
     prefs.reduceMotionEnabled = false
 
-    let monitor = DragMonitor(clock: mockClock, pasteboardReader: mockPasteboard, preferences: prefs)
+    let monitor = DragMonitor(clock: mockClock, pasteboardReader: mockPasteboard, preferences: prefs, mouseStateProvider: mockMouse)
 
     var wheelOpened = false
     var wheelClosed = false
@@ -1355,6 +1356,10 @@ do {
     let shiftMod = NSEvent.ModifierFlags.shift
     let optMod = NSEvent.ModifierFlags.option
     let emptyMod = NSEvent.ModifierFlags()
+
+    // Setup active drag session: mouseDown records baseline=1, Finder drag increments changeCount to 2
+    monitor.processMouseDown(timestamp: 999.0)
+    mockPasteboard.changeCount = 2
 
     // 12.1 Hold 449 ms: no wheel
     monitor.processMouseDragged(modifiers: shiftMod, location: NSPoint(x: 100, y: 100), timestamp: 1000.000)
@@ -1398,6 +1403,9 @@ do {
     wheelOpened = false
     var chargingCancelled = false
     monitor.onChargingCancel = { chargingCancelled = true }
+    mockMouse.isLeftButtonDown = true
+    monitor.processMouseDown(timestamp: 1099.0)
+    mockPasteboard.changeCount = 3
     monitor.processMouseDragged(modifiers: shiftMod, location: NSPoint(x: 100, y: 100), timestamp: 1100.000)
     monitor.processMouseDragged(modifiers: shiftMod, location: NSPoint(x: 100, y: 100), timestamp: 1100.200)
     monitor.processKeyDown(keyCode: 12, timestamp: 1100.250) // 'q' or other key
@@ -1406,6 +1414,9 @@ do {
     // 12.6 No drag session: Shift does nothing
     mockPasteboard.mockURLs = []
     wheelOpened = false
+    mockMouse.isLeftButtonDown = true
+    monitor.processMouseDown(timestamp: 1199.0)
+    mockPasteboard.changeCount = 4
     monitor.processMouseDragged(modifiers: shiftMod, location: NSPoint(x: 100, y: 100), timestamp: 1200.000)
     monitor.processMouseDragged(modifiers: shiftMod, location: NSPoint(x: 100, y: 100), timestamp: 1200.500)
     assertTest(!wheelOpened && monitor.state == .idle, "12.6 No drag session: Shift press does nothing")
@@ -1413,6 +1424,9 @@ do {
     // 12.7 Text drag (no file URLs): does nothing
     mockPasteboard.mockURLs = [] // Empty file list (pure text drag)
     wheelOpened = false
+    mockMouse.isLeftButtonDown = true
+    monitor.processMouseDown(timestamp: 1299.0)
+    mockPasteboard.changeCount = 5
     monitor.processMouseDragged(modifiers: shiftMod, location: NSPoint(x: 100, y: 100), timestamp: 1300.000)
     monitor.processMouseDragged(modifiers: shiftMod, location: NSPoint(x: 100, y: 100), timestamp: 1300.600)
     assertTest(!wheelOpened && monitor.state == .idle, "12.7 Text drag without file URLs does nothing")
@@ -1423,6 +1437,9 @@ do {
     wheelClosed = false
     var filesReplaced: [URL]? = nil
     monitor.onFilesReplaced = { filesReplaced = $0 }
+    mockMouse.isLeftButtonDown = true
+    monitor.processMouseDown(timestamp: 1399.0)
+    mockPasteboard.changeCount = 6
     monitor.processMouseDragged(modifiers: shiftMod, location: NSPoint(x: 100, y: 100), timestamp: 1400.000)
     monitor.processMouseDragged(modifiers: shiftMod, location: NSPoint(x: 100, y: 100), timestamp: 1400.450)
     assertTest(wheelOpened, "12.8 Wheel opened for second hold test")
@@ -1431,7 +1448,9 @@ do {
     // Second shift press down with new files
     let newURL = URL(fileURLWithPath: "/tmp/new_sample.mkv")
     mockPasteboard.mockURLs = [newURL]
-    monitor.processFlagsChanged(modifiers: shiftMod, timestamp: 1400.600)
+    monitor.processMouseDown(timestamp: 1400.550)
+    mockPasteboard.changeCount = 7
+    monitor.processMouseDragged(modifiers: shiftMod, location: NSPoint(x: 100, y: 100), timestamp: 1400.600)
     // Hold second shift for 450 ms -> 1401.050
     monitor.processMouseDragged(modifiers: shiftMod, location: NSPoint(x: 100, y: 100), timestamp: 1401.050)
     assertTest(!wheelClosed, "12.8 Second Shift hold does NOT close wheel in Phase 10B")
@@ -1439,9 +1458,13 @@ do {
     assertTest(monitor.rememberedFiles == [newURL], "12.8 Monitor rememberedFiles updated to new files")
 
     // 12.9 Option tap toggles mode
+    monitor.closeWheel()
     wheelOpened = false
     modeToggled = false
     currentIsAdvanced = false
+    mockMouse.isLeftButtonDown = true
+    monitor.processMouseDown(timestamp: 1499.0)
+    mockPasteboard.changeCount = 8
     monitor.processMouseDragged(modifiers: shiftMod, location: NSPoint(x: 100, y: 100), timestamp: 1500.000)
     monitor.processMouseDragged(modifiers: shiftMod, location: NSPoint(x: 100, y: 100), timestamp: 1500.450)
     monitor.processFlagsChanged(modifiers: emptyMod, timestamp: 1500.500)
@@ -1467,6 +1490,9 @@ do {
     prefs.shiftHoldDurationMs = 600.0
     monitor.closeWheel()
     wheelOpened = false
+    mockMouse.isLeftButtonDown = true
+    monitor.processMouseDown(timestamp: 1599.0)
+    mockPasteboard.changeCount = 9
     monitor.processMouseDragged(modifiers: shiftMod, location: NSPoint(x: 100, y: 100), timestamp: 1600.000)
     monitor.processMouseDragged(modifiers: shiftMod, location: NSPoint(x: 100, y: 100), timestamp: 1600.450)
     assertTest(!wheelOpened, "12.11 Configured 600 ms duration: not opened at 450 ms")
@@ -2718,7 +2744,8 @@ do {
     let fileA = URL(fileURLWithPath: "/tmp/clip_a.mov")
     let fileB = URL(fileURLWithPath: "/tmp/clip_b.mp4")
     let fileC = URL(fileURLWithPath: "/tmp/photo_c.png")
-    let mockPasteboard = MockDragPasteboardReader(urls: [fileA, fileB])
+    let mockPasteboard = MockDragPasteboardReader(urls: [fileA, fileB], changeCount: 1)
+    let mockMouse = MockMouseStateProvider(isLeftButtonDown: true)
 
     let prefs = PreferencesManager()
     prefs.shiftHoldDurationMs = 450.0
@@ -2727,7 +2754,7 @@ do {
     prefs.showChargingRing = false
     prefs.reduceMotionEnabled = false
 
-    let monitor = DragMonitor(clock: mockClock, pasteboardReader: mockPasteboard, preferences: prefs)
+    let monitor = DragMonitor(clock: mockClock, pasteboardReader: mockPasteboard, preferences: prefs, mouseStateProvider: mockMouse)
 
     var wheelOpenCount = 0
     var wheelCloseCount = 0
@@ -2748,6 +2775,9 @@ do {
 
     // 21.1 Real-shaped event sequence: shiftDown -> hold 450ms -> open -> drag continues -> shiftUp -> mouseUp -> wait 5s: still open
     // Step a: Shift down with mouse drag (armed)
+    mockMouse.isLeftButtonDown = true
+    monitor.processMouseDown(timestamp: 4999.0)
+    mockPasteboard.changeCount = 2
     monitor.processMouseDragged(modifiers: shiftMod, location: NSPoint(x: 200, y: 200), timestamp: 5000.000)
     assertTest(monitor.state == .armed(startedAt: 5000.000, files: [fileA, fileB], location: NSPoint(x: 200, y: 200)),
                "21.1a Mouse drag with Shift begins in Armed state")
@@ -2766,6 +2796,7 @@ do {
     assertTest(monitor.isWheelOpen, "21.1d Shift release (empty modifiers) preserves open wheel (latched)")
 
     // Step e: Mouse button released (mouseUp / drag session ends)
+    mockMouse.isLeftButtonDown = false
     monitor.processMouseUp(timestamp: 5000.800)
     assertTest(monitor.isWheelOpen, "21.1e Mouse up does NOT close wheel in sticky mode")
 
@@ -2799,20 +2830,27 @@ do {
 
     // 21.4 Second Shift hold with new files replaces remembered files and keeps wheel open
     mockPasteboard.mockURLs = [fileA]
+    mockMouse.isLeftButtonDown = true
+    monitor.processMouseDown(timestamp: 5019.0)
+    mockPasteboard.changeCount = 3
     monitor.processMouseDragged(modifiers: shiftMod, location: NSPoint(x: 100, y: 100), timestamp: 5020.000)
     monitor.processMouseDragged(modifiers: shiftMod, location: NSPoint(x: 100, y: 100), timestamp: 5020.450)
     assertTest(monitor.isWheelOpen && monitor.rememberedFiles == [fileA], "21.4a Wheel opened with fileA")
 
     // Release shift, end first drag
+    mockMouse.isLeftButtonDown = false
     monitor.processFlagsChanged(modifiers: emptyMod, timestamp: 5020.500)
     monitor.processMouseUp(timestamp: 5020.600)
     assertTest(monitor.isWheelOpen, "21.4b Wheel stays open after first drag ended")
 
     // Start second drag with fileC and hold shift for 450 ms
+    mockMouse.isLeftButtonDown = true
+    monitor.processMouseDown(timestamp: 5020.700)
+    mockPasteboard.changeCount = 4
     mockPasteboard.mockURLs = [fileC]
     replacedFiles = nil
     let closeBeforeSecondHold = wheelCloseCount
-    monitor.processFlagsChanged(modifiers: shiftMod, timestamp: 5021.000)
+    monitor.processMouseDragged(modifiers: shiftMod, location: NSPoint(x: 120, y: 120), timestamp: 5021.000)
     monitor.processMouseDragged(modifiers: shiftMod, location: NSPoint(x: 120, y: 120), timestamp: 5021.450)
 
     assertTest(wheelCloseCount == closeBeforeSecondHold, "21.4c Second Shift hold does NOT close wheel")
@@ -2823,14 +2861,18 @@ do {
     // Incomplete second shift hold reverts without closing
     mockPasteboard.mockURLs = [fileB]
     monitor.processFlagsChanged(modifiers: emptyMod, timestamp: 5022.000)
-    monitor.processFlagsChanged(modifiers: shiftMod, timestamp: 5022.100)
-    monitor.processMouseDragged(modifiers: shiftMod, location: NSPoint(x: 130, y: 130), timestamp: 5022.200) // only 100ms
+    mockMouse.isLeftButtonDown = true
+    monitor.processMouseDown(timestamp: 5022.050)
+    mockPasteboard.changeCount = 5
+    monitor.processMouseDragged(modifiers: shiftMod, location: NSPoint(x: 130, y: 130), timestamp: 5022.100) // only 100ms
     monitor.processFlagsChanged(modifiers: emptyMod, timestamp: 5022.250) // released early
     assertTest(monitor.isWheelOpen && monitor.rememberedFiles == [fileC],
                "21.4d Incomplete second Shift hold reverts to previous remembered files and keeps wheel open")
 
     // 21.5 Drop outside preserves open wheel
+    mockMouse.isLeftButtonDown = true
     monitor.processMouseDragged(modifiers: emptyMod, location: NSPoint(x: 800, y: 800), timestamp: 5023.000)
+    mockMouse.isLeftButtonDown = false
     monitor.processMouseUp(timestamp: 5023.100)
     assertTest(monitor.isWheelOpen && monitor.rememberedFiles == [fileC],
                "21.5 Drop outside does NOT close wheel and preserves remembered files")
@@ -3900,15 +3942,22 @@ do {
 
     // 35.4 Stationary hold timer advances state and triggers wheel without mouse movement
     let mockClock = MockDragMonitorClock(initialTime: 1000.0)
-    let mockReader = MockDragPasteboardReader(urls: [URL(fileURLWithPath: "/tmp/sample.png")])
-    let stationaryMonitor = DragMonitor(clock: mockClock, pasteboardReader: mockReader)
+    let mockReader = MockDragPasteboardReader(urls: [URL(fileURLWithPath: "/tmp/sample.png")], changeCount: 1)
+    let mockMouse = MockMouseStateProvider(isLeftButtonDown: true)
+    let stationaryMonitor = DragMonitor(clock: mockClock, pasteboardReader: mockReader, mouseStateProvider: mockMouse)
 
     var wheelOpened = false
     stationaryMonitor.onWheelOpen = { files, _, _ in
         wheelOpened = true
     }
 
-    // Arm via flagsChanged in idle
+    // Active drag began: mouseDown records baseline=1, Finder drag increments changeCount to 2
+    stationaryMonitor.processMouseDown(timestamp: 999.0)
+    mockReader.changeCount = 2
+    stationaryMonitor.processMouseDragged(modifiers: [], location: NSPoint(x: 100, y: 100), timestamp: 999.5)
+    assertTest(stationaryMonitor.dragSessionActive, "35.4 Drag session activated after mouse drag with new changeCount")
+
+    // Arm via flagsChanged in idle (stationary hold: mouse stopped moving, Shift pressed down while button held)
     stationaryMonitor.processFlagsChanged(modifiers: [.shift], timestamp: 1000.0)
     assertTest(stationaryMonitor.isArmed, "35.4 Shift down in idle with valid files arms DragMonitor")
 
@@ -3934,6 +3983,273 @@ do {
     assertTest(overlayVC.currentCustomizeSheet == nil, "35.5 Dismiss sheet clears currentCustomizeSheet")
     assertTest(!overlayVC.isBackplateHidden, "35.5 Backplate is visible after dismiss")
     assertTest(overlayVC.backplateAlpha == 1.0, "35.5 Backplate alpha is 1.0 after dismiss")
+}
+
+// MARK: - 36. Strict Drag Validation & Stale Pasteboard Immunity Tests
+print("\n--- 36. Strict Drag Validation & Stale Pasteboard Immunity Tests ---")
+do {
+    // 36.1 Stale file URLs on pasteboard, no mouse down, Shift hold 2 s: stays idle, wheel never opens, no timer running
+    let clock1 = MockDragMonitorClock(initialTime: 1000.0)
+    let pboard1 = MockDragPasteboardReader(urls: [URL(fileURLWithPath: "/tmp/stale.png")], changeCount: 5)
+    let mouse1 = MockMouseStateProvider(isLeftButtonDown: false)
+    let monitor1 = DragMonitor(clock: clock1, pasteboardReader: pboard1, mouseStateProvider: mouse1)
+
+    var wheel1Opened = false
+    monitor1.onWheelOpen = { _, _, _ in wheel1Opened = true }
+
+    monitor1.processFlagsChanged(modifiers: [.shift], timestamp: 1000.0)
+    clock1.advance(by: 2.0)
+    monitor1.tickCharging(now: 1002.0)
+
+    assertTest(monitor1.state == .idle, "36.1 Stale pasteboard without mouse down: monitor remains in idle state after Shift hold 2s")
+    assertTest(!wheel1Opened, "36.1 Stale pasteboard without mouse down: wheel never opens after Shift hold 2s")
+    assertTest(!monitor1.isChargingTimerRunning, "36.1 Stale pasteboard without mouse down: charging timer is not running")
+    assertTest(!monitor1.dragSessionActive, "36.1 Stale pasteboard without mouse down: dragSessionActive is false")
+
+    // 36.2 Mouse down + mouse dragged with unchanged changeCount (text selection or window drag), then Shift hold: stays idle
+    let clock2 = MockDragMonitorClock(initialTime: 2000.0)
+    let pboard2 = MockDragPasteboardReader(urls: [URL(fileURLWithPath: "/tmp/stale.png")], changeCount: 10)
+    let mouse2 = MockMouseStateProvider(isLeftButtonDown: true)
+    let monitor2 = DragMonitor(clock: clock2, pasteboardReader: pboard2, mouseStateProvider: mouse2)
+
+    var wheel2Opened = false
+    monitor2.onWheelOpen = { _, _, _ in wheel2Opened = true }
+
+    // Mouse down records baseline changeCount = 10
+    monitor2.processMouseDown(timestamp: 2000.0)
+    assertTest(monitor2.dragPasteboardBaselineChangeCount == 10, "36.2 processMouseDown recorded baseline changeCount = 10")
+
+    // Mouse dragged with unchanged changeCount (10 == 10)
+    monitor2.processMouseDragged(modifiers: [], location: NSPoint(x: 200, y: 200), timestamp: 2000.1)
+    assertTest(!monitor2.dragSessionActive, "36.2 Drag with unchanged changeCount does NOT activate dragSessionActive")
+
+    // Shift held while mouse button still down: must stay idle!
+    monitor2.processFlagsChanged(modifiers: [.shift], timestamp: 2000.2)
+    clock2.advance(by: 2.0)
+    monitor2.tickCharging(now: 2002.2)
+
+    assertTest(monitor2.state == .idle, "36.2 Unchanged changeCount + Shift hold: monitor remains in idle state")
+    assertTest(!wheel2Opened, "36.2 Unchanged changeCount + Shift hold: wheel never opens")
+    assertTest(!monitor2.isChargingTimerRunning, "36.2 Unchanged changeCount: charging timer is not running")
+
+    // 36.3 Real file drag (changeCount changed, file URLs present, button down):
+    // Part A: Shift hold 449 ms no wheel, 450 ms wheel opens
+    let clock3 = MockDragMonitorClock(initialTime: 3000.0)
+    let pboard3 = MockDragPasteboardReader(urls: [URL(fileURLWithPath: "/tmp/real.png")], changeCount: 15)
+    let mouse3 = MockMouseStateProvider(isLeftButtonDown: true)
+    let monitor3 = DragMonitor(clock: clock3, pasteboardReader: pboard3, mouseStateProvider: mouse3)
+
+    var wheel3Opened = false
+    monitor3.onWheelOpen = { _, _, _ in wheel3Opened = true }
+
+    monitor3.processMouseDown(timestamp: 3000.0) // baseline = 15
+    pboard3.changeCount = 16 // Finder increments changeCount to 16
+
+    // Drag begins with Shift held
+    monitor3.processMouseDragged(modifiers: [.shift], location: NSPoint(x: 100, y: 100), timestamp: 3000.0)
+    assertTest(monitor3.dragSessionActive, "36.3a Real file drag activates dragSessionActive")
+    assertTest(monitor3.isArmed, "36.3a Real file drag with Shift begins in armed state")
+
+    // Advance to 449 ms: no wheel
+    monitor3.processMouseDragged(modifiers: [.shift], location: NSPoint(x: 101, y: 101), timestamp: 3000.449)
+    assertTest(!wheel3Opened, "36.3a Real file drag: 449 ms does NOT open wheel")
+
+    // Advance to 450 ms: wheel opens
+    monitor3.processMouseDragged(modifiers: [.shift], location: NSPoint(x: 102, y: 102), timestamp: 3000.450)
+    assertTest(wheel3Opened, "36.3a Real file drag: 450 ms opens wheel")
+    assertTest(monitor3.isWheelOpen, "36.3a Monitor state is open at 450 ms")
+
+    // Part B: Stationary hold (no mouse movement, button still down) also opens at 450 ms
+    let clock3b = MockDragMonitorClock(initialTime: 3500.0)
+    let pboard3b = MockDragPasteboardReader(urls: [URL(fileURLWithPath: "/tmp/stationary.png")], changeCount: 20)
+    let mouse3b = MockMouseStateProvider(isLeftButtonDown: true)
+    let monitor3b = DragMonitor(clock: clock3b, pasteboardReader: pboard3b, mouseStateProvider: mouse3b)
+
+    var wheel3bOpened = false
+    monitor3b.onWheelOpen = { _, _, _ in wheel3bOpened = true }
+
+    monitor3b.processMouseDown(timestamp: 3500.0) // baseline = 20
+    pboard3b.changeCount = 21 // Finder drag starts
+    // User moves mouse slightly to begin drag (no Shift yet)
+    monitor3b.processMouseDragged(modifiers: [], location: NSPoint(x: 100, y: 100), timestamp: 3500.050)
+    assertTest(monitor3b.dragSessionActive, "36.3b Stationary hold: drag session activated by initial movement")
+    assertTest(monitor3b.state == .idle, "36.3b Stationary hold: state is idle before Shift is pressed")
+
+    // Mouse stops moving! User presses and holds Shift at 3500.100 while mouse is stationary and button down:
+    monitor3b.processFlagsChanged(modifiers: [.shift], timestamp: 3500.100)
+    assertTest(monitor3b.isArmed, "36.3b Stationary hold: Shift down arms monitor")
+
+    // Tick stationary timer to 449 ms: no wheel
+    monitor3b.tickCharging(now: 3500.100 + 0.449)
+    assertTest(!wheel3bOpened, "36.3b Stationary hold: 449 ms does not open wheel")
+
+    // Tick stationary timer to 450 ms: wheel opens without cursor movement!
+    monitor3b.tickCharging(now: 3500.100 + 0.450)
+    assertTest(wheel3bOpened, "36.3b Stationary hold: opens wheel at 450 ms without cursor movement")
+    assertTest(monitor3b.isWheelOpen, "36.3b Stationary hold: monitor state is open at 450 ms")
+
+    // 36.4 Drag session ends (mouseUp), then Shift hold: stays idle
+    let clock4 = MockDragMonitorClock(initialTime: 4000.0)
+    let pboard4 = MockDragPasteboardReader(urls: [URL(fileURLWithPath: "/tmp/ended.png")], changeCount: 30)
+    let mouse4 = MockMouseStateProvider(isLeftButtonDown: true)
+    let monitor4 = DragMonitor(clock: clock4, pasteboardReader: pboard4, mouseStateProvider: mouse4)
+
+    var wheel4Opened = false
+    monitor4.onWheelOpen = { _, _, _ in wheel4Opened = true }
+
+    monitor4.processMouseDown(timestamp: 4000.0) // baseline = 30
+    pboard4.changeCount = 31 // drag starts
+    monitor4.processMouseDragged(modifiers: [], location: NSPoint(x: 100, y: 100), timestamp: 4000.050)
+    assertTest(monitor4.dragSessionActive, "36.4 Active drag session before mouseUp")
+
+    // Mouse button released (drag session ends)
+    mouse4.isLeftButtonDown = false
+    monitor4.processMouseUp(timestamp: 4000.100)
+    assertTest(!monitor4.dragSessionActive, "36.4 processMouseUp clears dragSessionActive")
+
+    // Stale pasteboard remains populated with URLs; Shift hold 2s must stay idle:
+    monitor4.processFlagsChanged(modifiers: [.shift], timestamp: 4000.200)
+    clock4.advance(by: 2.0)
+    monitor4.tickCharging(now: 4002.200)
+
+    assertTest(monitor4.state == .idle, "36.4 After drag session ends, Shift hold leaves monitor in idle state")
+    assertTest(!wheel4Opened, "36.4 After drag session ends, wheel never opens on Shift hold")
+    assertTest(!monitor4.isChargingTimerRunning, "36.4 After drag session ends, charging timer is not running")
+
+    // 36.5 Shift down then the mouse button is released while charging: cancels
+    let clock5 = MockDragMonitorClock(initialTime: 5000.0)
+    let pboard5 = MockDragPasteboardReader(urls: [URL(fileURLWithPath: "/tmp/canceling.png")], changeCount: 40)
+    let mouse5 = MockMouseStateProvider(isLeftButtonDown: true)
+    let monitor5 = DragMonitor(clock: clock5, pasteboardReader: pboard5, mouseStateProvider: mouse5)
+
+    var charging5Cancelled = false
+    var wheel5Opened = false
+    monitor5.onChargingCancel = { charging5Cancelled = true }
+    monitor5.onWheelOpen = { _, _, _ in wheel5Opened = true }
+
+    monitor5.processMouseDown(timestamp: 5000.0) // baseline = 40
+    pboard5.changeCount = 41
+    monitor5.processMouseDragged(modifiers: [.shift], location: NSPoint(x: 100, y: 100), timestamp: 5000.0)
+    assertTest(monitor5.isArmed, "36.5 Began in armed state")
+
+    // Advance to charging state (> 120 ms)
+    monitor5.tickCharging(now: 5000.200)
+    assertTest(monitor5.isCharging, "36.5 Reached charging state at 200 ms")
+
+    // User releases mouse button while charging (mouseUp at 250 ms)
+    mouse5.isLeftButtonDown = false
+    monitor5.processMouseUp(timestamp: 5000.250)
+
+    assertTest(monitor5.state == .idle, "36.5 Mouse button release cancels charging and returns to idle")
+    assertTest(charging5Cancelled, "36.5 onChargingCancel called when mouse released during charging")
+    assertTest(!wheel5Opened, "36.5 Wheel did not open after cancel")
+    assertTest(!monitor5.dragSessionActive, "36.5 dragSessionActive is false after mouse release")
+    assertTest(!monitor5.isChargingTimerRunning, "36.5 Charging timer stopped after mouse release")
+
+    // Also test: tickCharging immediately cancels if mouseStateProvider reports button is released
+    mouse5.isLeftButtonDown = true
+    monitor5.processMouseDown(timestamp: 5100.0)
+    pboard5.changeCount = 42
+    monitor5.processMouseDragged(modifiers: [.shift], location: NSPoint(x: 100, y: 100), timestamp: 5100.0)
+    assertTest(monitor5.isArmed, "36.5 Re-armed for tickCharging button release test")
+    mouse5.isLeftButtonDown = false // button released without processMouseUp event
+    monitor5.tickCharging(now: 5100.050)
+    assertTest(monitor5.state == .idle, "36.5 tickCharging detected released mouse button and cancelled to idle")
+    assertTest(!monitor5.isChargingTimerRunning, "36.5 tickCharging stopped charging timer upon button release")
+
+    // 36.6 Typing simulation: 50 Shift press/release cycles of 80-250 ms with stale pasteboard: never arms
+    let clock6 = MockDragMonitorClock(initialTime: 6000.0)
+    let pboard6 = MockDragPasteboardReader(urls: [URL(fileURLWithPath: "/tmp/stale_from_finder.png")], changeCount: 50)
+    let mouse6 = MockMouseStateProvider(isLeftButtonDown: false) // typing in browser, mouse NOT down
+    let monitor6 = DragMonitor(clock: clock6, pasteboardReader: pboard6, mouseStateProvider: mouse6)
+
+    var typedCycleOpenedWheel = false
+    var typedCycleArmed = false
+    monitor6.onWheelOpen = { _, _, _ in typedCycleOpenedWheel = true }
+
+    var simClock = 6000.0
+    for i in 0..<50 {
+        // Vary typing hold durations between 80 ms and 240 ms
+        let pressDuration = 0.080 + Double(i % 17) * 0.010
+        // Shift pressed down (typing capital letter)
+        monitor6.processFlagsChanged(modifiers: [.shift], timestamp: simClock)
+        if monitor6.isArmed || monitor6.isCharging || monitor6.isWheelOpen {
+            typedCycleArmed = true
+        }
+
+        simClock += pressDuration
+        monitor6.tickCharging(now: simClock)
+        if monitor6.isArmed || monitor6.isCharging || monitor6.isWheelOpen {
+            typedCycleArmed = true
+        }
+
+        // Shift released
+        monitor6.processFlagsChanged(modifiers: [], timestamp: simClock)
+        simClock += 0.040 // gap between keystrokes
+    }
+
+    assertTest(!typedCycleArmed, "36.6 Typing simulation (50 Shift press cycles with stale pasteboard): NEVER arms")
+    assertTest(!typedCycleOpenedWheel, "36.6 Typing simulation: wheel NEVER opens")
+    assertTest(monitor6.state == .idle, "36.6 Typing simulation: monitor remains in idle state throughout")
+    assertTest(!monitor6.isChargingTimerRunning, "36.6 Typing simulation: no charging timer running")
+
+    // 36.7 Sticky wheel protection: stale pasteboard never re-targets open wheel; only a new real drag may
+    let clock7 = MockDragMonitorClock(initialTime: 7000.0)
+    let fileOriginal = URL(fileURLWithPath: "/tmp/original.png")
+    let fileStale = URL(fileURLWithPath: "/tmp/stale_other.png")
+    let fileNew = URL(fileURLWithPath: "/tmp/new_drag.png")
+    let pboard7 = MockDragPasteboardReader(urls: [fileOriginal], changeCount: 60)
+    let mouse7 = MockMouseStateProvider(isLeftButtonDown: true)
+    let prefs7 = PreferencesManager()
+    prefs7.stayOpenAfterRelease = true
+    let monitor7 = DragMonitor(clock: clock7, pasteboardReader: pboard7, preferences: prefs7, mouseStateProvider: mouse7)
+
+    var replaced7Files: [URL]? = nil
+    monitor7.onFilesReplaced = { replaced7Files = $0 }
+
+    // Step 1: Open wheel with fileOriginal
+    monitor7.processMouseDown(timestamp: 7000.0) // baseline = 60
+    pboard7.changeCount = 61
+    monitor7.processMouseDragged(modifiers: [.shift], location: NSPoint(x: 200, y: 200), timestamp: 7000.0)
+    monitor7.processMouseDragged(modifiers: [.shift], location: NSPoint(x: 200, y: 200), timestamp: 7000.450)
+    assertTest(monitor7.isWheelOpen && monitor7.rememberedFiles == [fileOriginal], "36.7 Step 1: Wheel opened with fileOriginal")
+
+    // Step 2: Release Shift and mouse (drop outside, sticky wheel stays open)
+    mouse7.isLeftButtonDown = false
+    monitor7.processFlagsChanged(modifiers: [], timestamp: 7000.500)
+    monitor7.processMouseUp(timestamp: 7000.550)
+    assertTest(monitor7.isWheelOpen, "36.7 Step 2: Wheel stays open after mouseUp")
+    assertTest(!monitor7.dragSessionActive, "36.7 Step 2: dragSessionActive is false after mouseUp")
+
+    // Step 3: Pasteboard has fileStale, but NO mouse down. Press Shift while typing:
+    pboard7.mockURLs = [fileStale]
+    monitor7.processFlagsChanged(modifiers: [.shift], timestamp: 7001.0)
+    clock7.advance(by: 1.0)
+    monitor7.tickCharging(now: 7002.0)
+    assertTest(monitor7.isWheelOpen && monitor7.rememberedFiles == [fileOriginal],
+               "36.7 Step 3: Stale pasteboard with Shift hold does NOT re-target sticky wheel (still fileOriginal)")
+    assertTest(replaced7Files == nil, "36.7 Step 3: onFilesReplaced was NOT called")
+
+    // Step 4: Mouse click and text selection in an app (changeCount unchanged from new mouseDown)
+    mouse7.isLeftButtonDown = true
+    monitor7.processMouseDown(timestamp: 7003.0) // baseline = 61
+    // pboard7.changeCount remains 61
+    monitor7.processMouseDragged(modifiers: [.shift], location: NSPoint(x: 300, y: 300), timestamp: 7003.1)
+    clock7.advance(by: 1.0)
+    monitor7.tickCharging(now: 7004.1)
+    assertTest(monitor7.rememberedFiles == [fileOriginal],
+               "36.7 Step 4: Text drag with unchanged changeCount does NOT re-target sticky wheel")
+
+    // Step 5: A real new file drag begins! Finder writes fileNew to drag pasteboard (changeCount = 62)
+    pboard7.mockURLs = [fileNew]
+    pboard7.changeCount = 62
+    monitor7.processMouseDragged(modifiers: [.shift], location: NSPoint(x: 250, y: 250), timestamp: 7005.0)
+    assertTest(monitor7.dragSessionActive, "36.7 Step 5: Real drag activates dragSessionActive during open wheel")
+    // Hold Shift for 450 ms
+    monitor7.processMouseDragged(modifiers: [.shift], location: NSPoint(x: 250, y: 250), timestamp: 7005.450)
+    assertTest(monitor7.isWheelOpen, "36.7 Step 5: Wheel remains open after second hold")
+    assertTest(monitor7.rememberedFiles == [fileNew], "36.7 Step 5: Real drag successfully re-targets wheel with fileNew")
+    assertTest(replaced7Files == [fileNew], "36.7 Step 5: onFilesReplaced called with fileNew")
 }
 
 print("\n==================================================")
