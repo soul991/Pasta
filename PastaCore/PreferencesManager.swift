@@ -14,6 +14,7 @@ public final class PreferencesManager {
     private let holdDurationKey = "pasta_shift_hold_duration_ms"
     private let stayOpenKey = "pasta_stay_open_after_release"
     private let keepWheelOpenKey = "pasta_keep_wheel_open_after_running"
+    private let autoDismissWheelKey = "pasta_auto_dismiss_wheel_after_running"
     private let showRingKey = "pasta_show_charging_ring"
     private let reduceMotionKey = "pasta_reduce_motion"
     private let reduceTransparencyKey = "pasta_reduce_transparency"
@@ -83,6 +84,16 @@ public final class PreferencesManager {
         }
         set {
             UserDefaults.standard.set(newValue, forKey: keepWheelOpenKey)
+        }
+    }
+
+    /// Whether the wheel auto-dismisses after a successful conversion when keepWheelOpenAfterRunning is true (default: false, never closes on error)
+    public var autoDismissWheelAfterRunning: Bool {
+        get {
+            return UserDefaults.standard.bool(forKey: autoDismissWheelKey)
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: autoDismissWheelKey)
         }
     }
 

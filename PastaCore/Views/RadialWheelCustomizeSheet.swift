@@ -35,6 +35,7 @@ public final class RadialWheelCustomizeSheet: NSView {
     private let holdDurationSlider = NSSlider()
     private let holdDurationLabel = NSTextField(labelWithString: "Hold duration: 450 ms")
     private let keepOpenCheckbox = NSButton(checkboxWithTitle: "Keep wheel open after running", target: nil, action: nil)
+    private let autoDismissCheckbox = NSButton(checkboxWithTitle: "Auto-close wheel after conversion", target: nil, action: nil)
     private let showRingCheckbox = NSButton(checkboxWithTitle: "Show charging progress ring", target: nil, action: nil)
 
     public override init(frame frameRect: NSRect) {
@@ -457,6 +458,12 @@ public final class RadialWheelCustomizeSheet: NSView {
         keepOpenCheckbox.action = #selector(keepOpenToggled)
         behaviorContainer.addSubview(keepOpenCheckbox)
 
+        autoDismissCheckbox.translatesAutoresizingMaskIntoConstraints = false
+        autoDismissCheckbox.state = PreferencesManager.shared.autoDismissWheelAfterRunning ? .on : .off
+        autoDismissCheckbox.target = self
+        autoDismissCheckbox.action = #selector(autoDismissToggled)
+        behaviorContainer.addSubview(autoDismissCheckbox)
+
         showRingCheckbox.translatesAutoresizingMaskIntoConstraints = false
         showRingCheckbox.state = PreferencesManager.shared.showChargingRing ? .on : .off
         showRingCheckbox.target = self
@@ -481,7 +488,11 @@ public final class RadialWheelCustomizeSheet: NSView {
             keepOpenCheckbox.leadingAnchor.constraint(equalTo: behaviorContainer.leadingAnchor),
             keepOpenCheckbox.trailingAnchor.constraint(equalTo: behaviorContainer.trailingAnchor),
 
-            showRingCheckbox.topAnchor.constraint(equalTo: keepOpenCheckbox.bottomAnchor, constant: 8),
+            autoDismissCheckbox.topAnchor.constraint(equalTo: keepOpenCheckbox.bottomAnchor, constant: 8),
+            autoDismissCheckbox.leadingAnchor.constraint(equalTo: behaviorContainer.leadingAnchor),
+            autoDismissCheckbox.trailingAnchor.constraint(equalTo: behaviorContainer.trailingAnchor),
+
+            showRingCheckbox.topAnchor.constraint(equalTo: autoDismissCheckbox.bottomAnchor, constant: 8),
             showRingCheckbox.leadingAnchor.constraint(equalTo: behaviorContainer.leadingAnchor),
             showRingCheckbox.trailingAnchor.constraint(equalTo: behaviorContainer.trailingAnchor)
         ])
@@ -541,6 +552,7 @@ public final class RadialWheelCustomizeSheet: NSView {
             labelModeSegment.selectedSegmentBezelColor = accent
         }
         keepOpenCheckbox.contentTintColor = accent
+        autoDismissCheckbox.contentTintColor = accent
         showRingCheckbox.contentTintColor = accent
     }
 
@@ -668,6 +680,10 @@ public final class RadialWheelCustomizeSheet: NSView {
 
     @objc private func keepOpenToggled() {
         PreferencesManager.shared.keepWheelOpenAfterRunning = (keepOpenCheckbox.state == .on)
+    }
+
+    @objc private func autoDismissToggled() {
+        PreferencesManager.shared.autoDismissWheelAfterRunning = (autoDismissCheckbox.state == .on)
     }
 
     @objc private func showRingToggled() {

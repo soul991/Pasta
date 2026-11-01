@@ -3885,6 +3885,13 @@ do {
     wheelOverlay.compactProgressButton.performClick(nil)
     assertTest(autoCloseCalled, "33.7 Reveal button click calls onCloseRequested")
 
+    // Test 33.7b: autoDismissWheelAfterRunning default and isolation
+    assertTest(PreferencesManager.shared.autoDismissWheelAfterRunning == false, "33.7b autoDismissWheelAfterRunning defaults to false")
+    PreferencesManager.shared.autoDismissWheelAfterRunning = true
+    assertTest(PreferencesManager.shared.autoDismissWheelAfterRunning == true, "33.7b autoDismissWheelAfterRunning toggles to true")
+    PreferencesManager.shared.autoDismissWheelAfterRunning = false
+    assertTest(PreferencesManager.shared.autoDismissWheelAfterRunning == false, "33.7b autoDismissWheelAfterRunning toggles back to false")
+
     // --- 34. Phase 10B Fix 8: P3 Hint Pill Tests ---
     print("\n--- 34. Phase 10B Fix 8: P3 Hint Pill Tests ---")
 

@@ -273,7 +273,6 @@ public final class RadialWheelOverlayViewController: NSViewController {
                 compactProgressIcon.image = img
                 compactProgressIcon.contentTintColor = .secondaryLabelColor
             }
-            scheduleAutoDismiss(delay: 2.0)
             return
         }
         if compactProgressButton.title == "Dismiss" {
@@ -290,7 +289,6 @@ public final class RadialWheelOverlayViewController: NSViewController {
             NSPasteboard.general.setString(details, forType: .string)
             compactProgressLabel.stringValue = "Error copied to clipboard ✓"
             compactProgressButton.title = "Dismiss"
-            scheduleAutoDismiss(delay: 2.0)
         }
     }
 
@@ -979,7 +977,6 @@ public final class RadialWheelOverlayViewController: NSViewController {
                                 self.compactProgressIcon.image = img
                                 self.compactProgressIcon.contentTintColor = .systemOrange
                             }
-                            self.scheduleAutoDismiss(delay: 6.0)
                         } else {
                             self.hudView.showError(error.localizedDescription)
                         }
@@ -1027,8 +1024,10 @@ public final class RadialWheelOverlayViewController: NSViewController {
                             self.compactProgressIcon.contentTintColor = .systemGreen
                         }
 
-                        // Auto-dismiss the wheel after 2.2 seconds upon completion
-                        self.scheduleAutoDismiss(delay: 2.2)
+                        // Auto-dismiss the wheel after 2.2 seconds only if autoDismissWheelAfterRunning is enabled
+                        if PreferencesManager.shared.autoDismissWheelAfterRunning {
+                            self.scheduleAutoDismiss(delay: 2.2)
+                        }
                     } else {
                         self.hudView.showSuccess(outputURL: output)
                     }
@@ -1050,7 +1049,6 @@ public final class RadialWheelOverlayViewController: NSViewController {
                             self.compactProgressIcon.image = img
                             self.compactProgressIcon.contentTintColor = .systemOrange
                         }
-                        self.scheduleAutoDismiss(delay: 6.0)
                     } else {
                         self.hudView.showError(error.localizedDescription)
                     }
