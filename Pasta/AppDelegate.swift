@@ -84,6 +84,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             button.action = #selector(statusItemClicked(_:))
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
+
+        if !DragMonitor.isAccessibilityTrusted() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+                self?.requestAccessibility()
+            }
+        }
     }
 
     @objc private func statusItemClicked(_ sender: NSStatusBarButton) {
@@ -136,7 +142,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func requestAccessibility() {
-        let trusted = DragMonitor.isAccessibilityTrusted(prompt: false)
+        let trusted = DragMonitor.isAccessibilityTrusted(prompt: true)
         if !trusted {
             if onboardingWindowController == nil {
                 onboardingWindowController = AccessibilityOnboardingWindowController()

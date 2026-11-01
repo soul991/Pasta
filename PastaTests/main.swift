@@ -3851,6 +3851,91 @@ do {
                "34.4 WheelGeometry detects dock encroachment as cramped (y=110 near minY=80)")
 }
 
+// ==================================================
+// Section 35: Trigger Hardening & Redundant Conversion Prevention Tests
+// ==================================================
+do {
+    print("\n--- 35. Phase 10B Trigger Hardening & Redundant Conversion Prevention ---")
+    // 35.1 WheelLayoutModel slots for a PNG file never offers PNG conversion
+    let samplePNG = URL(fileURLWithPath: "sample.png")
+    let pngSlots = WheelLayoutModel.shared.slots(for: samplePNG, isAdvanced: false)
+    let hasPNGTarget = pngSlots.contains { slot in
+        if case .action(let act) = slot.kind {
+            return act.outputExtension.lowercased() == "png" || act.id == "image.to.png"
+        }
+        return false
+    }
+    assertTest(!hasPNGTarget, "35.1 Wheel slots for sample.png never includes image.to.png or PNG output target")
+
+    // Pinned tools: verify 6 slots are present, filled with other available actions
+    let actionSlots = pngSlots.filter { if case .action = $0.kind { return true } else { return false } }
+    assertTest(actionSlots.count == 6, "35.1 Exactly 6 action slots populated for sample.png")
+
+    // 35.2 WheelLayoutModel slots for an MP4 file never offers MP4 conversion
+    let sampleMP4 = URL(fileURLWithPath: "sample.mp4")
+    let mp4Slots = WheelLayoutModel.shared.slots(for: sampleMP4, isAdvanced: false)
+    let hasMP4Target = mp4Slots.contains { slot in
+        if case .action(let act) = slot.kind {
+            return act.outputExtension.lowercased() == "mp4" || act.id == "video.to.mp4"
+        }
+        return false
+    }
+    assertTest(!hasMP4Target, "35.2 Wheel slots for sample.mp4 never includes video.to.mp4 or MP4 output target")
+
+    // 35.3 FormatRegistry image.to.png does NOT run rsvg-convert on non-SVG files
+    if let pngAction = FormatRegistry.shared.action(byId: "image.to.png") {
+        let fakeInput = URL(fileURLWithPath: "/path/to/test.png")
+        let fakeOutput = URL(fileURLWithPath: "/path/to/test_out.png")
+        let invs = pngAction.buildInvocations(fakeInput, fakeOutput)
+        let usesRsvg = invs.contains { $0.toolName == "rsvg-convert" }
+        assertTest(!usesRsvg, "35.3 image.to.png does NOT use rsvg-convert when converting a PNG/raster file")
+
+        let fakeSVGInput = URL(fileURLWithPath: "/path/to/vector.svg")
+        let svgInvs = pngAction.buildInvocations(fakeSVGInput, fakeOutput)
+        let svgUsesRsvg = svgInvs.contains { $0.toolName == "rsvg-convert" }
+        assertTest(svgUsesRsvg, "35.3 image.to.png uses rsvg-convert when converting an SVG file")
+    } else {
+        assertTest(false, "35.3 image.to.png found in FormatRegistry")
+    }
+
+    // 35.4 Stationary hold timer advances state and triggers wheel without mouse movement
+    let mockClock = MockDragMonitorClock(initialTime: 1000.0)
+    let mockReader = MockDragPasteboardReader(urls: [URL(fileURLWithPath: "/tmp/sample.png")])
+    let stationaryMonitor = DragMonitor(clock: mockClock, pasteboardReader: mockReader)
+
+    var wheelOpened = false
+    stationaryMonitor.onWheelOpen = { files, _, _ in
+        wheelOpened = true
+    }
+
+    // Arm via flagsChanged in idle
+    stationaryMonitor.processFlagsChanged(modifiers: [.shift], timestamp: 1000.0)
+    assertTest(stationaryMonitor.isArmed, "35.4 Shift down in idle with valid files arms DragMonitor")
+
+    // Tick stationary timer forward 150ms -> charging
+    stationaryMonitor.tickCharging(now: 1000.150)
+    assertTest(stationaryMonitor.isCharging, "35.4 Stationary timer advances state to charging at 150ms")
+
+    // Tick stationary timer to duration threshold -> opens wheel
+    stationaryMonitor.tickCharging(now: 1000.0 + stationaryMonitor.holdDurationSeconds)
+    assertTest(wheelOpened, "35.4 Stationary timer opens wheel at duration threshold without cursor movement")
+    assertTest(stationaryMonitor.isWheelOpen, "35.4 DragMonitor state is open after stationary timer completes")
+
+    // 35.5 Dismiss customize sheet restores wheel nodes and backplate
+    let overlayVC = RadialWheelOverlayViewController()
+    overlayVC.loadView()
+    overlayVC.viewDidLoad()
+    overlayVC.configure(files: [samplePNG], isOptionHeld: false)
+    overlayVC.showCustomizeSheet()
+    assertTest(overlayVC.currentCustomizeSheet != nil, "35.5 Customize sheet opened")
+
+    // Dismiss sheet: sheet dismissed, backplate visible
+    overlayVC.dismissCustomizeSheet(animated: false)
+    assertTest(overlayVC.currentCustomizeSheet == nil, "35.5 Dismiss sheet clears currentCustomizeSheet")
+    assertTest(!overlayVC.isBackplateHidden, "35.5 Backplate is visible after dismiss")
+    assertTest(overlayVC.backplateAlpha == 1.0, "35.5 Backplate alpha is 1.0 after dismiss")
+}
+
 print("\n==================================================")
 print("Test Suite Summary: \(passedTests)/\(totalTests) Passed, \(failedTests) Failed")
 print("==================================================")

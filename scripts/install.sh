@@ -20,11 +20,16 @@ if [ ! -w "/Applications" ]; then
 fi
 
 echo "2. Installing Pasta.app to $INSTALL_PATH..."
+pkill -x Pasta || true
+sleep 0.5
 rm -rf "$INSTALL_PATH"
 cp -R "Pasta.app" "$INSTALL_PATH"
 
 echo "3. Installing Finder Quick Action..."
 ./scripts/install_quick_action.sh
+
+echo "4. Launching $INSTALL_PATH..."
+open "$INSTALL_PATH"
 
 echo "=========================================="
 echo "Pasta successfully installed to: $INSTALL_PATH"

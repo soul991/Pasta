@@ -24,6 +24,12 @@ public final class RadialWheelOverlayViewController: NSViewController {
     public var currentCustomizeSheet: RadialWheelCustomizeSheet? {
         return customizeSheet
     }
+    public var isBackplateHidden: Bool {
+        return backplateView.isHidden
+    }
+    public var backplateAlpha: CGFloat {
+        return backplateView.alphaValue
+    }
 
     // Floating hint pill
     public let hintPillContainer = NSVisualEffectView()

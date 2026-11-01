@@ -43,19 +43,40 @@ public struct SystemDragPasteboardReader: DragPasteboardReader {
 
     public func extractFileURLs() -> [URL] {
         let pboard = NSPasteboard(name: .drag)
-        guard let items = pboard.pasteboardItems, !items.isEmpty else {
-            return []
-        }
 
-        var validURLs: [URL] = []
-        for item in items {
-            if let str = item.string(forType: .fileURL), let url = URL(string: str) {
-                if FileManager.default.fileExists(atPath: url.path) {
-                    validURLs.append(url)
-                }
+        // 1. Try reading NSURLs directly from the drag pasteboard
+        if let urls = pboard.readObjects(forClasses: [NSURL.self], options: nil) as? [URL], !urls.isEmpty {
+            let valid = urls.filter { FileManager.default.fileExists(atPath: $0.path) }
+            if !valid.isEmpty {
+                return valid
             }
         }
-        return validURLs
+
+        // 2. Try pasteboardItems with .fileURL
+        if let items = pboard.pasteboardItems, !items.isEmpty {
+            var validURLs: [URL] = []
+            for item in items {
+                if let str = item.string(forType: .fileURL), let url = URL(string: str) {
+                    if FileManager.default.fileExists(atPath: url.path) {
+                        validURLs.append(url)
+                    }
+                }
+            }
+            if !validURLs.isEmpty {
+                return validURLs
+            }
+        }
+
+        // 3. Try propertyList for NSFilenamesPboardType
+        let filenamesType = NSPasteboard.PasteboardType("NSFilenamesPboardType")
+        if let filenames = pboard.propertyList(forType: filenamesType) as? [String] {
+            let urls = filenames.map { URL(fileURLWithPath: $0) }.filter { FileManager.default.fileExists(atPath: $0.path) }
+            if !urls.isEmpty {
+                return urls
+            }
+        }
+
+        return []
     }
 }
 
@@ -145,6 +166,73 @@ public final class DragMonitor {
     private var localFlagsMonitor: Any?
     private var localKeyDownMonitor: Any?
 
+    // Active timer to advance charging state when mouse is stationary
+    private var chargingTimer: Timer?
+
+    private func startChargingTimer() {
+        stopChargingTimer()
+        guard clock is SystemDragMonitorClock else { return }
+        chargingTimer = Timer.scheduledTimer(withTimeInterval: 0.016, repeats: true) { [weak self] _ in
+            self?.tickCharging()
+        }
+    }
+
+    private func stopChargingTimer() {
+        chargingTimer?.invalidate()
+        chargingTimer = nil
+    }
+
+    public func tickCharging(now: TimeInterval? = nil) {
+        let currentNow = now ?? clock.now
+        switch state {
+        case .armed(let startedAt, let files, let location):
+            let elapsed = currentNow - startedAt
+            let duration = holdDurationSeconds
+            if elapsed >= duration - 0.0005 {
+                stopChargingTimer()
+                if preferences.showChargingRing && !preferences.reduceMotionEnabled {
+                    onChargingProgress?(1.0, location)
+                }
+                openWheel(openedAt: currentNow, files: files, location: location, isAdvanced: false)
+            } else if elapsed >= 0.120 {
+                let oldState = state
+                state = .charging(startedAt: startedAt, files: files, location: location)
+                logTransition(event: "timer.charging", location: location, oldState: oldState, newState: state)
+                let ringProgress = min(max(elapsed / duration, 0.0), 1.0)
+                if preferences.showChargingRing && !preferences.reduceMotionEnabled {
+                    onChargingProgress?(ringProgress, location)
+                }
+            }
+        case .charging(let startedAt, let files, let location):
+            let elapsed = currentNow - startedAt
+            let duration = holdDurationSeconds
+            if elapsed >= duration - 0.0005 {
+                stopChargingTimer()
+                if preferences.showChargingRing && !preferences.reduceMotionEnabled {
+                    onChargingProgress?(1.0, location)
+                }
+                openWheel(openedAt: currentNow, files: files, location: location, isAdvanced: false)
+            } else {
+                let ringProgress = min(max(elapsed / duration, 0.0), 1.0)
+                if preferences.showChargingRing && !preferences.reduceMotionEnabled {
+                    onChargingProgress?(ringProgress, location)
+                }
+            }
+        case .secondHoldArmed(let startedAt, let newFiles, let location):
+            let elapsed = currentNow - startedAt
+            if elapsed >= holdDurationSeconds - 0.0005 {
+                stopChargingTimer()
+                let oldState = state
+                rememberedFiles = newFiles
+                state = .open(openedAt: currentNow, files: newFiles, location: location, isAdvanced: false)
+                logTransition(event: "timer.secondHoldReplacedFiles", location: location, oldState: oldState, newState: state)
+                onFilesReplaced?(newFiles)
+            }
+        default:
+            stopChargingTimer()
+        }
+    }
+
     public init(
         clock: DragMonitorClock = SystemDragMonitorClock(),
         pasteboardReader: DragPasteboardReader = SystemDragPasteboardReader(),
@@ -171,6 +259,16 @@ public final class DragMonitor {
         default:
             return false
         }
+    }
+
+    public var isArmed: Bool {
+        if case .armed = state { return true }
+        return false
+    }
+
+    public var isCharging: Bool {
+        if case .charging = state { return true }
+        return false
     }
 
     // MARK: - Diagnostic Logging Helper
@@ -221,6 +319,7 @@ public final class DragMonitor {
             let oldState = state
             state = .armed(startedAt: timestamp, files: files, location: location)
             logTransition(event: "mouseDragged.armed", modifiers: modifiers, location: location, oldState: oldState, newState: state)
+            startChargingTimer()
 
         case .armed(let startedAt, let files, _):
             guard isShiftHeld else {
@@ -278,6 +377,7 @@ public final class DragMonitor {
                     let oldState = state
                     state = .secondHoldArmed(startedAt: timestamp, files: newFiles, location: location)
                     logTransition(event: "mouseDragged.startSecondHold", modifiers: modifiers, location: location, oldState: oldState, newState: state)
+                    startChargingTimer()
                 }
             }
 
@@ -359,6 +459,7 @@ public final class DragMonitor {
                     let oldState = state
                     state = .secondHoldArmed(startedAt: timestamp, files: newFiles, location: loc)
                     logTransition(event: "flagsChanged.secondHoldArmed", modifiers: modifiers, oldState: oldState, newState: state)
+                    startChargingTimer()
                 }
             }
 
@@ -368,9 +469,11 @@ public final class DragMonitor {
                 let oldState = state
                 state = .open(openedAt: startedAt, files: rememberedFiles, location: loc, isAdvanced: false)
                 logTransition(event: "flagsChanged.secondHoldRevert", modifiers: modifiers, oldState: oldState, newState: state)
+                stopChargingTimer()
             } else {
                 let elapsed = timestamp - startedAt
                 if elapsed >= holdDurationSeconds - 0.0005 {
+                    stopChargingTimer()
                     let oldState = state
                     rememberedFiles = newFiles
                     state = .open(openedAt: timestamp, files: newFiles, location: loc, isAdvanced: false)
@@ -380,7 +483,14 @@ public final class DragMonitor {
             }
 
         case .idle:
-            break
+            guard isShiftHeld else { break }
+            let files = pasteboardReader.extractFileURLs()
+            guard !files.isEmpty else { break }
+            let location = NSEvent.mouseLocation
+            let oldState = state
+            state = .armed(startedAt: timestamp, files: files, location: location)
+            logTransition(event: "flagsChanged.armed", modifiers: modifiers, location: location, oldState: oldState, newState: state)
+            startChargingTimer()
         }
     }
 
@@ -409,6 +519,7 @@ public final class DragMonitor {
 
     /// Process mouse up (drop outside or drag ending)
     public func processMouseUp(timestamp: TimeInterval) {
+        stopChargingTimer()
         switch state {
         case .armed, .charging:
             cancelCharging(reason: "Mouse up during charging")
@@ -436,6 +547,7 @@ public final class DragMonitor {
     // MARK: - Actions
 
     private func cancelCharging(reason: String = "Cancelled") {
+        stopChargingTimer()
         let oldState = state
         state = .idle
         optionKeyDownTimestamp = nil
@@ -444,6 +556,7 @@ public final class DragMonitor {
     }
 
     private func openWheel(openedAt: TimeInterval, files: [URL], location: NSPoint, isAdvanced: Bool) {
+        stopChargingTimer()
         let oldState = state
         rememberedFiles = files
         state = .open(openedAt: openedAt, files: files, location: location, isAdvanced: isAdvanced)
@@ -461,6 +574,7 @@ public final class DragMonitor {
     }
 
     public func closeWheel(reason: String = "User requested close") {
+        stopChargingTimer()
         let oldState = state
         state = .idle
         rememberedFiles.removeAll()
@@ -545,6 +659,7 @@ public final class DragMonitor {
     }
 
     public func stopMonitoring() {
+        stopChargingTimer()
         if let gdm = globalDragMonitor { NSEvent.removeMonitor(gdm); globalDragMonitor = nil }
         if let gmu = globalMouseUpMonitor { NSEvent.removeMonitor(gmu); globalMouseUpMonitor = nil }
         if let gfm = globalFlagsMonitor { NSEvent.removeMonitor(gfm); globalFlagsMonitor = nil }

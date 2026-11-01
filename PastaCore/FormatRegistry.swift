@@ -178,7 +178,9 @@ public final class FormatRegistry {
         ]
         for file in sampleFiles {
             for act in availableActions(for: file) {
-                collected[act.id] = act
+                if collected[act.id] == nil {
+                    collected[act.id] = act
+                }
             }
         }
         for act in metadataActions(for: "jpg") {
@@ -336,7 +338,8 @@ public final class FormatRegistry {
                 category: .image,
                 iconName: FormatRegistry.icon(forFormat: "jpeg")
             ) { input, output in
-                if inputExt == "svg" {
+                let currentExt = input.pathExtension.lowercased()
+                if currentExt == "svg" {
                     return [
                         Invocation(toolName: "magick", arguments: [input.path, output.path])
                     ]
@@ -357,7 +360,8 @@ public final class FormatRegistry {
                 category: .image,
                 iconName: FormatRegistry.icon(forFormat: "png")
             ) { input, output in
-                if inputExt == "svg" {
+                let currentExt = input.pathExtension.lowercased()
+                if currentExt == "svg" {
                     return [
                         Invocation(toolName: "rsvg-convert", arguments: ["-o", output.path, input.path])
                     ]
@@ -378,7 +382,8 @@ public final class FormatRegistry {
                 category: .image,
                 iconName: FormatRegistry.icon(forFormat: "webp")
             ) { input, output in
-                if ["png", "jpg", "jpeg", "tiff", "tif"].contains(inputExt) {
+                let currentExt = input.pathExtension.lowercased()
+                if ["png", "jpg", "jpeg", "tiff", "tif"].contains(currentExt) {
                     return [
                         Invocation(toolName: "cwebp", arguments: ["-q", "80", input.path, "-o", output.path])
                     ]

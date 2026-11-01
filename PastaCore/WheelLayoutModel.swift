@@ -455,36 +455,44 @@ public final class WheelLayoutModel {
         let totalSlots = 8
         var result: [WheelSlot] = []
 
-        let fileCategory: ActionCategory
-        let allActions: [ConversionAction]
         if let file = fileURL {
-            let actions = FormatRegistry.shared.actions(for: file, isOptionHeld: isAdvanced)
-            allActions = actions
-            fileCategory = actions.first?.category ?? .image
-        } else {
-            fileCategory = .image
-            allActions = []
-        }
+            let allActions = FormatRegistry.shared.actions(for: file, isOptionHeld: isAdvanced)
+            let fileCategory = allActions.first?.category ?? .image
+            let pinnedIDs = pinnedToolIDs(for: fileCategory).filter { !isToolHidden($0, in: fileCategory) }
 
-        let pinnedIDs = pinnedToolIDs(for: fileCategory).filter { !isToolHidden($0, in: fileCategory) }
-
-        // Slots 0 to 5: Primary tools
-        for slotIndex in 0..<6 {
-            let angle = (-CGFloat.pi / 2.0) + (CGFloat(slotIndex) * (2.0 * CGFloat.pi / CGFloat(totalSlots)))
-
-            if slotIndex < pinnedIDs.count {
-                let targetID = pinnedIDs[slotIndex]
-                if let matched = allActions.first(where: { $0.id == targetID }) ?? FormatRegistry.shared.action(byId: targetID) {
-                    result.append(WheelSlot(slotIndex: slotIndex, kind: .action(matched), angle: angle))
-                    continue
+            // 1. Gather all pinned tools that are valid for this specific file
+            var chosenActions: [ConversionAction] = []
+            for targetID in pinnedIDs {
+                if let matched = allActions.first(where: { $0.id == targetID }) {
+                    chosenActions.append(matched)
                 }
             }
 
-            // Fallback to unused actions
-            if let nextAction = allActions.first(where: { act in
-                !result.contains(where: { $0.action?.id == act.id }) && !isToolHidden(act.id, in: fileCategory)
-            }) {
-                result.append(WheelSlot(slotIndex: slotIndex, kind: .action(nextAction), angle: angle))
+            // 2. If fewer than 6, fill remaining slots with other available actions for this file
+            if chosenActions.count < 6 {
+                let chosenIDs = Set(chosenActions.map { $0.id })
+                let remaining = allActions.filter { !chosenIDs.contains($0.id) && !isToolHidden($0.id, in: fileCategory) }
+                for act in remaining {
+                    chosenActions.append(act)
+                    if chosenActions.count == 6 { break }
+                }
+            }
+
+            // 3. Populate slots 0..<chosenActions.count
+            for slotIndex in 0..<min(6, chosenActions.count) {
+                let angle = (-CGFloat.pi / 2.0) + (CGFloat(slotIndex) * (2.0 * CGFloat.pi / CGFloat(totalSlots)))
+                result.append(WheelSlot(slotIndex: slotIndex, kind: .action(chosenActions[slotIndex]), angle: angle))
+            }
+        } else {
+            // Preview mode (no file dragged): display the 6 pinned tools for .image
+            let fileCategory: ActionCategory = .image
+            let pinnedIDs = pinnedToolIDs(for: fileCategory).filter { !isToolHidden($0, in: fileCategory) }
+            for slotIndex in 0..<min(6, pinnedIDs.count) {
+                let angle = (-CGFloat.pi / 2.0) + (CGFloat(slotIndex) * (2.0 * CGFloat.pi / CGFloat(totalSlots)))
+                let targetID = pinnedIDs[slotIndex]
+                if let act = FormatRegistry.shared.action(byId: targetID) {
+                    result.append(WheelSlot(slotIndex: slotIndex, kind: .action(act), angle: angle))
+                }
             }
         }
 

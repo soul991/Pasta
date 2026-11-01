@@ -76,6 +76,10 @@ public final class RadialWheelOverlayPanel: NSPanel {
     }
 
     public func dismiss() {
+        wheelViewController.dismissCustomizeSheet(animated: false)
+        wheelViewController.dismissMoreView()
+        wheelViewController.dismissParameterPanel(animated: false)
+
         let isReduceMotion = PreferencesManager.shared.reduceMotionEnabled
         if !isReduceMotion {
             NSAnimationContext.runAnimationGroup({ ctx in
