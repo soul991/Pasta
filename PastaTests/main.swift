@@ -4156,6 +4156,7 @@ do {
     monitor5.tickCharging(now: 5100.050)
     assertTest(monitor5.state == .idle, "36.5 tickCharging detected released mouse button and cancelled to idle")
     assertTest(!monitor5.isChargingTimerRunning, "36.5 tickCharging stopped charging timer upon button release")
+    assertTest(!monitor5.dragSessionActive, "36.5 tickCharging clears dragSessionActive upon button release")
 
     // 36.6 Typing simulation: 50 Shift press/release cycles of 80-250 ms with stale pasteboard: never arms
     let clock6 = MockDragMonitorClock(initialTime: 6000.0)
@@ -4192,6 +4193,16 @@ do {
     assertTest(!typedCycleOpenedWheel, "36.6 Typing simulation: wheel NEVER opens")
     assertTest(monitor6.state == .idle, "36.6 Typing simulation: monitor remains in idle state throughout")
     assertTest(!monitor6.isChargingTimerRunning, "36.6 Typing simulation: no charging timer running")
+
+    // 36.6b Shortcut typing simulation (Cmd+Shift, Ctrl+Shift): never arms with stale pasteboard
+    monitor6.processFlagsChanged(modifiers: [.command, .shift], timestamp: simClock)
+    clock6.advance(by: 1.0)
+    monitor6.tickCharging(now: simClock + 1.0)
+    assertTest(monitor6.state == .idle && !typedCycleOpenedWheel, "36.6b Shortcut typing Cmd+Shift never arms with stale pasteboard")
+
+    // 36.6c stopMonitoring clears dragSessionActive
+    monitor5.stopMonitoring()
+    assertTest(!monitor5.dragSessionActive, "36.6c stopMonitoring clears dragSessionActive")
 
     // 36.7 Sticky wheel protection: stale pasteboard never re-targets open wheel; only a new real drag may
     let clock7 = MockDragMonitorClock(initialTime: 7000.0)

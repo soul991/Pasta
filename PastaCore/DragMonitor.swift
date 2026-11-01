@@ -176,7 +176,15 @@ public final class DragMonitor {
 
     // Current internal state
     public private(set) var state: State = .idle
-    public private(set) var dragSessionActive: Bool = false
+    private var _dragSessionActive: Bool = false
+    public var dragSessionActive: Bool {
+        get {
+            return _dragSessionActive && mouseStateProvider.isLeftButtonDown
+        }
+        set {
+            _dragSessionActive = newValue
+        }
+    }
     public private(set) var dragPasteboardBaselineChangeCount: Int = 0
 
     // Sticky context: files remembered while wheel remains open
@@ -208,9 +216,11 @@ public final class DragMonitor {
     private func startChargingTimer() {
         stopChargingTimer()
         guard clock is SystemDragMonitorClock else { return }
-        chargingTimer = Timer.scheduledTimer(withTimeInterval: 0.016, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 0.016, repeats: true) { [weak self] _ in
             self?.tickCharging()
         }
+        RunLoop.main.add(timer, forMode: .common)
+        chargingTimer = timer
     }
 
     private func stopChargingTimer() {
@@ -219,6 +229,10 @@ public final class DragMonitor {
     }
 
     public func tickCharging(now: TimeInterval? = nil) {
+        if !mouseStateProvider.isLeftButtonDown {
+            dragSessionActive = false
+        }
+
         // Stop charging immediately if mouse button released or dragSession no longer active
         guard mouseStateProvider.isLeftButtonDown && dragSessionActive else {
             stopChargingTimer()
@@ -380,24 +394,37 @@ public final class DragMonitor {
         let hasOtherModifiers = otherModifiers.contains(.control) ||
                                otherModifiers.contains(.command)
 
+        let isLeftDown = mouseStateProvider.isLeftButtonDown
+        let currentChange = pasteboardReader.changeCount
+
         // Rule: Any other modifier during charging cancels
         if hasOtherModifiers {
+            if isShiftHeld && state == .idle {
+                logArmingDecision(
+                    allowed: false,
+                    source: "mouseDragged.idle",
+                    baseline: dragPasteboardBaselineChangeCount,
+                    current: currentChange,
+                    buttonDown: isLeftDown,
+                    sessionActive: dragSessionActive,
+                    reason: "Cancel modifier present (Control or Command)"
+                )
+            }
             if case .armed = state { cancelCharging(reason: "Cancel modifier during armed") }
             if case .charging = state { cancelCharging(reason: "Cancel modifier during charging") }
             return
         }
 
-        let isLeftDown = mouseStateProvider.isLeftButtonDown
-        let currentChange = pasteboardReader.changeCount
-
         // 1. Detect drag session activation during mouse drag:
         // A drag began after the latest mouseDown: during leftMouseDragged, the changeCount differs from that baseline
         // AND the drag pasteboard contains file URLs.
+        var detectedFiles: [URL]? = nil
         if isLeftDown && !dragSessionActive {
             if currentChange != dragPasteboardBaselineChangeCount {
                 let files = pasteboardReader.extractFileURLs()
                 if !files.isEmpty {
                     dragSessionActive = true
+                    detectedFiles = files
                     PastaLogger.shared.info("DragMonitor drag session activated: baseline=\(dragPasteboardBaselineChangeCount), current=\(currentChange), filesCount=\(files.count)")
                 }
             }
@@ -435,7 +462,7 @@ public final class DragMonitor {
 
             // Both isLeftDown and dragSessionActive are true!
             // Never read file URLs from the drag pasteboard for arming unless dragSessionActive is true.
-            let files = pasteboardReader.extractFileURLs()
+            let files = detectedFiles ?? pasteboardReader.extractFileURLs()
             guard !files.isEmpty else {
                 logArmingDecision(
                     allowed: false,
@@ -536,7 +563,27 @@ public final class DragMonitor {
                 }
 
                 let newFiles = pasteboardReader.extractFileURLs()
-                if !newFiles.isEmpty && newFiles != currentFiles {
+                if newFiles.isEmpty {
+                    logArmingDecision(
+                        allowed: false,
+                        source: "mouseDragged.secondHold",
+                        baseline: dragPasteboardBaselineChangeCount,
+                        current: currentChange,
+                        buttonDown: isLeftDown,
+                        sessionActive: dragSessionActive,
+                        reason: "Re-targeting rejected: drag pasteboard contains no file URLs"
+                    )
+                } else if newFiles == currentFiles {
+                    logArmingDecision(
+                        allowed: false,
+                        source: "mouseDragged.secondHold",
+                        baseline: dragPasteboardBaselineChangeCount,
+                        current: currentChange,
+                        buttonDown: isLeftDown,
+                        sessionActive: dragSessionActive,
+                        reason: "Re-targeting rejected: files identical to currently open wheel"
+                    )
+                } else {
                     let oldState = state
                     state = .secondHoldArmed(startedAt: timestamp, files: newFiles, location: location)
                     logArmingDecision(
@@ -593,14 +640,25 @@ public final class DragMonitor {
         let otherModifiers = modifiers.subtracting([.shift, .option])
         let hasCancelModifiers = otherModifiers.contains(.control) || otherModifiers.contains(.command)
 
+        let isLeftDown = mouseStateProvider.isLeftButtonDown
+        let currentChange = pasteboardReader.changeCount
+
         if hasCancelModifiers {
+            if isShiftHeld && state == .idle {
+                logArmingDecision(
+                    allowed: false,
+                    source: "flagsChanged.idle",
+                    baseline: dragPasteboardBaselineChangeCount,
+                    current: currentChange,
+                    buttonDown: isLeftDown,
+                    sessionActive: dragSessionActive,
+                    reason: "Cancel modifier present (Control or Command)"
+                )
+            }
             if case .armed = state { cancelCharging(reason: "Cancel modifier during armed") }
             if case .charging = state { cancelCharging(reason: "Cancel modifier during charging") }
             return
         }
-
-        let isLeftDown = mouseStateProvider.isLeftButtonDown
-        let currentChange = pasteboardReader.changeCount
 
         switch state {
         case .armed, .charging:
@@ -653,7 +711,27 @@ public final class DragMonitor {
                 }
 
                 let newFiles = pasteboardReader.extractFileURLs()
-                if !newFiles.isEmpty && newFiles != files {
+                if newFiles.isEmpty {
+                    logArmingDecision(
+                        allowed: false,
+                        source: "flagsChanged.secondHold",
+                        baseline: dragPasteboardBaselineChangeCount,
+                        current: currentChange,
+                        buttonDown: isLeftDown,
+                        sessionActive: dragSessionActive,
+                        reason: "Re-targeting rejected: drag pasteboard contains no file URLs"
+                    )
+                } else if newFiles == files {
+                    logArmingDecision(
+                        allowed: false,
+                        source: "flagsChanged.secondHold",
+                        baseline: dragPasteboardBaselineChangeCount,
+                        current: currentChange,
+                        buttonDown: isLeftDown,
+                        sessionActive: dragSessionActive,
+                        reason: "Re-targeting rejected: files identical to currently open wheel"
+                    )
+                } else {
                     let oldState = state
                     state = .secondHoldArmed(startedAt: timestamp, files: newFiles, location: loc)
                     logArmingDecision(
@@ -893,6 +971,18 @@ public final class DragMonitor {
             guard let self = self else { return }
             self.processKeyDown(keyCode: event.keyCode, timestamp: event.timestamp)
         }
+        if globalMouseDownMonitor == nil {
+            PastaLogger.shared.warning("DragMonitor: globalMouseDownMonitor returned nil (requires Accessibility / Input Monitoring permission)")
+        }
+        if globalDragMonitor == nil {
+            PastaLogger.shared.warning("DragMonitor: globalDragMonitor returned nil (requires Accessibility / Input Monitoring permission)")
+        }
+        if globalMouseUpMonitor == nil {
+            PastaLogger.shared.warning("DragMonitor: globalMouseUpMonitor returned nil (requires Accessibility / Input Monitoring permission)")
+        }
+        if globalFlagsMonitor == nil {
+            PastaLogger.shared.warning("DragMonitor: globalFlagsMonitor returned nil (requires Accessibility / Input Monitoring permission)")
+        }
         if globalKeyDownMonitor == nil {
             PastaLogger.shared.warning("DragMonitor: globalKeyDownMonitor returned nil (requires Accessibility / Input Monitoring permission)")
         }
@@ -935,6 +1025,7 @@ public final class DragMonitor {
 
     public func stopMonitoring() {
         stopChargingTimer()
+        dragSessionActive = false
         if let gmd = globalMouseDownMonitor { NSEvent.removeMonitor(gmd); globalMouseDownMonitor = nil }
         if let gdm = globalDragMonitor { NSEvent.removeMonitor(gdm); globalDragMonitor = nil }
         if let gmu = globalMouseUpMonitor { NSEvent.removeMonitor(gmu); globalMouseUpMonitor = nil }
