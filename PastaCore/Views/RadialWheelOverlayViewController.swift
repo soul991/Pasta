@@ -49,8 +49,24 @@ public final class RadialWheelOverlayViewController: NSViewController {
     public let compactProgressButton = NSButton(title: "Reveal", target: nil, action: nil)
     public var currentConversionJobID: UUID?
     public var currentConvertingFileName: String?
-    private var lastOutputURL: URL?
-    private var lastErrorMessage: String?
+    public var lastOutputURL: URL?
+    public var lastErrorMessage: String?
+    private var autoDismissWorkItem: DispatchWorkItem?
+
+    public func scheduleAutoDismiss(delay: TimeInterval = 2.2) {
+        cancelAutoDismiss()
+        let item = DispatchWorkItem { [weak self] in
+            guard let self = self else { return }
+            self.onCloseRequested?()
+        }
+        autoDismissWorkItem = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: item)
+    }
+
+    public func cancelAutoDismiss() {
+        autoDismissWorkItem?.cancel()
+        autoDismissWorkItem = nil
+    }
 
     public override func loadView() {
         // Frame sized via WheelGeometry to accommodate all 8 nodes, max 1.06 hover scale,
@@ -237,10 +253,12 @@ public final class RadialWheelOverlayViewController: NSViewController {
     }
 
     @objc private func closeButtonClicked() {
+        cancelAutoDismiss()
         DragMonitor.shared.closeWheel(reason: "Close button (×) clicked")
     }
 
     @objc private func revealOutputClicked() {
+        cancelAutoDismiss()
         if compactProgressButton.title == "Cancel" {
             if let jid = currentConversionJobID {
                 JobRunner.shared.cancel(jobId: jid)
@@ -255,19 +273,24 @@ public final class RadialWheelOverlayViewController: NSViewController {
                 compactProgressIcon.image = img
                 compactProgressIcon.contentTintColor = .secondaryLabelColor
             }
+            scheduleAutoDismiss(delay: 2.0)
             return
         }
         if compactProgressButton.title == "Dismiss" {
             compactProgressContainer.isHidden = true
+            onCloseRequested?()
             return
         }
         if let url = lastOutputURL {
             NSWorkspace.shared.activateFileViewerSelecting([url])
+            onCloseRequested?()
         } else if let errorMsg = lastErrorMessage {
             let details = "Pasta Error Report\nAction error: \(errorMsg)\nTimestamp: \(ISO8601DateFormatter().string(from: Date()))"
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(details, forType: .string)
             compactProgressLabel.stringValue = "Error copied to clipboard ✓"
+            compactProgressButton.title = "Dismiss"
+            scheduleAutoDismiss(delay: 2.0)
         }
     }
 
@@ -339,6 +362,7 @@ public final class RadialWheelOverlayViewController: NSViewController {
     }
 
     public func configure(files: [URL], isOptionHeld: Bool) {
+        cancelAutoDismiss()
         self.targetFiles = files
         self.isAdvanced = isOptionHeld
 
@@ -880,6 +904,7 @@ public final class RadialWheelOverlayViewController: NSViewController {
     }
 
     private func performConversion(action: ConversionAction, params: ParameterValues = [:], formModel: ParameterFormModel? = nil) {
+        cancelAutoDismiss()
         guard let file = targetFiles.first else { return }
         DragMonitor.shared.actionExecuted()
 
@@ -954,6 +979,7 @@ public final class RadialWheelOverlayViewController: NSViewController {
                                 self.compactProgressIcon.image = img
                                 self.compactProgressIcon.contentTintColor = .systemOrange
                             }
+                            self.scheduleAutoDismiss(delay: 6.0)
                         } else {
                             self.hudView.showError(error.localizedDescription)
                         }
@@ -1000,6 +1026,9 @@ public final class RadialWheelOverlayViewController: NSViewController {
                             self.compactProgressIcon.image = img
                             self.compactProgressIcon.contentTintColor = .systemGreen
                         }
+
+                        // Auto-dismiss the wheel after 2.2 seconds upon completion
+                        self.scheduleAutoDismiss(delay: 2.2)
                     } else {
                         self.hudView.showSuccess(outputURL: output)
                     }
@@ -1021,6 +1050,7 @@ public final class RadialWheelOverlayViewController: NSViewController {
                             self.compactProgressIcon.image = img
                             self.compactProgressIcon.contentTintColor = .systemOrange
                         }
+                        self.scheduleAutoDismiss(delay: 6.0)
                     } else {
                         self.hudView.showError(error.localizedDescription)
                     }

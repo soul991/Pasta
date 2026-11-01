@@ -3856,6 +3856,37 @@ do {
     assertTest(wheelOverlay.compactProgressLabel.stringValue == "Conversion cancelled", "33.6 Compact progress label shows 'Conversion cancelled'")
     assertTest(wheelOverlay.compactProgressButton.title == "Dismiss", "33.6 Compact progress button changes to 'Dismiss' after cancel")
 
+    // 33.7 Auto-dismiss on process completion & button dismiss wiring
+    var autoCloseCalled = false
+    wheelOverlay.onCloseRequested = { autoCloseCalled = true }
+
+    // Test scheduleAutoDismiss fires after delay
+    wheelOverlay.scheduleAutoDismiss(delay: 0.05)
+    RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.02))
+    assertTest(!autoCloseCalled, "33.7 Auto-dismiss has not fired before deadline")
+    RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.06))
+    assertTest(autoCloseCalled, "33.7 Auto-dismiss fires onCloseRequested after deadline")
+
+    // Test cancelAutoDismiss prevents close
+    autoCloseCalled = false
+    wheelOverlay.scheduleAutoDismiss(delay: 0.05)
+    wheelOverlay.cancelAutoDismiss()
+    RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.08))
+    assertTest(!autoCloseCalled, "33.7 cancelAutoDismiss cancels pending close")
+
+    // Test Dismiss button click triggers onCloseRequested
+    autoCloseCalled = false
+    wheelOverlay.compactProgressButton.title = "Dismiss"
+    wheelOverlay.compactProgressButton.performClick(nil)
+    assertTest(autoCloseCalled, "33.7 Dismiss button click calls onCloseRequested")
+
+    // Test Reveal button click triggers onCloseRequested when output URL is present
+    autoCloseCalled = false
+    wheelOverlay.lastOutputURL = URL(fileURLWithPath: "/tmp/sample_output.mp4")
+    wheelOverlay.compactProgressButton.title = "Reveal"
+    wheelOverlay.compactProgressButton.performClick(nil)
+    assertTest(autoCloseCalled, "33.7 Reveal button click calls onCloseRequested")
+
     // --- 34. Phase 10B Fix 8: P3 Hint Pill Tests ---
     print("\n--- 34. Phase 10B Fix 8: P3 Hint Pill Tests ---")
 

@@ -76,6 +76,7 @@ public final class RadialWheelOverlayPanel: NSPanel {
     }
 
     public func dismiss() {
+        wheelViewController.cancelAutoDismiss()
         wheelViewController.dismissCustomizeSheet(animated: false)
         wheelViewController.dismissMoreView()
         wheelViewController.dismissParameterPanel(animated: false)
