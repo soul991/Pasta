@@ -25,6 +25,7 @@ public final class RadialWheelCustomizeSheet: NSView {
     // Primary tools controls
     private let categorySegment = NSSegmentedControl()
     private let toolsStackView = NSStackView()
+    private let addToolPicker = NSPopUpButton()
     private var selectedCategory: ActionCategory = .image
 
     // Behavior controls
@@ -289,6 +290,11 @@ public final class RadialWheelCustomizeSheet: NSView {
         toolsStackView.distribution = .fillEqually
         primaryToolsContainer.addSubview(toolsStackView)
 
+        addToolPicker.translatesAutoresizingMaskIntoConstraints = false
+        addToolPicker.target = self
+        addToolPicker.action = #selector(addToolPickerChanged)
+        primaryToolsContainer.addSubview(addToolPicker)
+
         let resetBtn = NSButton(title: "Reset Category to Defaults", target: self, action: #selector(resetCategoryClicked))
         resetBtn.translatesAutoresizingMaskIntoConstraints = false
         resetBtn.bezelStyle = .rounded
@@ -302,9 +308,14 @@ public final class RadialWheelCustomizeSheet: NSView {
             toolsStackView.topAnchor.constraint(equalTo: categorySegment.bottomAnchor, constant: 10),
             toolsStackView.leadingAnchor.constraint(equalTo: primaryToolsContainer.leadingAnchor),
             toolsStackView.trailingAnchor.constraint(equalTo: primaryToolsContainer.trailingAnchor),
-            toolsStackView.bottomAnchor.constraint(equalTo: resetBtn.topAnchor, constant: -10),
 
-            resetBtn.bottomAnchor.constraint(equalTo: primaryToolsContainer.bottomAnchor),
+            addToolPicker.topAnchor.constraint(equalTo: toolsStackView.bottomAnchor, constant: 8),
+            addToolPicker.leadingAnchor.constraint(equalTo: primaryToolsContainer.leadingAnchor),
+            addToolPicker.trailingAnchor.constraint(equalTo: primaryToolsContainer.trailingAnchor),
+            addToolPicker.heightAnchor.constraint(equalToConstant: 24),
+
+            resetBtn.topAnchor.constraint(equalTo: addToolPicker.bottomAnchor, constant: 8),
+            resetBtn.bottomAnchor.constraint(lessThanOrEqualTo: primaryToolsContainer.bottomAnchor),
             resetBtn.centerXAnchor.constraint(equalTo: primaryToolsContainer.centerXAnchor)
         ])
 
@@ -316,59 +327,55 @@ public final class RadialWheelCustomizeSheet: NSView {
 
         let pinnedIDs = WheelLayoutModel.shared.pinnedToolIDs(for: selectedCategory)
         for (index, toolID) in pinnedIDs.enumerated() {
-            let row = NSView()
+            let row = PinnedToolRowView(slotIndex: index, toolID: toolID)
             row.translatesAutoresizingMaskIntoConstraints = false
-            row.wantsLayer = true
-            row.layer?.cornerRadius = 6
-            row.layer?.backgroundColor = NSColor(white: 0.2, alpha: 0.5).cgColor
-
-            let label = NSTextField(labelWithString: "\(index + 1). \(toolID)")
-            label.translatesAutoresizingMaskIntoConstraints = false
-            label.font = NSFont.systemFont(ofSize: 11, weight: .medium)
-            label.textColor = .white
-            row.addSubview(label)
-
-            let isHidden = WheelLayoutModel.shared.isToolHidden(toolID, in: selectedCategory)
-            let hideBtn = NSButton(title: isHidden ? "Show" : "Hide", target: self, action: #selector(toggleHideClicked(_:)))
-            hideBtn.translatesAutoresizingMaskIntoConstraints = false
-            hideBtn.bezelStyle = .inline
-            hideBtn.tag = index
-            row.addSubview(hideBtn)
-
-            let upBtn = NSButton(title: "▲", target: self, action: #selector(moveToolUpClicked(_:)))
-            upBtn.translatesAutoresizingMaskIntoConstraints = false
-            upBtn.bezelStyle = .inline
-            upBtn.tag = index
-            upBtn.isEnabled = (index > 0)
-            row.addSubview(upBtn)
-
-            let downBtn = NSButton(title: "▼", target: self, action: #selector(moveToolDownClicked(_:)))
-            downBtn.translatesAutoresizingMaskIntoConstraints = false
-            downBtn.bezelStyle = .inline
-            downBtn.tag = index
-            downBtn.isEnabled = (index < pinnedIDs.count - 1)
-            row.addSubview(downBtn)
-
-            NSLayoutConstraint.activate([
-                label.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: 8),
-                label.centerYAnchor.constraint(equalTo: row.centerYAnchor),
-                label.trailingAnchor.constraint(lessThanOrEqualTo: hideBtn.leadingAnchor, constant: -4),
-
-                downBtn.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: -6),
-                downBtn.centerYAnchor.constraint(equalTo: row.centerYAnchor),
-                downBtn.widthAnchor.constraint(equalToConstant: 24),
-
-                upBtn.trailingAnchor.constraint(equalTo: downBtn.leadingAnchor, constant: -4),
-                upBtn.centerYAnchor.constraint(equalTo: row.centerYAnchor),
-                upBtn.widthAnchor.constraint(equalToConstant: 24),
-
-                hideBtn.trailingAnchor.constraint(equalTo: upBtn.leadingAnchor, constant: -4),
-                hideBtn.centerYAnchor.constraint(equalTo: row.centerYAnchor),
-                hideBtn.widthAnchor.constraint(equalToConstant: 44)
-            ])
-
+            row.heightAnchor.constraint(equalToConstant: 28).isActive = true
+            row.onRemove = { [weak self] idx in
+                guard let self = self else { return }
+                WheelLayoutModel.shared.removePinnedTool(at: idx, in: self.selectedCategory)
+                self.reloadToolsList()
+                self.onSettingsChanged?()
+            }
+            row.onMoveUp = { [weak self] idx in
+                guard let self = self else { return }
+                if idx > 0 {
+                    WheelLayoutModel.shared.reorderPinnedTool(from: idx, to: idx - 1, in: self.selectedCategory)
+                    self.reloadToolsList()
+                    self.onSettingsChanged?()
+                }
+            }
+            row.onMoveDown = { [weak self] idx in
+                guard let self = self else { return }
+                let pinned = WheelLayoutModel.shared.pinnedToolIDs(for: self.selectedCategory)
+                if idx < pinned.count - 1 {
+                    WheelLayoutModel.shared.reorderPinnedTool(from: idx, to: idx + 1, in: self.selectedCategory)
+                    self.reloadToolsList()
+                    self.onSettingsChanged?()
+                }
+            }
+            row.onReorder = { [weak self] fromIdx, toIdx in
+                guard let self = self else { return }
+                WheelLayoutModel.shared.reorderPinnedTool(from: fromIdx, to: toIdx, in: self.selectedCategory)
+                self.reloadToolsList()
+                self.onSettingsChanged?()
+            }
             toolsStackView.addArrangedSubview(row)
         }
+
+        // Update "Add Tool" picker items
+        addToolPicker.removeAllItems()
+        addToolPicker.addItem(withTitle: "＋ Add Tool to Wheel...")
+        let unpinned = WheelLayoutModel.shared.unpinnedTools(for: selectedCategory)
+        for act in unpinned {
+            let item = NSMenuItem(title: act.shortHumanName, action: nil, keyEquivalent: "")
+            item.representedObject = act.id
+            if let img = NSImage(systemSymbolName: act.iconName, accessibilityDescription: nil) {
+                img.size = NSSize(width: 14, height: 14)
+                item.image = img
+            }
+            addToolPicker.menu?.addItem(item)
+        }
+        addToolPicker.isEnabled = !unpinned.isEmpty
     }
 
     // MARK: - Section 3: Behavior
@@ -509,13 +516,18 @@ public final class RadialWheelCustomizeSheet: NSView {
         }
     }
 
-    @objc private func toggleHideClicked(_ sender: NSButton) {
+    @objc private func removePinnedToolClicked(_ sender: NSButton) {
         let index = sender.tag
-        let pinned = WheelLayoutModel.shared.pinnedToolIDs(for: selectedCategory)
-        guard index >= 0 && index < pinned.count else { return }
-        let toolID = pinned[index]
-        let currentlyHidden = WheelLayoutModel.shared.isToolHidden(toolID, in: selectedCategory)
-        WheelLayoutModel.shared.setToolHidden(toolID, hidden: !currentlyHidden, in: selectedCategory)
+        WheelLayoutModel.shared.removePinnedTool(at: index, in: selectedCategory)
+        reloadToolsList()
+        onSettingsChanged?()
+    }
+
+    @objc private func addToolPickerChanged() {
+        guard let item = addToolPicker.selectedItem, let toolID = item.representedObject as? String else {
+            return
+        }
+        WheelLayoutModel.shared.addPinnedTool(toolID: toolID, in: selectedCategory)
         reloadToolsList()
         onSettingsChanged?()
     }
@@ -557,5 +569,207 @@ public final class RadialWheelCustomizeSheet: NSView {
 
     @objc private func showRingToggled() {
         PreferencesManager.shared.showChargingRing = (showRingCheckbox.state == .on)
+    }
+
+    // MARK: - Testing Helpers
+    public var pinnedToolRows: [PinnedToolRowView] {
+        return toolsStackView.arrangedSubviews.compactMap { $0 as? PinnedToolRowView }
+    }
+    public func simulateDragReorder(from sourceIndex: Int, to destinationIndex: Int) {
+        WheelLayoutModel.shared.reorderPinnedTool(from: sourceIndex, to: destinationIndex, in: selectedCategory)
+        reloadToolsList()
+        onSettingsChanged?()
+    }
+}
+
+// MARK: - Pinned Tool Row View with Drag-to-Reorder
+
+public final class PinnedToolRowView: NSView, NSDraggingSource {
+    public static let dragType = NSPasteboard.PasteboardType("com.pasta.tool-row-index")
+
+    public let slotIndex: Int
+    public let toolID: String
+    public var onReorder: ((Int, Int) -> Void)?
+    public var onRemove: ((Int) -> Void)?
+    public var onMoveUp: ((Int) -> Void)?
+    public var onMoveDown: ((Int) -> Void)?
+
+    private var dragStartLocation: NSPoint?
+
+    public init(slotIndex: Int, toolID: String) {
+        self.slotIndex = slotIndex
+        self.toolID = toolID
+        super.init(frame: .zero)
+        setupRow()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    private func setupRow() {
+        wantsLayer = true
+        layer?.cornerRadius = 6
+        layer?.backgroundColor = NSColor(white: 0.2, alpha: 0.5).cgColor
+
+        registerForDraggedTypes([PinnedToolRowView.dragType])
+
+        let action = FormatRegistry.shared.action(byId: toolID)
+        let humanName = action?.shortHumanName ?? toolID
+        let iconName = action?.iconName ?? "doc.fill"
+
+        // Drag handle indicator (three horizontal lines glyph)
+        let dragHandle = NSImageView()
+        dragHandle.translatesAutoresizingMaskIntoConstraints = false
+        if let dragImg = NSImage(systemSymbolName: "line.3.horizontal", accessibilityDescription: "Drag to reorder") {
+            dragHandle.image = dragImg
+        }
+        dragHandle.contentTintColor = NSColor(white: 0.6, alpha: 1.0)
+        addSubview(dragHandle)
+
+        // Index label: "1."
+        let indexLabel = NSTextField(labelWithString: "\(slotIndex + 1).")
+        indexLabel.translatesAutoresizingMaskIntoConstraints = false
+        indexLabel.font = NSFont.systemFont(ofSize: 11, weight: .bold)
+        indexLabel.textColor = ThemeManager.shared.accentColor
+        addSubview(indexLabel)
+
+        // Glyph Icon
+        let iconView = NSImageView()
+        iconView.translatesAutoresizingMaskIntoConstraints = false
+        if let img = NSImage(systemSymbolName: iconName, accessibilityDescription: humanName) {
+            iconView.image = img
+        } else {
+            iconView.image = NSImage(systemSymbolName: "doc.fill", accessibilityDescription: humanName)
+        }
+        iconView.contentTintColor = .white
+        addSubview(iconView)
+
+        // Human display name: (MP4, MKV, WebM, GIF, Extract MP3)
+        let nameLabel = NSTextField(labelWithString: humanName)
+        nameLabel.translatesAutoresizingMaskIntoConstraints = false
+        nameLabel.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
+        nameLabel.textColor = .white
+        nameLabel.lineBreakMode = .byTruncatingTail
+        addSubview(nameLabel)
+
+        // "Remove from wheel" control
+        let removeBtn = NSButton(title: "Remove", target: self, action: #selector(removeClicked))
+        removeBtn.translatesAutoresizingMaskIntoConstraints = false
+        removeBtn.bezelStyle = .inline
+        removeBtn.font = NSFont.systemFont(ofSize: 10, weight: .medium)
+        addSubview(removeBtn)
+
+        let upBtn = NSButton(title: "▲", target: self, action: #selector(upClicked))
+        upBtn.translatesAutoresizingMaskIntoConstraints = false
+        upBtn.bezelStyle = .inline
+        upBtn.isEnabled = (slotIndex > 0)
+        addSubview(upBtn)
+
+        let downBtn = NSButton(title: "▼", target: self, action: #selector(downClicked))
+        downBtn.translatesAutoresizingMaskIntoConstraints = false
+        downBtn.bezelStyle = .inline
+        downBtn.isEnabled = (slotIndex < 5)
+        addSubview(downBtn)
+
+        NSLayoutConstraint.activate([
+            dragHandle.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6),
+            dragHandle.centerYAnchor.constraint(equalTo: centerYAnchor),
+            dragHandle.widthAnchor.constraint(equalToConstant: 12),
+            dragHandle.heightAnchor.constraint(equalToConstant: 12),
+
+            indexLabel.leadingAnchor.constraint(equalTo: dragHandle.trailingAnchor, constant: 4),
+            indexLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
+            indexLabel.widthAnchor.constraint(equalToConstant: 16),
+
+            iconView.leadingAnchor.constraint(equalTo: indexLabel.trailingAnchor, constant: 4),
+            iconView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            iconView.widthAnchor.constraint(equalToConstant: 16),
+            iconView.heightAnchor.constraint(equalToConstant: 16),
+
+            nameLabel.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: 6),
+            nameLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
+            nameLabel.trailingAnchor.constraint(lessThanOrEqualTo: removeBtn.leadingAnchor, constant: -4),
+
+            downBtn.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
+            downBtn.centerYAnchor.constraint(equalTo: centerYAnchor),
+            downBtn.widthAnchor.constraint(equalToConstant: 24),
+
+            upBtn.trailingAnchor.constraint(equalTo: downBtn.leadingAnchor, constant: -4),
+            upBtn.centerYAnchor.constraint(equalTo: centerYAnchor),
+            upBtn.widthAnchor.constraint(equalToConstant: 24),
+
+            removeBtn.trailingAnchor.constraint(equalTo: upBtn.leadingAnchor, constant: -4),
+            removeBtn.centerYAnchor.constraint(equalTo: centerYAnchor),
+            removeBtn.widthAnchor.constraint(equalToConstant: 58)
+        ])
+    }
+
+    @objc private func removeClicked() {
+        onRemove?(slotIndex)
+    }
+
+    @objc private func upClicked() {
+        onMoveUp?(slotIndex)
+    }
+
+    @objc private func downClicked() {
+        onMoveDown?(slotIndex)
+    }
+
+    // Drag Source
+    public override func mouseDown(with event: NSEvent) {
+        dragStartLocation = convert(event.locationInWindow, from: nil)
+    }
+
+    public override func mouseDragged(with event: NSEvent) {
+        guard let start = dragStartLocation else { return }
+        let current = convert(event.locationInWindow, from: nil)
+        let distance = hypot(current.x - start.x, current.y - start.y)
+        if distance > 4.0 {
+            dragStartLocation = nil
+            let pItem = NSPasteboardItem()
+            pItem.setString(String(slotIndex), forType: PinnedToolRowView.dragType)
+            let draggingItem = NSDraggingItem(pasteboardWriter: pItem)
+            draggingItem.setDraggingFrame(bounds, contents: self)
+            beginDraggingSession(with: [draggingItem], event: event, source: self)
+        }
+    }
+
+    public func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
+        return .move
+    }
+
+    // Drag Destination
+    public override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        guard let item = sender.draggingPasteboard.pasteboardItems?.first,
+              let str = item.string(forType: PinnedToolRowView.dragType),
+              let src = Int(str), src != slotIndex else {
+            return []
+        }
+        layer?.backgroundColor = NSColor(white: 0.35, alpha: 0.7).cgColor
+        return .move
+    }
+
+    public override func draggingExited(_ sender: NSDraggingInfo?) {
+        layer?.backgroundColor = NSColor(white: 0.2, alpha: 0.5).cgColor
+    }
+
+    public override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        layer?.backgroundColor = NSColor(white: 0.2, alpha: 0.5).cgColor
+        guard let item = sender.draggingPasteboard.pasteboardItems?.first,
+              let str = item.string(forType: PinnedToolRowView.dragType),
+              let src = Int(str) else {
+            return false
+        }
+        if src != slotIndex {
+            onReorder?(src, slotIndex)
+            return true
+        }
+        return false
+    }
+
+    public func simulateDrag(to destinationIndex: Int) {
+        onReorder?(slotIndex, destinationIndex)
     }
 }

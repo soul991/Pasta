@@ -33,6 +33,59 @@ public final class FormatRegistry {
         }
     }
 
+    public static let distinctFormatGlyphs: [String: String] = [
+        // Video
+        "mp4": "play.circle.fill",
+        "mkv": "film.stack",
+        "webm": "globe.americas.fill",
+        "mov": "video.badge.waveform",
+        "avi": "tv",
+        "wmv": "display",
+        "gif": "play.square",
+
+        // Audio
+        "mp3": "music.note",
+        "m4a": "music.note.list",
+        "wav": "waveform",
+        "flac": "hifispeaker.fill",
+        "opus": "headphones",
+        "ogg": "speaker.wave.3.fill",
+        "aiff": "tuningfork",
+
+        // Image
+        "jpeg": "photo",
+        "jpg": "photo.on.rectangle",
+        "png": "photo.fill",
+        "webp": "sparkles.rectangle.stack",
+        "heic": "camera.viewfinder",
+        "tiff": "doc.richtext",
+        "bmp": "square.grid.2x2.fill",
+        "svg": "bezierpath",
+
+        // Document & PDF
+        "pdf": "doc.text.fill",
+        "docx": "doc.text",
+        "doc": "doc",
+        "rtf": "text.alignleft",
+        "txt": "text.quote",
+        "html": "chevron.left.forwardslash.chevron.right",
+        "epub": "book.closed.fill",
+        "md": "doc.plaintext",
+
+        // Archive
+        "zip": "archivebox.fill",
+        "tar": "shippingbox",
+        "tar.gz": "shippingbox.fill",
+        "7z": "tray.2.fill",
+        "gz": "tray.and.arrow.down.fill",
+        "bz2": "tray.full.fill"
+    ]
+
+    public static func icon(forFormat format: String) -> String {
+        let key = format.lowercased().trimmingCharacters(in: .punctuationCharacters)
+        return distinctFormatGlyphs[key] ?? "doc.fill"
+    }
+
     public func action(for fileURL: URL, actionID: String) -> ConversionAction? {
         let actions = availableActions(for: fileURL)
         if let matched = actions.first(where: { $0.id == actionID }) {
@@ -87,6 +140,62 @@ public final class FormatRegistry {
             return actions.first(where: { $0.id == "video.snapshot.jpg" })
         }
         return nil
+    }
+
+    public func allRegisteredActions() -> [ConversionAction] {
+        var collected: [String: ConversionAction] = [:]
+        let sampleFiles = [
+            URL(fileURLWithPath: "sample.png"),
+            URL(fileURLWithPath: "sample.jpg"),
+            URL(fileURLWithPath: "sample.webp"),
+            URL(fileURLWithPath: "sample.heic"),
+            URL(fileURLWithPath: "sample.tiff"),
+            URL(fileURLWithPath: "sample.bmp"),
+            URL(fileURLWithPath: "sample.gif"),
+            URL(fileURLWithPath: "sample.avif"),
+            URL(fileURLWithPath: "sample.svg"),
+            URL(fileURLWithPath: "sample.mp4"),
+            URL(fileURLWithPath: "sample.mov"),
+            URL(fileURLWithPath: "sample.mkv"),
+            URL(fileURLWithPath: "sample.webm"),
+            URL(fileURLWithPath: "sample.avi"),
+            URL(fileURLWithPath: "sample.wmv"),
+            URL(fileURLWithPath: "sample.mp3"),
+            URL(fileURLWithPath: "sample.wav"),
+            URL(fileURLWithPath: "sample.m4a"),
+            URL(fileURLWithPath: "sample.flac"),
+            URL(fileURLWithPath: "sample.aac"),
+            URL(fileURLWithPath: "sample.ogg"),
+            URL(fileURLWithPath: "sample.aiff"),
+            URL(fileURLWithPath: "sample.pdf"),
+            URL(fileURLWithPath: "sample.docx"),
+            URL(fileURLWithPath: "sample.md"),
+            URL(fileURLWithPath: "sample.html"),
+            URL(fileURLWithPath: "sample.txt"),
+            URL(fileURLWithPath: "sample.epub"),
+            URL(fileURLWithPath: "sample.zip"),
+            URL(fileURLWithPath: "sample.tar.gz")
+        ]
+        for file in sampleFiles {
+            for act in availableActions(for: file) {
+                collected[act.id] = act
+            }
+        }
+        for act in metadataActions(for: "jpg") {
+            collected[act.id] = act
+        }
+        return Array(collected.values).sorted { $0.id < $1.id }
+    }
+
+    public func action(byId id: String) -> ConversionAction? {
+        if let act = allRegisteredActions().first(where: { $0.id == id }) {
+            return act
+        }
+        return action(for: URL(fileURLWithPath: "sample.file"), actionID: id)
+    }
+
+    public func allActions(for category: ActionCategory) -> [ConversionAction] {
+        return allRegisteredActions().filter { $0.category == category }
     }
 
     public static let compressionParameters: [ActionParameter] = [
@@ -225,7 +334,7 @@ public final class FormatRegistry {
                 outputExtension: "jpg",
                 isAdvanced: false,
                 category: .image,
-                iconName: "photo"
+                iconName: FormatRegistry.icon(forFormat: "jpeg")
             ) { input, output in
                 if inputExt == "svg" {
                     return [
@@ -246,7 +355,7 @@ public final class FormatRegistry {
                 outputExtension: "png",
                 isAdvanced: false,
                 category: .image,
-                iconName: "photo"
+                iconName: FormatRegistry.icon(forFormat: "png")
             ) { input, output in
                 if inputExt == "svg" {
                     return [
@@ -267,7 +376,7 @@ public final class FormatRegistry {
                 outputExtension: "webp",
                 isAdvanced: false,
                 category: .image,
-                iconName: "photo"
+                iconName: FormatRegistry.icon(forFormat: "webp")
             ) { input, output in
                 if ["png", "jpg", "jpeg", "tiff", "tif"].contains(inputExt) {
                     return [
@@ -288,7 +397,7 @@ public final class FormatRegistry {
                 outputExtension: "heic",
                 isAdvanced: false,
                 category: .image,
-                iconName: "photo"
+                iconName: FormatRegistry.icon(forFormat: "heic")
             ) { input, output in
                 [Invocation(toolName: "sips", arguments: ["-s", "format", "heic", input.path, "--out", output.path])]
             })
@@ -301,7 +410,7 @@ public final class FormatRegistry {
                 outputExtension: "tiff",
                 isAdvanced: false,
                 category: .image,
-                iconName: "photo"
+                iconName: FormatRegistry.icon(forFormat: "tiff")
             ) { input, output in
                 [Invocation(toolName: "sips", arguments: ["-s", "format", "tiff", input.path, "--out", output.path])]
             })
@@ -314,7 +423,7 @@ public final class FormatRegistry {
                 outputExtension: "gif",
                 isAdvanced: false,
                 category: .image,
-                iconName: "photo"
+                iconName: FormatRegistry.icon(forFormat: "gif")
             ) { input, output in
                 [Invocation(toolName: "magick", arguments: [input.path, output.path])]
             })
@@ -489,7 +598,7 @@ public final class FormatRegistry {
                 outputExtension: "mp4",
                 isAdvanced: false,
                 category: .video,
-                iconName: "film"
+                iconName: FormatRegistry.icon(forFormat: "mp4")
             ) { input, output in
                 [Invocation(toolName: "ffmpeg", arguments: ["-nostdin", "-n", "-i", input.path, "-c:v", "libx264", "-crf", "23", "-preset", "medium", "-c:a", "aac", "-movflags", "+faststart", output.path])]
             })
@@ -502,7 +611,7 @@ public final class FormatRegistry {
                 outputExtension: "webm",
                 isAdvanced: false,
                 category: .video,
-                iconName: "film"
+                iconName: FormatRegistry.icon(forFormat: "webm")
             ) { input, output in
                 [Invocation(toolName: "ffmpeg", arguments: ["-nostdin", "-n", "-i", input.path, "-c:v", "libvpx-vp9", "-crf", "32", "-b:v", "0", "-c:a", "libopus", output.path])]
             })
@@ -515,7 +624,7 @@ public final class FormatRegistry {
                 outputExtension: "mov",
                 isAdvanced: false,
                 category: .video,
-                iconName: "film"
+                iconName: FormatRegistry.icon(forFormat: "mov")
             ) { input, output in
                 [Invocation(toolName: "ffmpeg", arguments: ["-nostdin", "-n", "-i", input.path, "-c", "copy", output.path])]
             })
@@ -528,7 +637,7 @@ public final class FormatRegistry {
                 outputExtension: "mkv",
                 isAdvanced: false,
                 category: .video,
-                iconName: "film"
+                iconName: FormatRegistry.icon(forFormat: "mkv")
             ) { input, output in
                 [Invocation(toolName: "ffmpeg", arguments: ["-nostdin", "-n", "-i", input.path, "-c", "copy", output.path])]
             })
@@ -541,7 +650,7 @@ public final class FormatRegistry {
                 outputExtension: "avi",
                 isAdvanced: false,
                 category: .video,
-                iconName: "film"
+                iconName: FormatRegistry.icon(forFormat: "avi")
             ) { input, output in
                 [Invocation(toolName: "ffmpeg", arguments: ["-nostdin", "-n", "-i", input.path, "-c:v", "mpeg4", "-c:a", "mp3", output.path])]
             })
@@ -554,7 +663,7 @@ public final class FormatRegistry {
                 outputExtension: "wmv",
                 isAdvanced: false,
                 category: .video,
-                iconName: "film"
+                iconName: FormatRegistry.icon(forFormat: "wmv")
             ) { input, output in
                 [Invocation(toolName: "ffmpeg", arguments: ["-nostdin", "-n", "-i", input.path, "-c:v", "wmv2", "-b:v", "1000k", "-c:a", "wmav2", "-b:a", "128k", output.path])]
             })
@@ -566,7 +675,7 @@ public final class FormatRegistry {
             outputExtension: "gif",
             isAdvanced: false,
             category: .video,
-            iconName: "photo.stack"
+            iconName: FormatRegistry.icon(forFormat: "gif")
         ) { input, output in
             [Invocation(toolName: "ffmpeg", arguments: [
                 "-nostdin", "-n", "-i", input.path,
@@ -582,7 +691,7 @@ public final class FormatRegistry {
             outputExtension: "mp3",
             isAdvanced: false,
             category: .audio,
-            iconName: "waveform"
+            iconName: FormatRegistry.icon(forFormat: "mp3")
         ) { input, output in
             [Invocation(toolName: "ffmpeg", arguments: ["-nostdin", "-n", "-i", input.path, "-vn", "-c:a", "libmp3lame", "-q:a", "2", output.path])]
         })
@@ -593,7 +702,7 @@ public final class FormatRegistry {
             outputExtension: "m4a",
             isAdvanced: false,
             category: .audio,
-            iconName: "waveform"
+            iconName: FormatRegistry.icon(forFormat: "m4a")
         ) { input, output in
             [Invocation(toolName: "ffmpeg", arguments: ["-nostdin", "-n", "-i", input.path, "-vn", "-c:a", "aac", "-b:a", "192k", output.path])]
         })
@@ -604,7 +713,7 @@ public final class FormatRegistry {
             outputExtension: "wav",
             isAdvanced: false,
             category: .audio,
-            iconName: "waveform"
+            iconName: FormatRegistry.icon(forFormat: "wav")
         ) { input, output in
             [Invocation(toolName: "ffmpeg", arguments: ["-nostdin", "-n", "-i", input.path, "-vn", "-c:a", "pcm_s16le", output.path])]
         })
@@ -892,7 +1001,7 @@ public final class FormatRegistry {
                 outputExtension: "mp3",
                 isAdvanced: false,
                 category: .audio,
-                iconName: "waveform"
+                iconName: FormatRegistry.icon(forFormat: "mp3")
             ) { input, output in
                 [Invocation(toolName: "ffmpeg", arguments: ["-nostdin", "-n", "-i", input.path, "-vn", "-c:a", "libmp3lame", "-q:a", "2", output.path])]
             })
@@ -905,7 +1014,7 @@ public final class FormatRegistry {
                 outputExtension: "m4a",
                 isAdvanced: false,
                 category: .audio,
-                iconName: "waveform"
+                iconName: FormatRegistry.icon(forFormat: "m4a")
             ) { input, output in
                 [Invocation(toolName: "ffmpeg", arguments: ["-nostdin", "-n", "-i", input.path, "-vn", "-c:a", "aac", "-b:a", "192k", output.path])]
             })
@@ -918,7 +1027,7 @@ public final class FormatRegistry {
                 outputExtension: "flac",
                 isAdvanced: false,
                 category: .audio,
-                iconName: "waveform"
+                iconName: FormatRegistry.icon(forFormat: "flac")
             ) { input, output in
                 [Invocation(toolName: "ffmpeg", arguments: ["-nostdin", "-n", "-i", input.path, "-vn", "-c:a", "flac", output.path])]
             })
@@ -931,7 +1040,7 @@ public final class FormatRegistry {
                 outputExtension: "opus",
                 isAdvanced: false,
                 category: .audio,
-                iconName: "waveform"
+                iconName: FormatRegistry.icon(forFormat: "opus")
             ) { input, output in
                 [Invocation(toolName: "ffmpeg", arguments: ["-nostdin", "-n", "-i", input.path, "-vn", "-c:a", "libopus", "-b:a", "128k", output.path])]
             })
@@ -944,7 +1053,7 @@ public final class FormatRegistry {
                 outputExtension: "wav",
                 isAdvanced: false,
                 category: .audio,
-                iconName: "waveform"
+                iconName: FormatRegistry.icon(forFormat: "wav")
             ) { input, output in
                 [Invocation(toolName: "ffmpeg", arguments: ["-nostdin", "-n", "-i", input.path, "-vn", "-c:a", "pcm_s16le", output.path])]
             })
@@ -957,7 +1066,7 @@ public final class FormatRegistry {
                 outputExtension: "ogg",
                 isAdvanced: false,
                 category: .audio,
-                iconName: "waveform"
+                iconName: FormatRegistry.icon(forFormat: "ogg")
             ) { input, output in
                 [Invocation(toolName: "ffmpeg", arguments: ["-nostdin", "-n", "-i", input.path, "-vn", "-c:a", "vorbis", "-strict", "-2", "-ac", "2", "-b:a", "128k", output.path])]
             })
@@ -970,7 +1079,7 @@ public final class FormatRegistry {
                 outputExtension: "aiff",
                 isAdvanced: false,
                 category: .audio,
-                iconName: "waveform"
+                iconName: FormatRegistry.icon(forFormat: "aiff")
             ) { input, output in
                 [Invocation(toolName: "ffmpeg", arguments: ["-nostdin", "-n", "-i", input.path, "-vn", "-c:a", "pcm_s16be", output.path])]
             })
@@ -1154,7 +1263,7 @@ public final class FormatRegistry {
                 displayName: "Convert to Plain Text",
                 outputExtension: "txt",
                 isAdvanced: false,
-                category: .document,
+                category: .pdf,
                 iconName: "doc.text"
             ) { input, output in
                 [Invocation(toolName: "pdftotext", arguments: ["-layout", input.path, output.path])]
@@ -1164,7 +1273,7 @@ public final class FormatRegistry {
                 displayName: "Extract Pages to PNGs",
                 outputExtension: "png",
                 isAdvanced: false,
-                category: .image,
+                category: .pdf,
                 iconName: "photo.stack",
                 outputKind: .folder(suffix: "pages")
             ) { input, output in
@@ -1279,7 +1388,7 @@ public final class FormatRegistry {
                 outputExtension: "md",
                 isAdvanced: false,
                 category: .document,
-                iconName: "doc.text"
+                iconName: FormatRegistry.icon(forFormat: "md")
             ) { input, output in
                 [Invocation(toolName: "pandoc", arguments: ["-o", output.path, input.path])]
             },
@@ -1289,7 +1398,7 @@ public final class FormatRegistry {
                 outputExtension: "txt",
                 isAdvanced: false,
                 category: .document,
-                iconName: "doc.text"
+                iconName: FormatRegistry.icon(forFormat: "txt")
             ) { input, output in
                 [Invocation(toolName: "pandoc", arguments: ["-o", output.path, input.path])]
             },
@@ -1299,7 +1408,7 @@ public final class FormatRegistry {
                 outputExtension: "html",
                 isAdvanced: false,
                 category: .document,
-                iconName: "globe"
+                iconName: FormatRegistry.icon(forFormat: "html")
             ) { input, output in
                 [Invocation(toolName: "pandoc", arguments: ["-o", output.path, input.path])]
             },
@@ -1309,7 +1418,7 @@ public final class FormatRegistry {
                 outputExtension: "epub",
                 isAdvanced: false,
                 category: .document,
-                iconName: "book"
+                iconName: FormatRegistry.icon(forFormat: "epub")
             ) { input, output in
                 [Invocation(toolName: "pandoc", arguments: ["-o", output.path, input.path])]
             }
@@ -1322,7 +1431,7 @@ public final class FormatRegistry {
                 outputExtension: "pdf",
                 isAdvanced: false,
                 category: .document,
-                iconName: "doc.richtext"
+                iconName: FormatRegistry.icon(forFormat: "pdf")
             ) { input, output in
                 let outDir = output.deletingLastPathComponent().path
                 return [Invocation(toolName: "soffice", arguments: ["--headless", "--convert-to", "pdf", input.path, "--outdir", outDir])]
@@ -1342,7 +1451,7 @@ public final class FormatRegistry {
                 outputExtension: "docx",
                 isAdvanced: false,
                 category: .document,
-                iconName: "doc.text"
+                iconName: FormatRegistry.icon(forFormat: "docx")
             ) { input, output in
                 [Invocation(toolName: "pandoc", arguments: ["-o", output.path, input.path])]
             },
@@ -1352,7 +1461,7 @@ public final class FormatRegistry {
                 outputExtension: "html",
                 isAdvanced: false,
                 category: .document,
-                iconName: "globe"
+                iconName: FormatRegistry.icon(forFormat: "html")
             ) { input, output in
                 [Invocation(toolName: "pandoc", arguments: ["-s", "-o", output.path, input.path])]
             },
@@ -1362,7 +1471,7 @@ public final class FormatRegistry {
                 outputExtension: "txt",
                 isAdvanced: false,
                 category: .document,
-                iconName: "doc.text"
+                iconName: FormatRegistry.icon(forFormat: "txt")
             ) { input, output in
                 [Invocation(toolName: "pandoc", arguments: ["-o", output.path, input.path])]
             },
@@ -1372,7 +1481,7 @@ public final class FormatRegistry {
                 outputExtension: "epub",
                 isAdvanced: false,
                 category: .document,
-                iconName: "book"
+                iconName: FormatRegistry.icon(forFormat: "epub")
             ) { input, output in
                 [Invocation(toolName: "pandoc", arguments: ["-o", output.path, input.path])]
             },
@@ -1711,7 +1820,7 @@ public final class FormatRegistry {
                 outputExtension: "tar.gz",
                 isAdvanced: false,
                 category: .archive,
-                iconName: "archivebox"
+                iconName: FormatRegistry.icon(forFormat: "tar.gz")
             ) { input, output in
                 let parentDir = input.deletingLastPathComponent().path
                 let name = input.lastPathComponent
@@ -1727,7 +1836,7 @@ public final class FormatRegistry {
             outputExtension: "zip",
             isAdvanced: false,
             category: .archive,
-            iconName: "archivebox"
+            iconName: FormatRegistry.icon(forFormat: "zip")
         ) { input, output in
             [Invocation(toolName: "ditto", arguments: ["-c", "-k", "--sequesterRsrc", input.path, output.path])]
         }
@@ -1740,7 +1849,7 @@ public final class FormatRegistry {
             outputExtension: "gz",
             isAdvanced: false,
             category: .archive,
-            iconName: "archivebox"
+            iconName: FormatRegistry.icon(forFormat: "gz")
         ) { input, output in
             [Invocation(toolName: "7zz", arguments: ["a", "-tgzip", output.path, input.path])]
         }

@@ -3452,6 +3452,80 @@ do {
     assertTest(zOrderVC.activeNodeViews.allSatisfy { !$0.isHidden && $0.alphaValue == 1.0 }, "27.1 Closing the sheet restores the wheel nodes")
     assertTest(zOrderVC.activeNodeViews.allSatisfy { $0.frame.width > 0 && $0.frame.height > 0 }, "27.1 All restored nodes have positive dimensions")
     assertTest(zOrderVC.wheelCloseButton?.isHidden == false && zOrderVC.wheelCloseButton?.alphaValue == 1.0, "27.1 Closing sheet restores wheel close button")
+
+    // =======================================================
+    // 28. Phase 10B Fix 2: P1 Tools Tab - Human Display Names, Icons, Pinned Slots & Controls
+    // =======================================================
+    print("\n--- 28. Phase 10B Fix 2: P1 Tools Tab Tests ---")
+
+    // 28.1 Every registered action must have a display name and an icon
+    let allRegActions = FormatRegistry.shared.allRegisteredActions()
+    assertTest(!allRegActions.isEmpty, "28.1 Registered actions list is non-empty (\(allRegActions.count) actions found)")
+    var actionsLackingDisplayName: [String] = []
+    var actionsLackingIcon: [String] = []
+    for act in allRegActions {
+        if act.displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            actionsLackingDisplayName.append(act.id)
+        }
+        if act.iconName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            actionsLackingIcon.append(act.id)
+        }
+    }
+    assertTest(actionsLackingDisplayName.isEmpty, "28.1 Every registered action has a non-empty display name (missing: \(actionsLackingDisplayName))")
+    assertTest(actionsLackingIcon.isEmpty, "28.1 Every registered action has a non-empty icon name (missing: \(actionsLackingIcon))")
+
+    // 28.2 Human display name conversion (no raw action ids like video.to.mp4)
+    if let mp4Act = FormatRegistry.shared.action(byId: "video.to.mp4") {
+        assertTest(mp4Act.shortHumanName == "MP4", "28.2 video.to.mp4 short human name is MP4 (got: \(mp4Act.shortHumanName))")
+    } else {
+        assertTest(false, "28.2 Missing video.to.mp4 action")
+    }
+    if let mkvAct = FormatRegistry.shared.action(byId: "video.to.mkv") {
+        assertTest(mkvAct.shortHumanName == "MKV", "28.2 video.to.mkv short human name is MKV (got: \(mkvAct.shortHumanName))")
+    }
+    if let extractAct = FormatRegistry.shared.action(byId: "video.extract.mp3") {
+        assertTest(extractAct.shortHumanName == "Extract MP3", "28.2 video.extract.mp3 short human name is Extract MP3 (got: \(extractAct.shortHumanName))")
+    }
+
+    // 28.3 Pinned slots removal and addition keeps exactly 6 pinned
+    let toolsModel = WheelLayoutModel(isolatedStorage: [:])
+    let initialVideoPinned = toolsModel.pinnedToolIDs(for: .video)
+    assertTest(initialVideoPinned.count == 6, "28.3 Initially exactly 6 pinned tools for video")
+
+    // Remove first tool
+    let removedTool = initialVideoPinned[0]
+    toolsModel.removePinnedTool(at: 0, in: .video)
+    let postRemovePinned = toolsModel.pinnedToolIDs(for: .video)
+    assertTest(postRemovePinned.count == 6, "28.3 Removing tool maintains exactly 6 pinned tools")
+    assertTest(!postRemovePinned.contains(removedTool), "28.3 Removed tool is no longer in pinned tools list")
+    assertTest(toolsModel.isToolHidden(removedTool, in: .video), "28.3 Removed tool is marked hidden")
+
+    // Add back the removed tool via addPinnedTool
+    toolsModel.addPinnedTool(toolID: removedTool, in: .video)
+    let postAddPinned = toolsModel.pinnedToolIDs(for: .video)
+    assertTest(postAddPinned.count == 6, "28.3 Adding tool maintains exactly 6 pinned tools")
+    assertTest(postAddPinned.contains(removedTool), "28.3 Added tool is restored into pinned tools")
+    assertTest(!toolsModel.isToolHidden(removedTool, in: .video), "28.3 Added tool is no longer hidden")
+
+    // 28.4 Customize sheet Tools tab: displays human names, never raw action ids
+    let customizeSheet = RadialWheelCustomizeSheet()
+    let toolLabels = customizeSheet.subviews.flatMap { $0.subviews }.flatMap { $0.subviews }.compactMap { $0 as? NSTextField }
+    let rawActionIDLeaks = toolLabels.filter { $0.stringValue.contains("image.to.") || $0.stringValue.contains("video.to.") }
+    assertTest(rawActionIDLeaks.isEmpty, "28.4 No raw action ids displayed in Customize sheet Tools tab (leaks: \(rawActionIDLeaks.map { $0.stringValue }))")
+
+    // 28.5 Drag to reorder simulation and PinnedToolRowView verification
+    let toolsSheet = RadialWheelCustomizeSheet()
+    toolsSheet.frame = NSRect(x: 0, y: 0, width: 360, height: 480)
+    toolsSheet.layoutSubtreeIfNeeded()
+    let initialRows = toolsSheet.pinnedToolRows
+    assertTest(initialRows.count == 6, "28.5 Exactly 6 PinnedToolRowView items in Customize sheet Tools tab")
+    let firstRowTool = initialRows[0].toolID
+    let secondRowTool = initialRows[1].toolID
+    toolsSheet.simulateDragReorder(from: 0, to: 1)
+    let reorderedRows = toolsSheet.pinnedToolRows
+    assertTest(reorderedRows.count == 6, "28.5 Reordering maintains exactly 6 pinned tool rows")
+    assertTest(reorderedRows[0].toolID == secondRowTool, "28.5 Reordered tool row 0 now has previous row 1 tool")
+    assertTest(reorderedRows[1].toolID == firstRowTool, "28.5 Reordered tool row 1 now has previous row 0 tool")
 }
 
 print("\n==================================================")

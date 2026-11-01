@@ -31,6 +31,17 @@ public struct WCAGContrast {
         return Double((lighter + 0.05) / (darker + 0.05))
     }
 
+    /// Blends a foreground color (which may contain alpha) over an opaque background color
+    public static func composite(foreground: NSColor, over background: NSColor) -> NSColor {
+        guard let fg = foreground.usingColorSpace(.sRGB),
+              let bg = background.usingColorSpace(.sRGB) else { return foreground }
+        let a = fg.alphaComponent
+        let r = (fg.redComponent * a) + (bg.redComponent * (1.0 - a))
+        let g = (fg.greenComponent * a) + (bg.greenComponent * (1.0 - a))
+        let b = (fg.blueComponent * a) + (bg.blueComponent * (1.0 - a))
+        return NSColor(srgbRed: r, green: g, blue: b, alpha: 1.0)
+    }
+
     /// Returns either dark ink (#1A0F05) or crisp white to guarantee >= 4.5:1 contrast against accent
     public static func contrastingLabelColor(for accent: NSColor) -> NSColor {
         let darkInk = NSColor(hex: "#1A0F05") ?? .black
@@ -317,16 +328,21 @@ public final class WheelLayoutModel {
     public func pinnedToolIDs(for category: ActionCategory) -> [String] {
         let key = pinnedPrefix + category.rawValue
         let defaults = WheelLayoutModel.defaultPinnedToolIDs(for: category)
-        guard let saved = storageStringArray(forKey: key), !saved.isEmpty else {
-            return defaults
-        }
+        var result = storageStringArray(forKey: key) ?? defaults
+        if result.isEmpty { result = defaults }
 
         // Validate and ensure exactly 6 items
-        var result = saved.filter { !defaults.isEmpty ? defaults.contains($0) || true : true }
         for d in defaults {
             if result.count >= 6 { break }
             if !result.contains(d) {
                 result.append(d)
+            }
+        }
+        let allActions = FormatRegistry.shared.allActions(for: category)
+        for a in allActions {
+            if result.count >= 6 { break }
+            if !result.contains(a.id) {
+                result.append(a.id)
             }
         }
         return Array(result.prefix(6))
@@ -344,6 +360,49 @@ public final class WheelLayoutModel {
         let moved = current.remove(at: sourceIndex)
         current.insert(moved, at: destinationIndex)
         setPinnedToolIDs(current, for: category)
+    }
+
+    public func removePinnedTool(at index: Int, in category: ActionCategory) {
+        var current = pinnedToolIDs(for: category)
+        guard index >= 0 && index < current.count else { return }
+        let removedID = current.remove(at: index)
+        setToolHidden(removedID, hidden: true, in: category)
+
+        let allActions = FormatRegistry.shared.allActions(for: category)
+        let hidden = hiddenToolIDs(for: category)
+        if let replacement = allActions.first(where: { !current.contains($0.id) && !hidden.contains($0.id) }) {
+            current.append(replacement.id)
+        } else if let fallback = WheelLayoutModel.defaultPinnedToolIDs(for: category).first(where: { !current.contains($0) }) {
+            current.append(fallback)
+        } else if let anyOther = allActions.first(where: { !current.contains($0.id) }) {
+            current.append(anyOther.id)
+        } else {
+            for act in FormatRegistry.shared.allRegisteredActions() {
+                if !current.contains(act.id) {
+                    current.append(act.id)
+                    setToolHidden(act.id, hidden: false, in: category)
+                    if current.count == 6 { break }
+                }
+            }
+        }
+        setPinnedToolIDs(current, for: category)
+    }
+
+    public func addPinnedTool(toolID: String, in category: ActionCategory) {
+        var current = pinnedToolIDs(for: category)
+        guard !current.contains(toolID) else { return }
+        setToolHidden(toolID, hidden: false, in: category)
+        if current.count >= 6 {
+            current[current.count - 1] = toolID
+        } else {
+            current.append(toolID)
+        }
+        setPinnedToolIDs(current, for: category)
+    }
+
+    public func unpinnedTools(for category: ActionCategory) -> [ConversionAction] {
+        let pinned = Set(pinnedToolIDs(for: category))
+        return FormatRegistry.shared.allActions(for: category).filter { !pinned.contains($0.id) }
     }
 
     public func resetToDefaults(for category: ActionCategory) {
@@ -415,16 +474,17 @@ public final class WheelLayoutModel {
 
             if slotIndex < pinnedIDs.count {
                 let targetID = pinnedIDs[slotIndex]
-                if let matched = allActions.first(where: { $0.id == targetID }) {
+                if let matched = allActions.first(where: { $0.id == targetID }) ?? FormatRegistry.shared.action(byId: targetID) {
                     result.append(WheelSlot(slotIndex: slotIndex, kind: .action(matched), angle: angle))
                     continue
                 }
             }
 
-            // Fallback to whichever actions are available (skipping hidden)
-            let remainingActions = allActions.filter { !pinnedIDs.contains($0.id) && !isToolHidden($0.id, in: fileCategory) }
-            if slotIndex < remainingActions.count {
-                result.append(WheelSlot(slotIndex: slotIndex, kind: .action(remainingActions[slotIndex]), angle: angle))
+            // Fallback to unused actions
+            if let nextAction = allActions.first(where: { act in
+                !result.contains(where: { $0.action?.id == act.id }) && !isToolHidden(act.id, in: fileCategory)
+            }) {
+                result.append(WheelSlot(slotIndex: slotIndex, kind: .action(nextAction), angle: angle))
             }
         }
 

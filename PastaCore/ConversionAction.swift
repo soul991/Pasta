@@ -68,6 +68,19 @@ public struct ConversionAction: Identifiable, Equatable {
         return dict
     }
 
+    public var shortHumanName: String {
+        var name = displayName
+        if name.hasPrefix("Convert to ") {
+            name = String(name.dropFirst("Convert to ".count))
+        } else if name.hasPrefix("Remux to ") {
+            name = String(name.dropFirst("Remux to ".count))
+        }
+        if name == "Extract MP3 Audio" {
+            name = "Extract MP3"
+        }
+        return name.isEmpty ? outputExtension.uppercased() : name
+    }
+
     public init(
         id: String,
         displayName: String,
