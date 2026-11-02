@@ -81,35 +81,13 @@ public struct PastaCLI {
     }
 
     private static func runDoctor() {
-        let tools = [
-            "ffmpeg", "cwebp", "magick", "gs", "qpdf", "pdftoppm",
-            "pdftotext", "exiftool", "pandoc", "rsvg-convert", "unar",
-            "7zz", "sips", "ditto", "tar"
-        ]
-
         print("Pasta Environment & Engine Doctor:")
         print("--------------------------------------------------")
-        print("Required Engine Tools:")
-        var allOk = true
-        for tool in tools {
-            if let url = ToolLocator.shared.findTool(tool) {
-                print("  [OK]      \(tool.padding(toLength: 14, withPad: " ", startingAt: 0)) -> \(url.path)")
-            } else {
-                print("  [MISSING] \(tool.padding(toLength: 14, withPad: " ", startingAt: 0)) (NOT FOUND)")
-                allOk = false
-            }
-        }
-        print("\nOptional Engine Tools:")
-        let optionalTools = ["soffice"]
-        for tool in optionalTools {
-            if let url = ToolLocator.shared.findOptionalTool(tool) {
-                print("  [OK (OPTIONAL)]  \(tool.padding(toLength: 14, withPad: " ", startingAt: 0)) -> \(url.path)")
-            } else {
-                print("  [OPTIONAL MISSING] \(tool.padding(toLength: 14, withPad: " ", startingAt: 0)) (LibreOffice not installed, Office conversions disabled)")
-            }
+        for status in ToolLocator.shared.doctorStatuses() {
+            print("  \(status.displayLine)")
         }
         print("--------------------------------------------------")
-        if allOk {
+        if ToolLocator.shared.doctorStatuses().filter({ !$0.isOptional }).allSatisfy(\.isAvailable) {
             print("All required engine binaries are available.")
         } else {
             print("Warning: Some tools are missing. Install missing tools via Homebrew.")

@@ -46,6 +46,10 @@ do {
         threwMissing = false
     }
     assertTest(threwMissing, "ToolLocator throws PastaError.missingTool for nonexistent tool")
+
+    let doctorStatuses = ToolLocator.shared.doctorStatuses()
+    assertTest(doctorStatuses.contains { $0.name == "ffmpeg" && !$0.isOptional && $0.path != nil }, "ToolLocator doctor report includes required tool paths")
+    assertTest(doctorStatuses.contains { $0.name == "soffice" && $0.isOptional }, "ToolLocator doctor report includes optional LibreOffice status")
 }
 
 // MARK: - 1.2 System glass availability
@@ -3388,6 +3392,8 @@ do {
     assertTest(settingsController.headerView.titleLabel.stringValue == "Pasta", "25.6 Settings header displays 'Pasta' title")
     assertTest(settingsController.headerView.subtitleLabel.stringValue.contains("Settings"), "25.6 Settings header displays descriptive subtitle")
     assertTest(settingsController.customizeSheet.superview != nil, "25.6 SettingsWindowController embeds Customize sheet")
+    assertTest(settingsController.doctorLabel.stringValue.contains("ffmpeg:"), "25.6 Settings window displays required tool doctor results")
+    assertTest(settingsController.doctorLabel.stringValue.contains("soffice:"), "25.6 Settings window displays optional-tool doctor results")
 
     // 25.7 Bundle assets existence and size check
     let appIconPath = "assets/AppIcon.icns"

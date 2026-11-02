@@ -198,9 +198,10 @@ CI tests verify the mathematical state machine against simulated clock timestamp
 - [ ] **Wheel Hub Brand Mark (Idle State)**:
   - Open the wheel manually via menu bar ("Show Wheel") or without files.
   - **Expected:** The center hub displays the rigatoni brand mark glyph tinted with the current theme accent color, the label "PASTA", and "Drag a file onto the wheel".
-- [ ] **Settings Window Header**:
+- [ ] **Settings Window Header & Doctor**:
   - Open Settings (via menu bar "Settings..." or <kbd>⌘</kbd> + <kbd>,</kbd>).
   - **Expected:** The window header prominently features the Pasta App Icon (48x48 pt squircle), title "Pasta" (18 pt bold), and subtitle "Preferences & Radial Wheel Settings".
+  - **Expected:** The lower panel lists each required conversion engine and its resolved path, and labels unavailable optional engines (including LibreOffice) as optional without treating them as errors.
 - [ ] **About Panel App Icon**:
   - Choose "About Pasta" from the menu bar menu.
   - **Expected:** The About alert dialog displays the high-resolution Pasta App Icon alongside version and description text.
