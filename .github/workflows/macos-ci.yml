@@ -23,11 +23,7 @@ jobs:
           swift --version
 
       - name: Install dependencies via Homebrew
-        run: |
-          brew update --quiet
-          brew install ffmpeg imagemagick qpdf ghostscript poppler pandoc exiftool webp unar sevenzip librsvg
-          brew install --cask libreoffice
-          /Applications/LibreOffice.app/Contents/MacOS/soffice --version
+        uses: ./.github/actions/install-dependencies
 
       - name: Swift Build
         run: |
@@ -73,6 +69,9 @@ jobs:
           sw_vers
           xcodebuild -version
           swift --version
+
+      - name: Install dependencies via Homebrew
+        uses: ./.github/actions/install-dependencies
 
       - name: Build and test pre-27 path
         run: |

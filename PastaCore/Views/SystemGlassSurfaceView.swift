@@ -40,9 +40,11 @@ public final class SystemGlassSurfaceView: NSView {
             systemGlass.cornerRadius = cornerRadius
             systemGlass.tintColor = tintColor
             systemGlass.style = .regular
+            #if compiler(>=6.4)
             if #available(macOS 27, *) {
                 systemGlass.effectIsInteractive = isInteractive
             }
+            #endif
             fallback.isHidden = true
             usesSystemGlass = true
         } else {
