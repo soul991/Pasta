@@ -48,6 +48,29 @@ do {
     assertTest(threwMissing, "ToolLocator throws PastaError.missingTool for nonexistent tool")
 }
 
+// MARK: - 1.1 Notification delivery safety
+print("\n--- 1.1 Notification Delivery Safety Tests ---")
+do {
+    let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        .appendingPathComponent("PastaCore/PastaCLI.swift")
+    let source = (try? String(contentsOf: sourceURL, encoding: .utf8)) ?? ""
+    let notificationStart = source.range(of: "public static func showNotification")
+    let notificationSource = notificationStart.map { String(source[$0.lowerBound...]) } ?? ""
+    assertTest(
+        notificationSource.contains("UNUserNotificationCenter") &&
+        !notificationSource.contains("display notification") &&
+        !notificationSource.contains("/usr/bin/osascript"),
+        "1.1 Notifications use UserNotifications rather than interpolated AppleScript"
+    )
+    let title = "Pasta \"Converted\""
+    let message = "Created file with $; & and \"quotes\""
+    let request = PastaCLI.makeNotificationRequest(title: title, message: message)
+    assertTest(
+        request.content.title == title && request.content.body == message && request.trigger == nil,
+        "1.1 Native notification request preserves literal title and message content"
+    )
+}
+
 // MARK: - 2. OutputPlanner Tests
 print("\n--- 2. OutputPlanner Tests ---")
 do {
