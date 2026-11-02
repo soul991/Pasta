@@ -19,6 +19,7 @@ public final class RadialOptionNodeView: NSView {
     }
 
     private let visualEffect = NSVisualEffectView()
+    private let systemGlass = SystemGlassSurfaceView(cornerRadius: 32, isInteractive: true)
     private let gradientLayer = CAGradientLayer()
     private let titleLabel = NSTextField(labelWithString: "")
     private let iconView = NSImageView()
@@ -72,6 +73,14 @@ public final class RadialOptionNodeView: NSView {
 
         registerForDraggedTypes([.fileURL])
 
+        addSubview(systemGlass)
+        NSLayoutConstraint.activate([
+            systemGlass.leadingAnchor.constraint(equalTo: leadingAnchor),
+            systemGlass.trailingAnchor.constraint(equalTo: trailingAnchor),
+            systemGlass.topAnchor.constraint(equalTo: topAnchor),
+            systemGlass.bottomAnchor.constraint(equalTo: bottomAnchor)
+        ])
+
         let tracking = NSTrackingArea(
             rect: bounds,
             options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
@@ -95,7 +104,7 @@ public final class RadialOptionNodeView: NSView {
         gradientLayer.cornerRadius = 32
         gradientLayer.masksToBounds = true
         gradientLayer.isHidden = true
-        visualEffect.layer?.addSublayer(gradientLayer)
+        layer?.addSublayer(gradientLayer)
 
         // Icon
         iconView.translatesAutoresizingMaskIntoConstraints = false
@@ -195,6 +204,8 @@ public final class RadialOptionNodeView: NSView {
         let isIncreaseContrast = PreferencesManager.shared.increaseContrastEnabled
         let isReduceTransparency = PreferencesManager.shared.reduceTransparencyEnabled
 
+        systemGlass.configure(cornerRadius: bounds.width / 2.0, tintColor: ThemeManager.shared.accentColor.withAlphaComponent(0.15), isInteractive: true)
+
         // Label visibility mode
         let labelMode = WheelLayoutModel.shared.labelMode
         switch labelMode {
@@ -210,10 +221,12 @@ public final class RadialOptionNodeView: NSView {
 
         // Reduce Transparency: Use opaque dark background
         if isReduceTransparency {
+            systemGlass.isHidden = true
             visualEffect.isHidden = true
             layer?.backgroundColor = ThemeManager.shared.reduceTransparencyBackground.cgColor
         } else {
-            visualEffect.isHidden = false
+            systemGlass.isHidden = false
+            visualEffect.isHidden = systemGlass.usesSystemGlass
             layer?.backgroundColor = NSColor.clear.cgColor
         }
 
@@ -321,7 +334,9 @@ public final class RadialOptionNodeView: NSView {
     // MARK: - Testing Helpers
     public var testTitleLabel: NSTextField { titleLabel }
     public var testHasDarkScrimView: Bool {
-        return subviews.contains { $0 != titleLabel && $0 != iconView && $0 != visualEffect }
+        return subviews.contains { view in
+            view != titleLabel && view != iconView && view != visualEffect && view != systemGlass
+        }
     }
     public var testGradientIsActive: Bool { !gradientLayer.isHidden }
     public var testTitleTextColor: NSColor { titleLabel.textColor ?? .clear }

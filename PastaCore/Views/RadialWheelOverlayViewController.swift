@@ -12,6 +12,7 @@ public final class RadialWheelOverlayViewController: NSViewController {
     private let centerDisc = RadialWheelCenterDiscView()
     private let hudView = RadialConversionHUDView()
     private var nodeViews: [RadialOptionNodeView] = []
+    private var glassContentView: NSView?
     private var parameterPanelView: ParameterPanelView?
     private var moreView: RadialWheelMoreView?
     private var customizeSheet: RadialWheelCustomizeSheet?
@@ -32,7 +33,8 @@ public final class RadialWheelOverlayViewController: NSViewController {
     }
 
     // Floating hint pill
-    public let hintPillContainer = NSVisualEffectView()
+    public let hintPillContainer = NSView()
+    private let hintPillGlass = SystemGlassSurfaceView(cornerRadius: 14, tintColor: NSColor(white: 0.10, alpha: 0.78), isInteractive: true)
     public let hintPillLabel = NSTextField(labelWithString: "")
     public private(set) var isHintPillAboveWheel: Bool = false
 
@@ -53,6 +55,8 @@ public final class RadialWheelOverlayViewController: NSViewController {
     public var lastErrorMessage: String?
     private var autoDismissWorkItem: DispatchWorkItem?
 
+    private var contentHost: NSView { glassContentView ?? view }
+
     public func scheduleAutoDismiss(delay: TimeInterval = 2.2) {
         cancelAutoDismiss()
         let item = DispatchWorkItem { [weak self] in
@@ -71,9 +75,22 @@ public final class RadialWheelOverlayViewController: NSViewController {
     public override func loadView() {
         // Frame sized via WheelGeometry to accommodate all 8 nodes, max 1.06 hover scale,
         // 18pt accent glow, 10pt shadow, and controls with >= 8pt margin.
-        view = NSView(frame: NSRect(x: 0, y: 0, width: WheelGeometry.panelWidth, height: WheelGeometry.panelHeight))
+        let rootView = NSView(frame: NSRect(x: 0, y: 0, width: WheelGeometry.panelWidth, height: WheelGeometry.panelHeight))
+        view = rootView
         view.wantsLayer = true
         view.layer?.masksToBounds = false
+        if #available(macOS 26, *) {
+            let container = SystemGlassContainerView(spacing: 10)
+            container.frame = rootView.bounds
+            container.autoresizingMask = [.width, .height]
+            let content = NSView(frame: container.bounds)
+            content.autoresizingMask = [.width, .height]
+            content.wantsLayer = true
+            content.layer?.masksToBounds = false
+            container.contentView = content
+            rootView.addSubview(container)
+            glassContentView = content
+        }
     }
 
     public override func viewDidLoad() {
@@ -93,7 +110,7 @@ public final class RadialWheelOverlayViewController: NSViewController {
             width: outerD,
             height: outerD
         )
-        view.addSubview(backplateView)
+        contentHost.addSubview(backplateView)
 
         // Center Disc centered at (WheelGeometry.wheelCenterX, WheelGeometry.wheelCenterY)
         centerDisc.diameter = hubD
@@ -103,7 +120,7 @@ public final class RadialWheelOverlayViewController: NSViewController {
             width: hubD,
             height: hubD
         )
-        view.addSubview(centerDisc)
+        contentHost.addSubview(centerDisc)
 
         // HUD View (initially hidden)
         hudView.frame = NSRect(
@@ -116,19 +133,24 @@ public final class RadialWheelOverlayViewController: NSViewController {
         hudView.onDismiss = { [weak self] in
             self?.onCloseRequested?()
         }
-        view.addSubview(hudView)
+        contentHost.addSubview(hudView)
 
         // Hint pill container
         hintPillContainer.translatesAutoresizingMaskIntoConstraints = false
-        hintPillContainer.blendingMode = .behindWindow
-        hintPillContainer.material = .hudWindow
-        hintPillContainer.state = .active
         hintPillContainer.wantsLayer = true
         hintPillContainer.layer?.cornerRadius = 14
         hintPillContainer.layer?.borderWidth = 1.0
         hintPillContainer.layer?.borderColor = NSColor(white: 1.0, alpha: 0.15).cgColor
         hintPillContainer.layer?.masksToBounds = true
-        view.addSubview(hintPillContainer)
+        contentHost.addSubview(hintPillContainer)
+
+        hintPillContainer.addSubview(hintPillGlass)
+        NSLayoutConstraint.activate([
+            hintPillGlass.leadingAnchor.constraint(equalTo: hintPillContainer.leadingAnchor),
+            hintPillGlass.trailingAnchor.constraint(equalTo: hintPillContainer.trailingAnchor),
+            hintPillGlass.topAnchor.constraint(equalTo: hintPillContainer.topAnchor),
+            hintPillGlass.bottomAnchor.constraint(equalTo: hintPillContainer.bottomAnchor)
+        ])
 
         hintPillLabel.translatesAutoresizingMaskIntoConstraints = false
         hintPillLabel.stringValue = "Esc closes · ⌥ mode · ⇧ re-targets"
@@ -149,7 +171,7 @@ public final class RadialWheelOverlayViewController: NSViewController {
         compactProgressContainer.layer?.borderColor = NSColor(white: 1.0, alpha: 0.18).cgColor
         compactProgressContainer.layer?.masksToBounds = true
         compactProgressContainer.isHidden = true
-        view.addSubview(compactProgressContainer)
+        contentHost.addSubview(compactProgressContainer)
 
         compactProgressIcon.translatesAutoresizingMaskIntoConstraints = false
         if let img = NSImage(systemSymbolName: "arrow.triangle.2.circlepath", accessibilityDescription: nil) {
@@ -184,10 +206,10 @@ public final class RadialWheelOverlayViewController: NSViewController {
         compactStack.spacing = 8
         compactProgressContainer.addSubview(compactStack)
 
-        let pillBottom = hintPillContainer.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -12)
-        let pillTop = hintPillContainer.topAnchor.constraint(equalTo: view.topAnchor, constant: 12)
+        let pillBottom = hintPillContainer.bottomAnchor.constraint(equalTo: contentHost.bottomAnchor, constant: -12)
+        let pillTop = hintPillContainer.topAnchor.constraint(equalTo: contentHost.topAnchor, constant: 12)
         let progAbovePill = compactProgressContainer.bottomAnchor.constraint(equalTo: hintPillContainer.topAnchor, constant: -8)
-        let progBottom = compactProgressContainer.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -12)
+        let progBottom = compactProgressContainer.bottomAnchor.constraint(equalTo: contentHost.bottomAnchor, constant: -12)
 
         self.hintPillBottomConstraint = pillBottom
         self.hintPillTopConstraint = pillTop
@@ -195,19 +217,19 @@ public final class RadialWheelOverlayViewController: NSViewController {
         self.compactProgressBottomConstraint = progBottom
 
         NSLayoutConstraint.activate([
-            hintPillContainer.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            hintPillContainer.centerXAnchor.constraint(equalTo: contentHost.centerXAnchor),
             hintPillContainer.heightAnchor.constraint(equalToConstant: 28),
-            hintPillContainer.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor, constant: 16),
-            hintPillContainer.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -16),
+            hintPillContainer.leadingAnchor.constraint(greaterThanOrEqualTo: contentHost.leadingAnchor, constant: 16),
+            hintPillContainer.trailingAnchor.constraint(lessThanOrEqualTo: contentHost.trailingAnchor, constant: -16),
 
             hintPillLabel.leadingAnchor.constraint(equalTo: hintPillContainer.leadingAnchor, constant: 14),
             hintPillLabel.trailingAnchor.constraint(equalTo: hintPillContainer.trailingAnchor, constant: -14),
             hintPillLabel.centerYAnchor.constraint(equalTo: hintPillContainer.centerYAnchor),
 
-            compactProgressContainer.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            compactProgressContainer.centerXAnchor.constraint(equalTo: contentHost.centerXAnchor),
             compactProgressContainer.heightAnchor.constraint(equalToConstant: 32),
-            compactProgressContainer.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor, constant: 20),
-            compactProgressContainer.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -20),
+            compactProgressContainer.leadingAnchor.constraint(greaterThanOrEqualTo: contentHost.leadingAnchor, constant: 20),
+            compactProgressContainer.trailingAnchor.constraint(lessThanOrEqualTo: contentHost.trailingAnchor, constant: -20),
 
             compactStack.leadingAnchor.constraint(equalTo: compactProgressContainer.leadingAnchor, constant: 10),
             compactStack.trailingAnchor.constraint(equalTo: compactProgressContainer.trailingAnchor, constant: -10),
@@ -241,7 +263,7 @@ public final class RadialWheelOverlayViewController: NSViewController {
         closeBtn.setAccessibilityRole(.button)
         closeBtn.setAccessibilityLabel("Close wheel")
         closeBtn.setAccessibilityHelp("Closes the radial wheel overlay")
-        view.addSubview(closeBtn)
+        contentHost.addSubview(closeBtn)
         self.wheelCloseButton = closeBtn
 
         DragMonitor.shared.onEscIntercepted = { [weak self] in
@@ -472,14 +494,14 @@ public final class RadialWheelOverlayViewController: NSViewController {
                 nodeView.frame = .zero
                 nodeView.isHidden = true
                 nodeView.alphaValue = 0.0
-                view.addSubview(nodeView)
+                contentHost.addSubview(nodeView)
                 nodeViews.append(nodeView)
             } else if !isReduceMotion {
                 // Staggered blooming animation with mass 1.0, stiffness 420.0, damping 28.0 physics
                 nodeView.layer?.transform = CATransform3DMakeScale(0.4, 0.4, 1.0)
                 nodeView.alphaValue = 0.0
 
-                view.addSubview(nodeView)
+                contentHost.addSubview(nodeView)
                 nodeViews.append(nodeView)
 
                 let delay = Double(slot.slotIndex) * 0.025
@@ -495,7 +517,7 @@ public final class RadialWheelOverlayViewController: NSViewController {
                 // Plain fade for Reduce Motion
                 nodeView.layer?.transform = CATransform3DIdentity
                 nodeView.alphaValue = 1.0
-                view.addSubview(nodeView)
+                contentHost.addSubview(nodeView)
                 nodeViews.append(nodeView)
             }
         }
@@ -552,7 +574,7 @@ public final class RadialWheelOverlayViewController: NSViewController {
             self?.performConversion(action: action, params: params, formModel: model)
         }
 
-        view.addSubview(panel)
+        contentHost.addSubview(panel)
         self.parameterPanelView = panel
 
         if !isReduceMotion {
@@ -737,7 +759,7 @@ public final class RadialWheelOverlayViewController: NSViewController {
             self?.dismissMoreView()
         }
 
-        view.addSubview(more)
+        contentHost.addSubview(more)
         self.moreView = more
 
         if !PreferencesManager.shared.reduceMotionEnabled {
@@ -807,7 +829,7 @@ public final class RadialWheelOverlayViewController: NSViewController {
             self?.dismissCustomizeSheet()
         }
 
-        view.addSubview(sheet, positioned: .above, relativeTo: nil)
+        contentHost.addSubview(sheet, positioned: .above, relativeTo: nil)
         self.customizeSheet = sheet
 
         if !isReduceMotion {
@@ -884,7 +906,7 @@ public final class RadialWheelOverlayViewController: NSViewController {
         configure(files: targetFiles, isOptionHeld: isAdvanced)
 
         if let sheet = customizeSheet {
-            view.addSubview(sheet, positioned: .above, relativeTo: nil)
+            contentHost.addSubview(sheet, positioned: .above, relativeTo: nil)
             for node in nodeViews {
                 node.frame = .zero
                 node.isHidden = true

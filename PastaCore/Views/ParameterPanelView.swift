@@ -5,12 +5,13 @@ import ObjectiveC
 
 /// Inline parameter configuration panel for actions with parameters.
 /// Built for the Shift-hold radial wheel and the menu bar drop window.
-public final class ParameterPanelView: NSVisualEffectView {
+public final class ParameterPanelView: NSView {
     public let model: ParameterFormModel
     public let action: ConversionAction
 
     public var onRun: ((ParameterValues) -> Void)?
     public var onCancel: (() -> Void)?
+    private let systemGlass = SystemGlassSurfaceView(cornerRadius: 16, tintColor: NSColor(white: 0.10, alpha: 0.82), isInteractive: true)
 
     // Subviews
     private let headerStack = NSStackView()
@@ -53,14 +54,18 @@ public final class ParameterPanelView: NSVisualEffectView {
         let isReduceTransparency = PreferencesManager.shared.reduceTransparencyEnabled
         let isIncreaseContrast = PreferencesManager.shared.increaseContrastEnabled
 
+        systemGlass.translatesAutoresizingMaskIntoConstraints = false
+        systemGlass.configure(cornerRadius: 16, tintColor: NSColor(white: 0.10, alpha: 0.82), isInteractive: true)
+        systemGlass.isHidden = isReduceTransparency
+        addSubview(systemGlass)
+        NSLayoutConstraint.activate([
+            systemGlass.leadingAnchor.constraint(equalTo: leadingAnchor),
+            systemGlass.trailingAnchor.constraint(equalTo: trailingAnchor),
+            systemGlass.topAnchor.constraint(equalTo: topAnchor),
+            systemGlass.bottomAnchor.constraint(equalTo: bottomAnchor)
+        ])
         if isReduceTransparency {
-            material = .hudWindow
-            blendingMode = .withinWindow
             layer?.backgroundColor = NSColor(white: 0.12, alpha: 0.98).cgColor
-        } else {
-            material = .hudWindow
-            blendingMode = .behindWindow
-            state = .active
         }
 
         if isIncreaseContrast {

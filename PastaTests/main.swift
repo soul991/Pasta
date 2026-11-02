@@ -48,6 +48,21 @@ do {
     assertTest(threwMissing, "ToolLocator throws PastaError.missingTool for nonexistent tool")
 }
 
+// MARK: - 1.2 System glass availability
+print("\n--- 1.2 System Glass Availability Tests ---")
+do {
+    let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        .appendingPathComponent("PastaCore/Views/SystemGlassSurfaceView.swift")
+    let source = (try? String(contentsOf: sourceURL, encoding: .utf8)) ?? ""
+    assertTest(
+        source.contains("NSGlassEffectView") &&
+        source.contains("NSGlassEffectContainerView") &&
+        source.contains("#available(macOS 26") &&
+        source.contains("#available(macOS 27"),
+        "1.2 System glass uses public macOS 26 classes and gates macOS 27 interaction API"
+    )
+}
+
 // MARK: - 1.1 Notification delivery safety
 print("\n--- 1.1 Notification Delivery Safety Tests ---")
 do {

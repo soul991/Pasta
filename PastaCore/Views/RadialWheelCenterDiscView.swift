@@ -11,6 +11,7 @@ public final class RadialWheelCenterDiscView: NSView {
     }
 
     private let visualEffect = NSVisualEffectView()
+    private let systemGlass = SystemGlassSurfaceView(cornerRadius: 64, tintColor: NSColor(white: 0.08, alpha: 0.85), isInteractive: true)
     private let iconImageView = NSImageView()
     private let countBadge = NSTextField(labelWithString: "")
     private let fileNameLabel = NSTextField(labelWithString: "")
@@ -46,6 +47,14 @@ public final class RadialWheelCenterDiscView: NSView {
         wantsLayer = true
         layer?.cornerRadius = 64
         layer?.masksToBounds = false
+
+        addSubview(systemGlass)
+        NSLayoutConstraint.activate([
+            systemGlass.leadingAnchor.constraint(equalTo: leadingAnchor),
+            systemGlass.trailingAnchor.constraint(equalTo: trailingAnchor),
+            systemGlass.topAnchor.constraint(equalTo: topAnchor),
+            systemGlass.bottomAnchor.constraint(equalTo: bottomAnchor)
+        ])
 
         visualEffect.translatesAutoresizingMaskIntoConstraints = false
         visualEffect.blendingMode = .behindWindow
@@ -140,11 +149,15 @@ public final class RadialWheelCenterDiscView: NSView {
         let isIncreaseContrast = ThemeManager.shared.isIncreaseContrast
         let isReduceMotion = ThemeManager.shared.isReduceMotion
 
+        systemGlass.configure(cornerRadius: diameter / 2.0, tintColor: NSColor(white: 0.08, alpha: 0.85), isInteractive: true)
+
         if isReduceTransparency {
+            systemGlass.isHidden = true
             visualEffect.isHidden = true
             layer?.backgroundColor = ThemeManager.shared.reduceTransparencyBackground.cgColor
         } else {
-            visualEffect.isHidden = false
+            systemGlass.isHidden = false
+            visualEffect.isHidden = systemGlass.usesSystemGlass
             layer?.backgroundColor = NSColor.clear.cgColor
         }
 
