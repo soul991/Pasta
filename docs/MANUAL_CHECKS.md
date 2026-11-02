@@ -2,6 +2,15 @@
 
 *This document details all hardware, AppKit UI, OS permission, and interaction tests that cannot be fully verified in headless CI and require manual verification on a real Mac running macOS 13+.*
 
+> Audit 2026-11-02 additions: before Phase 11 proceeds, the owner must also
+> verify the sticky-wheel results remain visible for 10 seconds with auto-close
+> off after a successful conversion, a cancellation, and an error; that an
+> error's **Copy Details** button remains available; and that Settings shows
+> `pasta doctor` paths/missing optional tools plus the Shift-hold-duration
+> slider. Once Liquid Glass is implemented, capture screenshots of the wheel,
+> Customize sheet, parameter panel, and hint pill over the red-car wallpaper,
+> with Reduce Transparency and Increase Contrast both enabled separately.
+
 ---
 
 ## 1. Accessibility Permission Flow (`AXIsProcessTrusted`)
