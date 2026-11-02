@@ -3930,6 +3930,29 @@ do {
     PreferencesManager.shared.autoDismissWheelAfterRunning = false
     assertTest(PreferencesManager.shared.autoDismissWheelAfterRunning == false, "33.7b autoDismissWheelAfterRunning toggles back to false")
 
+    // 33.7c Sticky outcome retention: with auto-close disabled, all terminal results remain for at least 10 seconds.
+    PreferencesManager.shared.autoDismissWheelAfterRunning = false
+    let successOverlay = RadialWheelOverlayViewController()
+    successOverlay.loadView()
+    successOverlay.viewDidLoad()
+    successOverlay.showStickyResultForTesting()
+    let cancelOverlay = RadialWheelOverlayViewController()
+    cancelOverlay.loadView()
+    cancelOverlay.viewDidLoad()
+    cancelOverlay.currentConversionJobID = UUID()
+    cancelOverlay.compactProgressContainer.isHidden = false
+    cancelOverlay.compactProgressBar.isHidden = false
+    cancelOverlay.compactProgressButton.title = "Cancel"
+    cancelOverlay.compactProgressButton.performClick(nil)
+    let errorOverlay = RadialWheelOverlayViewController()
+    errorOverlay.loadView()
+    errorOverlay.viewDidLoad()
+    errorOverlay.showStickyResultForTesting(error: "Synthetic conversion failure")
+    RunLoop.main.run(until: Date(timeIntervalSinceNow: 10.0))
+    assertTest(!successOverlay.compactProgressContainer.isHidden && successOverlay.compactProgressButton.title == "Reveal" && !successOverlay.isAutoDismissScheduled, "33.7c Successful conversion remains visible for 10s when auto-close is off")
+    assertTest(!cancelOverlay.compactProgressContainer.isHidden && cancelOverlay.compactProgressButton.title == "Dismiss" && !cancelOverlay.isAutoDismissScheduled, "33.7c Cancel result remains visible for 10s when auto-close is off")
+    assertTest(!errorOverlay.compactProgressContainer.isHidden && errorOverlay.compactProgressButton.title == "Copy Details" && !errorOverlay.isAutoDismissScheduled, "33.7c Error remains visible with Copy Details when auto-close is off")
+
     // --- 34. Phase 10B Fix 8: P3 Hint Pill Tests ---
     print("\n--- 34. Phase 10B Fix 8: P3 Hint Pill Tests ---")
 

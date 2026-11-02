@@ -55,6 +55,8 @@ public final class RadialWheelOverlayViewController: NSViewController {
     public var lastErrorMessage: String?
     private var autoDismissWorkItem: DispatchWorkItem?
 
+    public var isAutoDismissScheduled: Bool { autoDismissWorkItem != nil }
+
     private var contentHost: NSView { glassContentView ?? view }
 
     public func scheduleAutoDismiss(delay: TimeInterval = 2.2) {
@@ -993,7 +995,7 @@ public final class RadialWheelOverlayViewController: NSViewController {
                             self.compactProgressBar.isHidden = true
                             self.compactProgressContainer.isHidden = false
                             self.compactProgressButton.isHidden = false
-                            self.compactProgressButton.title = "Copy Error"
+                            self.compactProgressButton.title = "Copy Details"
                             self.compactProgressLabel.stringValue = "Error: \(error.localizedDescription)"
                             if let img = NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: nil) {
                                 self.compactProgressIcon.image = img
@@ -1065,7 +1067,7 @@ public final class RadialWheelOverlayViewController: NSViewController {
                         self.compactProgressBar.isHidden = true
                         self.compactProgressContainer.isHidden = false
                         self.compactProgressButton.isHidden = false
-                        self.compactProgressButton.title = "Copy Error"
+                        self.compactProgressButton.title = "Copy Details"
                         self.compactProgressLabel.stringValue = "Error: \(error.localizedDescription)"
                         if let img = NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: nil) {
                             self.compactProgressIcon.image = img
@@ -1076,6 +1078,25 @@ public final class RadialWheelOverlayViewController: NSViewController {
                     }
                 }
             }
+        }
+    }
+
+    public func showStickyResultForTesting(error: String? = nil) {
+        cancelAutoDismiss()
+        compactProgressContainer.isHidden = false
+        compactProgressBar.stopAnimation(nil)
+        compactProgressBar.isHidden = true
+        compactProgressButton.isHidden = false
+        if let error {
+            lastOutputURL = nil
+            lastErrorMessage = error
+            compactProgressLabel.stringValue = "Error: \(error)"
+            compactProgressButton.title = "Copy Details"
+        } else {
+            lastErrorMessage = nil
+            lastOutputURL = URL(fileURLWithPath: "/tmp/pasta-success-output")
+            compactProgressLabel.stringValue = "Done: pasta-success-output"
+            compactProgressButton.title = "Reveal"
         }
     }
 }
