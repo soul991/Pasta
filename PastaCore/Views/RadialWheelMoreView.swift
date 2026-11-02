@@ -183,7 +183,11 @@ public final class RadialWheelMoreView: NSView {
                 width: bounds.width - 28,
                 height: itemHeight
             ))
-            btn.title = "  \(action.displayName) (\(action.outputExtension.uppercased()))"
+            var title = "  \(action.displayName) (\(action.outputExtension.uppercased()))"
+            if let note = action.requirementNote {
+                title += " (\(note))"
+            }
+            btn.title = title
             if let img = NSImage(systemSymbolName: action.iconName, accessibilityDescription: nil) {
                 btn.image = img
             }

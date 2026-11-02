@@ -99,12 +99,16 @@ public struct PastaCLI {
             }
         }
         print("\nOptional Engine Tools:")
-        let optionalTools = ["soffice"]
-        for tool in optionalTools {
+        let optionalTools = [
+            ("soffice", "LibreOffice", "Office document conversions (DOCX, PPTX, XLSX to PDF/images)"),
+            ("ebook-convert", "Calibre", "Enhanced PDF to EPUB layout preservation"),
+            ("avifenc", "libavif", "Dedicated AVIF image encoding")
+        ]
+        for (tool, appName, desc) in optionalTools {
             if let url = ToolLocator.shared.findOptionalTool(tool) {
-                print("  [OK (OPTIONAL)]  \(tool.padding(toLength: 14, withPad: " ", startingAt: 0)) -> \(url.path)")
+                print("  [OK (OPTIONAL)]    \(tool.padding(toLength: 14, withPad: " ", startingAt: 0)) -> \(url.path) (\(appName))")
             } else {
-                print("  [OPTIONAL MISSING] \(tool.padding(toLength: 14, withPad: " ", startingAt: 0)) (LibreOffice not installed, Office conversions disabled)")
+                print("  [OPTIONAL MISSING] \(tool.padding(toLength: 14, withPad: " ", startingAt: 0)) (\(appName) not installed - \(desc))")
             }
         }
         print("--------------------------------------------------")

@@ -52,7 +52,7 @@ public final class ToolLocator {
     }
 
     public func requireTool(_ name: String) throws -> URL {
-        guard let url = findTool(name) else {
+        guard let url = findOptionalTool(name) ?? findTool(name) else {
             throw PastaError.missingTool(name)
         }
         return url
@@ -72,7 +72,22 @@ public final class ToolLocator {
             if FileManager.default.isExecutableFile(atPath: defaultAppPath) {
                 return URL(fileURLWithPath: defaultAppPath)
             }
-            return nil
+            return findTool("soffice")
+        }
+        if name == "ebook-convert" {
+            lock.lock()
+            let overridden = overrides["ebook-convert"]
+            lock.unlock()
+            if let overridden = overridden {
+                if FileManager.default.isExecutableFile(atPath: overridden.path) {
+                    return overridden
+                }
+            }
+            let defaultAppPath = "/Applications/Calibre.app/Contents/MacOS/ebook-convert"
+            if FileManager.default.isExecutableFile(atPath: defaultAppPath) {
+                return URL(fileURLWithPath: defaultAppPath)
+            }
+            return findTool("ebook-convert")
         }
         return findTool(name)
     }

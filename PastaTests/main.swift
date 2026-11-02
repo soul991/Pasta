@@ -4299,6 +4299,275 @@ do {
     assertTest(replaced7Files == [fileNew], "36.7 Step 5: onFilesReplaced called with fileNew")
 }
 
+// MARK: - 37. Phase 11 Block A Tests: Documents, OCR, PDF Security, Formats
+print("\n--- 37. Phase 11 Block A Tests: Documents, OCR, PDF Security, Formats ---")
+
+// 37.1 Office conversions (A1)
+do {
+    // Action registration checks
+    let docxActions = FormatRegistry.shared.actions(for: URL(fileURLWithPath: "sample.docx"))
+    assertTest(docxActions.contains { $0.id == "docx.to.pdf" }, "37.1 docx.to.pdf is registered for docx")
+    assertTest(docxActions.contains { $0.id == "docx.to.images" }, "37.1 docx.to.images is registered for docx")
+
+    let odtActions = FormatRegistry.shared.actions(for: URL(fileURLWithPath: "sample.odt"))
+    assertTest(odtActions.contains { $0.id == "office.to.pdf" }, "37.1 office.to.pdf is registered for odt")
+    assertTest(odtActions.contains { $0.id == "office.to.images" }, "37.1 office.to.images is registered for odt")
+
+    let pptxActions = FormatRegistry.shared.actions(for: URL(fileURLWithPath: "sample.pptx"))
+    assertTest(pptxActions.contains { $0.id == "office.to.pdf" }, "37.1 office.to.pdf is registered for pptx")
+    let pptxImages = pptxActions.first { $0.id == "office.to.images" }
+    assertTest(pptxImages != nil && pptxImages?.displayName == "Extract Slides to PNGs", "37.1 office.to.images is labeled 'Extract Slides to PNGs' for pptx")
+
+    let xlsxActions = FormatRegistry.shared.actions(for: URL(fileURLWithPath: "sample.xlsx"))
+    assertTest(xlsxActions.contains { $0.id == "xlsx.to.csv" }, "37.1 xlsx.to.csv is registered for xlsx")
+
+    let csvActions = FormatRegistry.shared.actions(for: URL(fileURLWithPath: "sample.csv"))
+    assertTest(csvActions.contains { $0.id == "csv.to.xlsx" }, "37.1 csv.to.xlsx is registered for csv")
+
+    let mdActions = FormatRegistry.shared.actions(for: URL(fileURLWithPath: "sample.md"))
+    assertTest(mdActions.contains { $0.id == "md.to.pdf" }, "37.1 md.to.pdf is registered for md")
+
+    let htmlActions = FormatRegistry.shared.actions(for: URL(fileURLWithPath: "sample.html"))
+    assertTest(htmlActions.contains { $0.id == "html.to.pdf" }, "37.1 html.to.pdf is registered for html")
+
+    // Missing tool handling
+    var threwMissing = false
+    do {
+        let runner = JobRunner()
+        try OfficeTools.shared.convertOfficeToPDF(input: URL(fileURLWithPath: "Fixtures/sample.docx"), output: URL(fileURLWithPath: "/tmp/sample.pdf"), runner: runner, jobId: UUID())
+    } catch PastaError.missingTool(let tool) {
+        threwMissing = (tool == "soffice")
+    } catch {
+        threwMissing = false
+    }
+    assertTest(threwMissing, "37.1 Missing soffice tool throws PastaError.missingTool('soffice')")
+
+    // LibreOffice UserInstallation argument injection check
+    let runner = JobRunner()
+    let testJobId = UUID()
+    ToolLocator.shared.setOverride(tool: "soffice", url: URL(fileURLWithPath: "/bin/echo"))
+    defer { ToolLocator.shared.setOverride(tool: "soffice", url: nil) }
+
+    let outCaptured = try runner.executeCapture(invocation: Invocation(toolName: "soffice", arguments: ["--convert-to", "pdf", "input.docx"]), jobId: testJobId)
+    assertTest(outCaptured.stdout.contains("-env:UserInstallation=file:///tmp/Pasta_lo_\(testJobId.uuidString)"),
+               "37.1 soffice invocation automatically receives isolated user profile argument (-env:UserInstallation)")
+
+    // Cleanliness check: isolated loProfile removed after job
+    let profileDir = URL(fileURLWithPath: "/tmp/Pasta_lo_\(testJobId.uuidString)")
+    assertTest(!FileManager.default.fileExists(atPath: profileDir.path), "37.1 Isolated LibreOffice profile directory cleaned up after job")
+
+    // Multi-sheet XLSX to CSVs extraction test
+    let xlsxFixture = URL(fileURLWithPath: "Fixtures/sample.xlsx")
+    let tempXLSXDir = try OutputPlanner.makeTempDirectory()
+    defer { try? FileManager.default.removeItem(at: tempXLSXDir) }
+
+    try OfficeTools.shared.convertXLSXToCSVs(input: xlsxFixture, outputDir: tempXLSXDir, runner: runner, jobId: UUID())
+    let empCSV = tempXLSXDir.appendingPathComponent("Employees.csv")
+    let salCSV = tempXLSXDir.appendingPathComponent("Salaries.csv")
+    assertTest(FileManager.default.fileExists(atPath: empCSV.path), "37.1 XLSX multi-sheet extraction created Employees.csv")
+    assertTest(FileManager.default.fileExists(atPath: salCSV.path), "37.1 XLSX multi-sheet extraction created Salaries.csv")
+
+    let empText = (try? String(contentsOf: empCSV, encoding: .utf8)) ?? ""
+    assertTest(empText.contains("Alice,Engineering") && empText.contains("Bob,Design"), "37.1 Employees.csv contains extracted shared string data")
+
+    let salText = (try? String(contentsOf: salCSV, encoding: .utf8)) ?? ""
+    assertTest(salText.contains("100000") && salText.contains("95000"), "37.1 Salaries.csv contains numeric cell data")
+
+    // Requirement note and wheel hiding when tool absent
+    let docxAct = docxActions.first { $0.id == "docx.to.pdf" }
+    assertTest(docxAct?.requirementNote == "needs LibreOffice", "37.1 docx.to.pdf requirementNote is 'needs LibreOffice' when soffice missing")
+    assertTest(docxAct?.shortHumanName.contains("(needs LibreOffice)") == true, "37.1 docx.to.pdf shortHumanName contains '(needs LibreOffice)'")
+
+    let wheelSlots = WheelLayoutModel.shared.slots(for: URL(fileURLWithPath: "sample.docx"), isAdvanced: false)
+    assertTest(!wheelSlots.contains { $0.action?.id == "docx.to.pdf" }, "37.1 docx.to.pdf is hidden from primary wheel slots when soffice is missing")
+
+    let moreActs = WheelLayoutModel.shared.moreActions(for: URL(fileURLWithPath: "sample.docx"), isAdvanced: false)
+    assertTest(moreActs.contains { $0.id == "docx.to.pdf" }, "37.1 docx.to.pdf appears in More actions list")
+}
+
+// 37.2 Vision OCR Tests (A2)
+do {
+    let ocrDir = try OutputPlanner.makeTempDirectory()
+    defer { try? FileManager.default.removeItem(at: ocrDir) }
+
+    // Generate test image with known text
+    let testImgURL = ocrDir.appendingPathComponent("test_ocr.png")
+    let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 500, pixelsHigh: 120, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .calibratedRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+    NSGraphicsContext.saveGraphicsState()
+    let ctx = NSGraphicsContext(bitmapImageRep: rep)!
+    NSGraphicsContext.current = ctx
+    NSColor.white.setFill()
+    NSRect(x: 0, y: 0, width: 500, height: 120).fill()
+    let font = NSFont.boldSystemFont(ofSize: 32)
+    let str = NSAttributedString(string: "PASTA OCR ACCURATE TEST 2026", attributes: [.font: font, .foregroundColor: NSColor.black])
+    str.draw(at: NSPoint(x: 20, y: 40))
+    NSGraphicsContext.restoreGraphicsState()
+    let pngData = rep.representation(using: .png, properties: [:])!
+    try pngData.write(to: testImgURL)
+
+    // Recognize text from image
+    let recognized = try VisionOCRTools.shared.recognizeText(from: testImgURL, language: "en-US")
+    assertTest(recognized.contains("PASTA") && recognized.contains("OCR") && recognized.contains("2026"),
+               "37.2 VisionOCRTools recognizes known text from generated image fixture (got: '\(recognized.trimmingCharacters(in: .whitespacesAndNewlines))')")
+
+    // Create searchable PDF
+    let searchablePDFURL = ocrDir.appendingPathComponent("searchable.pdf")
+    try VisionOCRTools.shared.createSearchablePDF(from: testImgURL, outputURL: searchablePDFURL, language: "en-US")
+    assertTest(FileManager.default.fileExists(atPath: searchablePDFURL.path), "37.2 Searchable PDF created successfully")
+
+    // Verify searchable PDF text via pdftotext
+    let runner = JobRunner()
+    let (stdout, _) = try runner.executeCapture(invocation: Invocation(toolName: "pdftotext", arguments: [searchablePDFURL.path, "-"]))
+    assertTest(stdout.contains("PASTA") && stdout.contains("OCR"), "37.2 pdftotext extracts invisible text layer from searchable PDF")
+
+    // Recognize text from PDF page
+    let pdfRecognized = try VisionOCRTools.shared.recognizeText(fromPDF: searchablePDFURL, language: "en-US")
+    assertTest(pdfRecognized.contains("PASTA"), "37.2 VisionOCRTools recognizes text directly from PDF pages")
+
+    // Error handling on empty image
+    let emptyImgURL = ocrDir.appendingPathComponent("empty.png")
+    FileManager.default.createFile(atPath: emptyImgURL.path, contents: Data())
+    var threwInvalidInput = false
+    do {
+        _ = try VisionOCRTools.shared.recognizeText(from: emptyImgURL)
+    } catch PastaError.invalidInput {
+        threwInvalidInput = true
+    } catch {
+        threwInvalidInput = false
+    }
+    assertTest(threwInvalidInput, "37.2 VisionOCRTools rejects empty image file with PastaError.invalidInput")
+}
+
+// 37.3 PDF Security & Stamping Tests (qpdf) (A3)
+do {
+    let secDir = try OutputPlanner.makeTempDirectory()
+    defer { try? FileManager.default.removeItem(at: secDir) }
+
+    let samplePDF = URL(fileURLWithPath: "Fixtures/sample.pdf")
+    let lockedPDF = secDir.appendingPathComponent("locked.pdf")
+    let unlockedPDF = secDir.appendingPathComponent("unlocked.pdf")
+    let password = "SuperSecret_P@ssword_2026!"
+    let runner = JobRunner()
+
+    // Lock PDF
+    try PDFSecurityTools.shared.lockPDF(input: samplePDF, output: lockedPDF, password: password, runner: runner, jobId: UUID())
+    assertTest(FileManager.default.fileExists(atPath: lockedPDF.path), "37.3 PDFSecurityTools.lockPDF creates encrypted PDF")
+
+    // Verify locked PDF rejects opening without password
+    var pdftotextFailed = false
+    do {
+        _ = try runner.executeCapture(invocation: Invocation(toolName: "pdftotext", arguments: [lockedPDF.path, "-"]))
+    } catch {
+        pdftotextFailed = true
+    }
+    assertTest(pdftotextFailed, "37.3 Encrypted PDF rejects pdftotext without password")
+
+    // Unlock PDF
+    try PDFSecurityTools.shared.unlockPDF(input: lockedPDF, output: unlockedPDF, password: password, runner: runner, jobId: UUID())
+    assertTest(FileManager.default.fileExists(atPath: unlockedPDF.path), "37.3 PDFSecurityTools.unlockPDF restores decrypted PDF")
+
+    // Verify unlocked PDF text is readable
+    let (unlockedText, _) = try runner.executeCapture(invocation: Invocation(toolName: "pdftotext", arguments: [unlockedPDF.path, "-"]))
+    let (origText, _) = try runner.executeCapture(invocation: Invocation(toolName: "pdftotext", arguments: [samplePDF.path, "-"]))
+    assertTest(unlockedText == origText, "37.3 Unlocked PDF text matches original text exactly")
+
+    // Password redaction in PastaLogger (Rule 19)
+    PastaLogger.shared.info("Testing password logging: password=\(password) and secret password: \(password)")
+    let logURL = PastaLogger.shared.logFileURL
+    let logData = (try? String(contentsOf: logURL, encoding: .utf8)) ?? ""
+    assertTest(!logData.contains(password), "37.3 Rule 19: Password string '\(password)' NEVER appears in pasta.log")
+    assertTest(logData.contains("[REDACTED]"), "37.3 Rule 19: Password was redacted in pasta.log")
+
+    // Watermark stamping
+    let watermarkedPDF = secDir.appendingPathComponent("watermarked.pdf")
+    try PDFSecurityTools.shared.watermarkPDF(
+        input: samplePDF,
+        output: watermarkedPDF,
+        watermarkText: "PASTA_SECRET_STAMP",
+        opacity: 0.4,
+        position: "diagonal",
+        runner: runner,
+        jobId: UUID()
+    )
+    assertTest(FileManager.default.fileExists(atPath: watermarkedPDF.path), "37.3 Watermark PDF created")
+    let (watermarkOut, _) = try runner.executeCapture(invocation: Invocation(toolName: "pdftotext", arguments: [watermarkedPDF.path, "-"]))
+    assertTest(watermarkOut.contains("PASTA_SECRET_STAMP"), "37.3 Watermark text 'PASTA_SECRET_STAMP' present in output via pdftotext")
+
+    // Page numbering on 3-page fixture
+    let threePagesFixture = URL(fileURLWithPath: "Fixtures/three_numbered_pages.pdf")
+    let numberedPDF = secDir.appendingPathComponent("numbered.pdf")
+    try PDFSecurityTools.shared.addPageNumbers(
+        input: threePagesFixture,
+        output: numberedPDF,
+        position: "bottom-center",
+        startNumber: 1,
+        format: "Page 1 of N",
+        runner: runner,
+        jobId: UUID()
+    )
+    assertTest(FileManager.default.fileExists(atPath: numberedPDF.path), "37.3 Page numbers stamped on 3-page fixture")
+    let (numberedOut, _) = try runner.executeCapture(invocation: Invocation(toolName: "pdftotext", arguments: [numberedPDF.path, "-"]))
+    assertTest(numberedOut.contains("Page 1 of 3") && numberedOut.contains("Page 2 of 3") && numberedOut.contains("Page 3 of 3"),
+               "37.3 Page numbers 'Page 1 of 3', 'Page 2 of 3', 'Page 3 of 3' present on all pages")
+
+    // Temporary scratch cleanliness check
+    let tmpContents = (try? FileManager.default.contentsOfDirectory(atPath: "/tmp")) ?? []
+    let leftoverPasta = tmpContents.filter { $0.hasPrefix("Pasta_qpdf_arg_") || $0.hasPrefix("Pasta_qpdf_pw_") }
+    assertTest(leftoverPasta.isEmpty, "37.3 Zero leftover temporary password files in /tmp")
+}
+
+// 37.4 Formats: BMP, AVIF, PDF to EPUB, PDF/A-2b (A4)
+do {
+    let fmtDir = try OutputPlanner.makeTempDirectory()
+    defer { try? FileManager.default.removeItem(at: fmtDir) }
+    let runner = JobRunner()
+    let samplePNG = URL(fileURLWithPath: "Fixtures/sample.png")
+    let samplePDF = URL(fileURLWithPath: "Fixtures/sample.pdf")
+
+    // BMP conversion
+    let bmpURL = fmtDir.appendingPathComponent("sample.bmp")
+    let bmpAct = FormatRegistry.shared.action(byId: "image.to.bmp")!
+    try runner.run(action: bmpAct, input: samplePNG, destinationDirectory: fmtDir)
+    assertTest(FileManager.default.fileExists(atPath: bmpURL.path), "37.4 image.to.bmp produces output file")
+    let (fileBmpOut, _) = try runner.executeCapture(invocation: Invocation(toolName: "file", arguments: [bmpURL.path]))
+    assertTest(fileBmpOut.contains("PC bitmap") || fileBmpOut.contains("BMP"), "37.4 BMP output format verified with file: \(fileBmpOut.trimmingCharacters(in: .whitespacesAndNewlines))")
+
+    // AVIF conversion
+    let avifURL = fmtDir.appendingPathComponent("sample.avif")
+    let avifAct = FormatRegistry.shared.action(byId: "image.to.avif")!
+    try runner.run(action: avifAct, input: samplePNG, destinationDirectory: fmtDir)
+    assertTest(FileManager.default.fileExists(atPath: avifURL.path), "37.4 image.to.avif produces output file")
+    let (fileAvifOut, _) = try runner.executeCapture(invocation: Invocation(toolName: "file", arguments: [avifURL.path]))
+    assertTest(fileAvifOut.contains("AVIF") || fileAvifOut.contains("ISO Media"), "37.4 AVIF output format verified with file: \(fileAvifOut.trimmingCharacters(in: .whitespacesAndNewlines))")
+
+    // PDF to EPUB (Text Only)
+    let epubURL = fmtDir.appendingPathComponent("sample.epub")
+    try PDFTools.shared.convertToEPUB(input: samplePDF, output: epubURL, runner: runner, jobId: UUID())
+    assertTest(FileManager.default.fileExists(atPath: epubURL.path), "37.4 PDF to EPUB creates output file")
+    let (unzipOut, _) = try runner.executeCapture(invocation: Invocation(toolName: "unzip", arguments: ["-p", epubURL.path, "mimetype"]))
+    assertTest(unzipOut.contains("application/epub+zip"), "37.4 EPUB zip structure contains valid mimetype application/epub+zip")
+
+    // PDF/A-2b archival PDF with Ghostscript
+    let pdfaURL = fmtDir.appendingPathComponent("sample_pdfa.pdf")
+    try PDFTools.shared.convertToPDFA(input: samplePDF, output: pdfaURL, runner: runner, jobId: UUID())
+    assertTest(FileManager.default.fileExists(atPath: pdfaURL.path), "37.4 PDF to PDF/A-2b creates output file")
+    let (exifPart, _) = try runner.executeCapture(invocation: Invocation(toolName: "exiftool", arguments: ["-XMP-pdfaid:Part", pdfaURL.path]))
+    let (exifConf, _) = try runner.executeCapture(invocation: Invocation(toolName: "exiftool", arguments: ["-XMP-pdfaid:Conformance", pdfaURL.path]))
+    assertTest(exifPart.contains("2") && exifConf.contains("B"), "37.4 PDF/A-2b metadata verified with exiftool (Part: 2, Conformance: B)")
+
+    // Calibre optional tool registration & doctor check
+    let calibreAct = FormatRegistry.shared.action(byId: "pdf.to.epub.calibre")
+    assertTest(calibreAct != nil, "37.4 pdf.to.epub.calibre action is registered")
+    assertTest(calibreAct?.requiredTool == "ebook-convert", "37.4 pdf.to.epub.calibre requires ebook-convert")
+    assertTest(calibreAct?.requirementNote == "needs Calibre", "37.4 pdf.to.epub.calibre requirementNote is 'needs Calibre' when missing")
+
+    // Format registry distinct glyphs
+    assertTest(FormatRegistry.icon(forFormat: "avif") == "photo.stack", "37.4 distinctFormatGlyphs icon for avif is photo.stack")
+    assertTest(FormatRegistry.icon(forFormat: "pdfa") == "archivebox.circle.fill", "37.4 distinctFormatGlyphs icon for pdfa is archivebox.circle.fill")
+    assertTest(FormatRegistry.icon(forFormat: "xlsx") == "tablecells.fill", "37.4 distinctFormatGlyphs icon for xlsx is tablecells.fill")
+    assertTest(FormatRegistry.icon(forFormat: "csv") == "tablecells.badge.ellipsis", "37.4 distinctFormatGlyphs icon for csv is tablecells.badge.ellipsis")
+}
+
 print("\n==================================================")
 print("Test Suite Summary: \(passedTests)/\(totalTests) Passed, \(failedTests) Failed")
 print("==================================================")

@@ -125,4 +125,46 @@ public final class PDFTools {
         let inv = Invocation(toolName: "qpdf", arguments: args)
         try runner.execute(invocation: inv, jobId: jobId)
     }
+
+    /// Converts PDF to archival PDF/A-2b using Ghostscript
+    public func convertToPDFA(input: URL, output: URL, runner: JobRunner, jobId: UUID) throws {
+        _ = try ToolLocator.shared.requireTool("gs")
+        let inv = Invocation(toolName: "gs", arguments: [
+            "-dPDFA=2",
+            "-dBATCH",
+            "-dNOPAUSE",
+            "-dPDFACompatibilityPolicy=1",
+            "-sColorConversionStrategy=UseDeviceIndependentColor",
+            "-sDEVICE=pdfwrite",
+            "-o", output.path,
+            input.path
+        ])
+        try runner.execute(invocation: inv, timeoutSeconds: 60, jobId: jobId)
+    }
+
+    /// Converts PDF to EPUB using pdftotext to extract plain text/markdown followed by pandoc
+    /// Note: Labeled "text only, layout not preserved"
+    public func convertToEPUB(input: URL, output: URL, runner: JobRunner, jobId: UUID) throws {
+        _ = try ToolLocator.shared.requireTool("pdftotext")
+        _ = try ToolLocator.shared.requireTool("pandoc")
+
+        let scratchDir = try OutputPlanner.makeTempDirectory()
+        defer {
+            try? FileManager.default.removeItem(at: scratchDir)
+        }
+
+        let tempTextURL = scratchDir.appendingPathComponent("document_text.txt")
+        let txtInv = Invocation(toolName: "pdftotext", arguments: ["-layout", input.path, tempTextURL.path])
+        try runner.execute(invocation: txtInv, timeoutSeconds: 30, jobId: jobId)
+
+        let epubInv = Invocation(toolName: "pandoc", arguments: [tempTextURL.path, "-o", output.path])
+        try runner.execute(invocation: epubInv, timeoutSeconds: 60, jobId: jobId)
+    }
+
+    /// Converts PDF to EPUB using Calibre (ebook-convert) for enhanced layout preservation
+    public func convertToEPUBWithCalibre(input: URL, output: URL, runner: JobRunner, jobId: UUID) throws {
+        _ = try ToolLocator.shared.requireTool("ebook-convert")
+        let inv = Invocation(toolName: "ebook-convert", arguments: [input.path, output.path])
+        try runner.execute(invocation: inv, timeoutSeconds: 120, jobId: jobId)
+    }
 }

@@ -40,6 +40,7 @@ public final class JobRunner {
         if let proc = proc {
             terminateGracefully(proc)
         }
+        try? FileManager.default.removeItem(atPath: "/tmp/Pasta_lo_\(jobId.uuidString)")
     }
 
     public func cancel() {
@@ -128,9 +129,11 @@ public final class JobRunner {
 
         // Create temporary isolated scratch space
         let tempDir = try OutputPlanner.makeTempDirectory()
+        let loProfileDir = URL(fileURLWithPath: "/tmp/Pasta_lo_\(jobId.uuidString)")
         defer {
             // Safe to swallow: best-effort temporary scratch directory removal on scope exit
             try? fm.removeItem(at: tempDir)
+            try? fm.removeItem(at: loProfileDir)
         }
 
         let tempWorkingOutputURL: URL
@@ -264,9 +267,11 @@ public final class JobRunner {
         PastaLogger.shared.info("Starting batch action \(action.id) on \(inputs.count) files -> '\(finalDestinationURL.lastPathComponent)'")
 
         let tempDir = try OutputPlanner.makeTempDirectory()
+        let loProfileDir = URL(fileURLWithPath: "/tmp/Pasta_lo_\(jobId.uuidString)")
         defer {
             // Safe to swallow: best-effort temporary scratch directory removal on scope exit
             try? fm.removeItem(at: tempDir)
+            try? fm.removeItem(at: loProfileDir)
         }
 
         let tempWorkingOutputURL: URL
@@ -405,9 +410,17 @@ extension JobRunner {
 
         let toolURL = try ToolLocator.shared.requireTool(invocation.toolName)
 
+        var processArgs = invocation.arguments
+        if invocation.toolName == "soffice" {
+            let loProfile = "file:///tmp/Pasta_lo_\(jobId.uuidString)"
+            if !processArgs.contains(where: { $0.hasPrefix("-env:UserInstallation=") }) {
+                processArgs.insert("-env:UserInstallation=\(loProfile)", at: 0)
+            }
+        }
+
         let process = Process()
         process.executableURL = toolURL
-        process.arguments = invocation.arguments
+        process.arguments = processArgs
         process.standardInput = FileHandle.nullDevice
 
         let outPipe = Pipe()
@@ -643,9 +656,11 @@ extension JobRunner {
             PastaLogger.shared.info("Starting async action \(action.id) on '\(input.lastPathComponent)' -> '\(finalDestinationURL.lastPathComponent)'")
 
             let tempDir = try OutputPlanner.makeTempDirectory()
+            let loProfileDir = URL(fileURLWithPath: "/tmp/Pasta_lo_\(jobId.uuidString)")
             defer {
                 // Safe to swallow: best-effort temporary scratch directory removal on scope exit
                 try? fm.removeItem(at: tempDir)
+                try? fm.removeItem(at: loProfileDir)
             }
 
             let tempWorkingOutputURL: URL
@@ -739,9 +754,17 @@ extension JobRunner {
 
         let toolURL = try ToolLocator.shared.requireTool(invocation.toolName)
 
+        var processArgs = invocation.arguments
+        if invocation.toolName == "soffice" {
+            let loProfile = "file:///tmp/Pasta_lo_\(jobId.uuidString)"
+            if !processArgs.contains(where: { $0.hasPrefix("-env:UserInstallation=") }) {
+                processArgs.insert("-env:UserInstallation=\(loProfile)", at: 0)
+            }
+        }
+
         let process = Process()
         process.executableURL = toolURL
-        process.arguments = invocation.arguments
+        process.arguments = processArgs
         process.standardInput = FileHandle.nullDevice
 
         let outPipe = Pipe()

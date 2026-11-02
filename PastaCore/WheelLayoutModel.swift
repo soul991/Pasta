@@ -464,6 +464,9 @@ public final class WheelLayoutModel {
             var chosenActions: [ConversionAction] = []
             for targetID in pinnedIDs {
                 if let matched = allActions.first(where: { $0.id == targetID }) {
+                    if let req = matched.requiredTool, !ToolLocator.shared.isOptionalToolAvailable(req) {
+                        continue
+                    }
                     chosenActions.append(matched)
                 }
             }
@@ -471,7 +474,13 @@ public final class WheelLayoutModel {
             // 2. If fewer than 6, fill remaining slots with other available actions for this file
             if chosenActions.count < 6 {
                 let chosenIDs = Set(chosenActions.map { $0.id })
-                let remaining = allActions.filter { !chosenIDs.contains($0.id) && !isToolHidden($0.id, in: fileCategory) }
+                let remaining = allActions.filter { act in
+                    guard !chosenIDs.contains(act.id) && !isToolHidden(act.id, in: fileCategory) else { return false }
+                    if let req = act.requiredTool, !ToolLocator.shared.isOptionalToolAvailable(req) {
+                        return false
+                    }
+                    return true
+                }
                 for act in remaining {
                     chosenActions.append(act)
                     if chosenActions.count == 6 { break }

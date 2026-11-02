@@ -20,6 +20,7 @@ jobs:
         run: |
           brew update --quiet
           brew install ffmpeg imagemagick qpdf ghostscript poppler pandoc exiftool webp unar sevenzip librsvg
+          brew install --cask libreoffice
 
       - name: Environment Diagnostics
         run: |

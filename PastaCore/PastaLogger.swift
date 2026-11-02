@@ -3,7 +3,7 @@ import Foundation
 public final class PastaLogger {
     public static let shared = PastaLogger()
 
-    private let logFileURL: URL
+    public let logFileURL: URL
     private let lock = NSLock()
     private let dateFormatter = ISO8601DateFormatter()
 
@@ -15,12 +15,28 @@ public final class PastaLogger {
         self.logFileURL = logsDir.appendingPathComponent("pasta.log")
     }
 
+    private func redactSensitiveInfo(_ text: String) -> String {
+        var clean = text
+        let patterns = [
+            "(--(?:user-|owner-)?password=)[^\\s]+",
+            "(-P\\s+)[^\\s]+",
+            "((?i)password[:=]\\s*)[^\\s,;]+"
+        ]
+        for pattern in patterns {
+            if let regex = try? NSRegularExpression(pattern: pattern) {
+                clean = regex.stringByReplacingMatches(in: clean, range: NSRange(location: 0, length: clean.utf16.count), withTemplate: "$1[REDACTED]")
+            }
+        }
+        return clean
+    }
+
     public func log(_ message: String, level: String = "INFO") {
         lock.lock()
         defer { lock.unlock() }
 
         let timestamp = dateFormatter.string(from: Date())
-        let line = "[\(timestamp)] [\(level)] \(message)\n"
+        let safeMessage = redactSensitiveInfo(message)
+        let line = "[\(timestamp)] [\(level)] \(safeMessage)\n"
 
         guard let data = line.data(using: .utf8) else { return }
 
