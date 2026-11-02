@@ -30,6 +30,7 @@ public final class ToolLocator {
     ]
 
     private var overrides: [String: URL] = [:]
+    private var unavailableOverrides: Set<String> = []
     private var cache: [String: URL] = [:]
     private let lock = NSLock()
 
@@ -39,9 +40,23 @@ public final class ToolLocator {
         lock.lock()
         defer { lock.unlock() }
         if let url = url {
+            unavailableOverrides.remove(tool)
             overrides[tool] = url
         } else {
             overrides.removeValue(forKey: tool)
+        }
+    }
+
+    /// Forces a tool to be unavailable without consulting the machine's PATH or app bundle.
+    /// This is used by deterministic tests for optional conversion engines.
+    public func setUnavailableOverride(tool: String, isUnavailable: Bool) {
+        lock.lock()
+        defer { lock.unlock() }
+        if isUnavailable {
+            overrides.removeValue(forKey: tool)
+            unavailableOverrides.insert(tool)
+        } else {
+            unavailableOverrides.remove(tool)
         }
     }
 
@@ -49,6 +64,9 @@ public final class ToolLocator {
         lock.lock()
         defer { lock.unlock() }
 
+        if unavailableOverrides.contains(name) {
+            return nil
+        }
         if let overridden = overrides[name] {
             return overridden
         }
@@ -79,8 +97,12 @@ public final class ToolLocator {
     public func findOptionalTool(_ name: String) -> URL? {
         if name == "soffice" {
             lock.lock()
+            let isForcedUnavailable = unavailableOverrides.contains("soffice")
             let overridden = overrides["soffice"]
             lock.unlock()
+            if isForcedUnavailable {
+                return nil
+            }
             if let overridden = overridden {
                 if FileManager.default.isExecutableFile(atPath: overridden.path) {
                     return overridden

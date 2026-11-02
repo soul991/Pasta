@@ -47,6 +47,15 @@ do {
     }
     assertTest(threwMissing, "ToolLocator throws PastaError.missingTool for nonexistent tool")
 
+    ToolLocator.shared.setUnavailableOverride(tool: "soffice", isUnavailable: true)
+    assertTest(!ToolLocator.shared.isOptionalToolAvailable("soffice"), "ToolLocator missing override hides optional LibreOffice regardless of runner state")
+    ToolLocator.shared.setUnavailableOverride(tool: "soffice", isUnavailable: false)
+
+    let overriddenSoffice = URL(fileURLWithPath: "/usr/bin/true")
+    ToolLocator.shared.setOverride(tool: "soffice", url: overriddenSoffice)
+    assertTest(ToolLocator.shared.findOptionalTool("soffice") == overriddenSoffice, "ToolLocator present override takes precedence for optional LibreOffice")
+    ToolLocator.shared.setOverride(tool: "soffice", url: nil)
+
     let doctorStatuses = ToolLocator.shared.doctorStatuses()
     assertTest(doctorStatuses.contains { $0.name == "ffmpeg" && !$0.isOptional && $0.path != nil }, "ToolLocator doctor report includes required tool paths")
     assertTest(doctorStatuses.contains { $0.name == "soffice" && $0.isOptional }, "ToolLocator doctor report includes optional LibreOffice status")
@@ -747,9 +756,30 @@ do {
         assertTest(out != nil && FileManager.default.fileExists(atPath: out!.path) && hashBefore == hashAfter, "Step 2: Hostile filename 'sample with spaces.png' converts to PDF safely")
     }
 
-    // 7.8 Optional LibreOffice detection & Doctor
-    let sofficeAvailable = ToolLocator.shared.isOptionalToolAvailable("soffice")
-    assertTest(sofficeAvailable == false, "Step 2: soffice is correctly reported as missing optional tool without failure")
+    // 7.8 Optional LibreOffice detection: missing and present states are forced so CI does not depend on its image.
+    ToolLocator.shared.setUnavailableOverride(tool: "soffice", isUnavailable: true)
+    let hiddenSofficeAction = FormatRegistry.shared.action(for: sampleDocx, actionID: "docx.to.pdf")
+    assertTest(hiddenSofficeAction == nil, "Step 2: forced-missing soffice hides docx.to.pdf without failure")
+    ToolLocator.shared.setUnavailableOverride(tool: "soffice", isUnavailable: false)
+
+    let fakeSoffice = URL(fileURLWithPath: "/usr/bin/true")
+    ToolLocator.shared.setOverride(tool: "soffice", url: fakeSoffice)
+    let presentSofficeAction = FormatRegistry.shared.action(for: sampleDocx, actionID: "docx.to.pdf")
+    assertTest(presentSofficeAction != nil, "Step 2: forced-present soffice exposes docx.to.pdf")
+    ToolLocator.shared.setOverride(tool: "soffice", url: nil)
+
+    // This executes only on runners with a real LibreOffice binary; fake overrides never reach it.
+    if let realSoffice = ToolLocator.shared.findOptionalTool("soffice") {
+        let realSofficeAction = FormatRegistry.shared.action(for: sampleDocx, actionID: "docx.to.pdf")
+        let realSofficeOutput = realSofficeAction.flatMap { try? JobRunner.shared.run(action: $0, input: sampleDocx, destinationDirectory: testTempDir) }
+        assertTest(
+            FileManager.default.isExecutableFile(atPath: realSoffice.path) &&
+                realSofficeOutput.map { FileManager.default.fileExists(atPath: $0.path) } == true,
+            "Step 2: real LibreOffice converts DOCX to PDF when soffice is installed"
+        )
+    } else {
+        print("  ⓘ SKIP: real LibreOffice DOCX-to-PDF integration (soffice unavailable)")
+    }
 }
 
 // MARK: - 8. Phase 9 Step 3: Compression Modes Tests
@@ -3189,7 +3219,7 @@ do {
                "23.6 More actions count (\(moreVideoActions.count)) == all minus pinned (\(expectedMoreCount))")
 
     // 23.7 Unavailable tools (missing optional binary) excluded
-    ToolLocator.shared.setOverride(tool: "soffice", url: nil)
+    ToolLocator.shared.setUnavailableOverride(tool: "soffice", isUnavailable: true)
     let docxFile = URL(fileURLWithPath: "sample.docx")
     let docxSlots = testLayoutModel.slots(for: docxFile, isAdvanced: false)
     let hasSofficeAction = docxSlots.contains { slot in
@@ -3199,6 +3229,7 @@ do {
         return false
     }
     assertTest(!hasSofficeAction, "23.7 Unavailable tool docx.to.pdf (missing soffice) excluded from slots")
+    ToolLocator.shared.setUnavailableOverride(tool: "soffice", isUnavailable: false)
 
     // 23.8 Theme contrast: every theme's label-on-accent ratio is >= 4.5:1
     for theme in WheelTheme.allCases {
