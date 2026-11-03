@@ -194,6 +194,13 @@ public final class RadialOptionNodeView: NSView {
         updateState()
     }
 
+    /// Diagnostic description of what this node is actually showing (used by wheel snapshot logging).
+    public func debugSnapshot() -> String {
+        let iconState = iconView.image == nil ? "nil" : "set"
+        let colorText = String(describing: titleLabel.textColor)
+        return "alpha=\(alphaValue) hidden=\(isHidden) frame=\(NSStringFromRect(frame)) glass=\(systemGlass.usesSystemGlass) icon=\(iconState) iconHidden=\(iconView.isHidden) title='\(titleLabel.stringValue)' titleHidden=\(titleLabel.isHidden) titleAlpha=\(titleLabel.alphaValue) titleColor=\(colorText)"
+    }
+
     private func updateState() {
         let accent = ThemeManager.shared.accentColor
         let darkInk = NSColor(hex: "#1A0F05") ?? .black
