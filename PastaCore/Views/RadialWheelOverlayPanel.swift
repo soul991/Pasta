@@ -33,6 +33,19 @@ public final class RadialWheelOverlayPanel: NSPanel {
         return true
     }
 
+    /// Esc fallback: works whenever the panel itself receives the key, even if global key monitoring is unavailable.
+    public override func cancelOperation(_ sender: Any?) {
+        DragMonitor.shared.closeWheel(reason: "Esc via wheel panel responder")
+    }
+
+    public override func keyDown(with event: NSEvent) {
+        if event.keyCode == 53 {
+            DragMonitor.shared.closeWheel(reason: "Esc keyDown on wheel panel")
+        } else {
+            super.keyDown(with: event)
+        }
+    }
+
     public func configure(files: [URL]) {
         wheelViewController.configure(files: files, isOptionHeld: false)
     }

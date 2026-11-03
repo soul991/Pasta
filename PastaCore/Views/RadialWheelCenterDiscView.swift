@@ -17,6 +17,12 @@ public final class RadialWheelCenterDiscView: NSView {
     private let fileNameLabel = NSTextField(labelWithString: "")
     private let detailLabel = NSTextField(labelWithString: "")
 
+    /// Diagnostic description of what the hub is actually showing (used by wheel snapshot logging).
+    public func debugSnapshot() -> String {
+        let imageState = iconImageView.image == nil ? "nil" : "set"
+        return "hidden=\(isHidden) alpha=\(alphaValue) name='\(fileNameLabel.stringValue)' detail='\(detailLabel.stringValue)' image=\(imageState) glass=\(systemGlass.usesSystemGlass)"
+    }
+
     public var displayedFileName: String {
         return fileNameLabel.stringValue
     }

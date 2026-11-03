@@ -832,6 +832,9 @@ public final class DragMonitor {
 
     /// Process key down events (Esc cancels, other keys cancel charging)
     public func processKeyDown(keyCode: UInt16, timestamp: TimeInterval) {
+        if isWheelOpen {
+            PastaLogger.shared.info("DragMonitor key event while wheel open: keyCode=\(keyCode)")
+        }
         switch state {
         case .armed, .charging:
             // Any other key pressed during charging cancels
@@ -937,6 +940,7 @@ public final class DragMonitor {
 
     public func startMonitoring() {
         stopMonitoring()
+        PastaLogger.shared.info("DragMonitor startMonitoring: accessibilityTrusted=\(DragMonitor.isAccessibilityTrusted())")
 
         // Refresh baseline upon starting monitoring
         dragPasteboardBaselineChangeCount = pasteboardReader.changeCount

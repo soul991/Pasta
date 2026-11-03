@@ -523,6 +523,28 @@ public final class RadialWheelOverlayViewController: NSViewController {
                 nodeViews.append(nodeView)
             }
         }
+
+        // Diagnostics: record what the wheel is really showing shortly after it appears.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
+            guard let self = self else { return }
+            PastaLogger.shared.info("Wheel snapshot 0.8s after configure:\n" + self.debugSnapshot())
+        }
+    }
+
+    /// Diagnostic description of the whole wheel (files, nodes, hub, hint pill, window state).
+    public func debugSnapshot() -> String {
+        let appearanceName = view.effectiveAppearance.name.rawValue
+        let isKey = view.window?.isKeyWindow ?? false
+        let windowAlpha = view.window?.alphaValue ?? -1
+        var lines: [String] = []
+        lines.append("wheel files=\(targetFiles.count) nodes=\(nodeViews.count) advanced=\(isAdvanced) appearance=\(appearanceName) windowKey=\(isKey) windowAlpha=\(windowAlpha)")
+        lines.append("hub: " + centerDisc.debugSnapshot())
+        let hintColor = String(describing: hintPillLabel.textColor)
+        lines.append("hint: text='\(hintPillLabel.stringValue)' alpha=\(hintPillContainer.alphaValue) hidden=\(hintPillContainer.isHidden) color=\(hintColor)")
+        for (index, node) in nodeViews.enumerated() {
+            lines.append("node\(index): " + node.debugSnapshot())
+        }
+        return lines.joined(separator: "\n")
     }
 
     // MARK: - Parameter Panel Management (Phase 10 Step 2)

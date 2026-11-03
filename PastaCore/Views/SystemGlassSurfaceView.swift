@@ -20,7 +20,9 @@ public final class SystemGlassSurfaceView: NSView {
     }
 
     public func configure(cornerRadius: CGFloat, tintColor: NSColor?, isInteractive: Bool) {
-        let shouldUseSystemGlass = !ThemeManager.shared.isReduceTransparency
+        // Diagnostic switch: `defaults write com.local.pasta PastaForceFallbackGlass -bool true` forces the NSVisualEffectView path.
+        let forceFallback = UserDefaults.standard.bool(forKey: "PastaForceFallbackGlass")
+        let shouldUseSystemGlass = !ThemeManager.shared.isReduceTransparency && !forceFallback
         if #available(macOS 26, *), shouldUseSystemGlass {
             let systemGlass: NSGlassEffectView
             if let existing = glass as? NSGlassEffectView {
