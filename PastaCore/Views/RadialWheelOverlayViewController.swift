@@ -81,18 +81,10 @@ public final class RadialWheelOverlayViewController: NSViewController {
         view = rootView
         view.wantsLayer = true
         view.layer?.masksToBounds = false
-        if #available(macOS 26, *) {
-            let container = SystemGlassContainerView(spacing: 10)
-            container.frame = rootView.bounds
-            container.autoresizingMask = [.width, .height]
-            let content = NSView(frame: container.bounds)
-            content.autoresizingMask = [.width, .height]
-            content.wantsLayer = true
-            content.layer?.masksToBounds = false
-            container.contentView = content
-            rootView.addSubview(container)
-            glassContentView = content
-        }
+        // NOTE: do NOT host the wheel content inside an NSGlassEffectContainerView. A glass container
+        // renders everything in its contentView as glass, which blurs away node icons, labels and the
+        // hub text (owner screenshots, Nov 3). Individual glass surfaces (SystemGlassSurfaceView) are
+        // layered inside nodes, hub, backplate and hint pill instead; content sits above them.
     }
 
     public override func viewDidLoad() {

@@ -1995,6 +1995,14 @@ do {
     wheelVC.onCloseRequested = { closeRequested = true }
     wheelVC.cancelOperation(nil)
     assertTest(closeRequested, "16.8 cancelOperation without parameter panel requests wheel close")
+
+    // 16.9 Regression (owner screenshots, Nov 3): wheel content must NOT be hosted in a glass container
+    if #available(macOS 26, *) {
+        assertTest(!wheelVC.view.subviews.contains(where: { $0 is NSGlassEffectContainerView }),
+                   "16.9 Wheel content is not hosted inside an NSGlassEffectContainerView (it hides icons and labels)")
+    }
+    assertTest(!wheelVC.view.subviews.isEmpty && wheelVC.view.subviews.contains(where: { $0 is RadialWheelBackplateView }),
+               "16.9 Backplate is a direct subview of the wheel view")
 }
 
 // MARK: - 17. Crop Presets & Dynamic Media Probe Tests (Phase 10 Fix 1)
