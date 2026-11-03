@@ -3,7 +3,11 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-PASTA_BIN="./Pasta.app/Contents/MacOS/Pasta"
+PASTA_BIN="${PASTA_BIN:-}"
+if [ -z "$PASTA_BIN" ]; then
+    PASTA_BIN="./Pasta.app/Contents/MacOS/Pasta"
+fi
+
 if [ ! -f "$PASTA_BIN" ]; then
     if [ -f ".build/release/Pasta" ]; then
         PASTA_BIN=".build/release/Pasta"

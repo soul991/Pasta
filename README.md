@@ -105,15 +105,13 @@ pasta convert --action image.collage --param columns=2 img1.png img2.png
 
 ## 🧪 Testing & Verification
 
-Pasta includes comprehensive unit, integration, and security hardening test suites verified continuously via GitHub Actions (`.github/workflows/macos-ci.yml`) on `macos-latest`:
+Pasta includes comprehensive unit, integration, and security hardening suites.
+The current Xcode 27.2 verification result is **749 / 749 PastaTests passing** in both
+Debug and Release, plus **33 / 33 Section 8 checks** against both the debug
+binary and the bundled app. Reprint live counts with:
 
 ```bash
-# Run all 157 Unit, Integration & Section 12 Shift-Hold Tests (Debug & Release)
-swift run PastaTests
-swift run -c release PastaTests
-
-# Run 33 Section 8 Hardening, Resource Leak & Hostile Filename Tests
-./scripts/run_section8_tests.sh
+./scripts/test_counts.sh
 
 # Build, package, and verify signed Pasta.app bundle
 ./scripts/build_app.sh
@@ -121,7 +119,12 @@ codesign --verify --deep --strict Pasta.app
 ```
 
 ### GitHub Actions CI
-Every commit and pull request runs automated CI on `macos-latest` (`macos-26-arm64`), installing all 12 engines via Homebrew (`brew install ffmpeg imagemagick qpdf ghostscript poppler pandoc exiftool webp unar sevenzip librsvg`), executing `swift build`, running `PastaTests` (**157 / 157 passing**), executing `./scripts/run_section8_tests.sh` (**33 / 33 passing**), assembling `Pasta.app`, and validating code signatures and embedded bundle assets (`AppIcon.icns`, `MenuBarIcon.pdf`, `theme_tokens.json`).
+Every commit and pull request runs a primary `xcode-27` arm64 job and a
+`macos-latest` fallback compatibility job. Each prints `sw_vers` and
+`xcodebuild -version`. The primary job installs the conversion engines and
+LibreOffice, builds Debug and Release, runs both PastaTests suites, runs Section
+8 against the explicit debug binary and `Pasta.app`, then validates the app
+signature and bundled assets.
 
 ---
 

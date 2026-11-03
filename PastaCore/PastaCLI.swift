@@ -1,4 +1,5 @@
 import Foundation
+import UserNotifications
 
 public struct PastaCLI {
     public static func run(arguments: [String]) {
@@ -80,35 +81,13 @@ public struct PastaCLI {
     }
 
     private static func runDoctor() {
-        let tools = [
-            "ffmpeg", "cwebp", "magick", "gs", "qpdf", "pdftoppm",
-            "pdftotext", "exiftool", "pandoc", "rsvg-convert", "unar",
-            "7zz", "sips", "ditto", "tar"
-        ]
-
         print("Pasta Environment & Engine Doctor:")
         print("--------------------------------------------------")
-        print("Required Engine Tools:")
-        var allOk = true
-        for tool in tools {
-            if let url = ToolLocator.shared.findTool(tool) {
-                print("  [OK]      \(tool.padding(toLength: 14, withPad: " ", startingAt: 0)) -> \(url.path)")
-            } else {
-                print("  [MISSING] \(tool.padding(toLength: 14, withPad: " ", startingAt: 0)) (NOT FOUND)")
-                allOk = false
-            }
-        }
-        print("\nOptional Engine Tools:")
-        let optionalTools = ["soffice"]
-        for tool in optionalTools {
-            if let url = ToolLocator.shared.findOptionalTool(tool) {
-                print("  [OK (OPTIONAL)]  \(tool.padding(toLength: 14, withPad: " ", startingAt: 0)) -> \(url.path)")
-            } else {
-                print("  [OPTIONAL MISSING] \(tool.padding(toLength: 14, withPad: " ", startingAt: 0)) (LibreOffice not installed, Office conversions disabled)")
-            }
+        for status in ToolLocator.shared.doctorStatuses() {
+            print("  \(status.displayLine)")
         }
         print("--------------------------------------------------")
-        if allOk {
+        if ToolLocator.shared.doctorStatuses().filter({ !$0.isOptional }).allSatisfy(\.isAvailable) {
             print("All required engine binaries are available.")
         } else {
             print("Warning: Some tools are missing. Install missing tools via Homebrew.")
@@ -334,23 +313,45 @@ public struct PastaCLI {
         }
     }
 
+    public static func makeNotificationRequest(title: String, message: String) -> UNNotificationRequest {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = message
+        content.sound = .default
+        return UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+    }
+
     public static func showNotification(title: String, message: String) {
-        let script = "display notification \"\(message.replacingOccurrences(of: "\"", with: "\\\""))\" with title \"\(title)\""
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        proc.arguments = ["-e", script]
-        let errPipe = Pipe()
-        proc.standardError = errPipe
-        do {
-            try proc.run()
-            proc.waitUntilExit()
-            if proc.terminationStatus != 0 {
-                let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
-                let errStr = String(data: errData, encoding: .utf8) ?? ""
-                PastaLogger.shared.error("Notification error: \(errStr.trimmingCharacters(in: .whitespacesAndNewlines))")
+        let center = UNUserNotificationCenter.current()
+        let request = makeNotificationRequest(title: title, message: message)
+
+        center.getNotificationSettings { settings in
+            switch settings.authorizationStatus {
+            case .authorized, .provisional, .ephemeral:
+                deliverNotification(request, through: center)
+            case .notDetermined:
+                center.requestAuthorization(options: [.alert, .sound]) { granted, error in
+                    if let error {
+                        PastaLogger.shared.error("Native notification authorization failed: \(error.localizedDescription)")
+                    } else if granted {
+                        deliverNotification(request, through: center)
+                    } else {
+                        PastaLogger.shared.warning("Native notifications are disabled; no notification was delivered")
+                    }
+                }
+            case .denied:
+                PastaLogger.shared.warning("Native notifications are disabled; no notification was delivered")
+            @unknown default:
+                PastaLogger.shared.warning("Native notification authorization has an unknown status; no notification was delivered")
             }
-        } catch {
-            PastaLogger.shared.error("Failed to run notification osascript: \(error.localizedDescription)")
+        }
+    }
+
+    private static func deliverNotification(_ request: UNNotificationRequest, through center: UNUserNotificationCenter) {
+        center.add(request) { error in
+            if let error {
+                PastaLogger.shared.error("Native notification delivery failed: \(error.localizedDescription)")
+            }
         }
     }
 }

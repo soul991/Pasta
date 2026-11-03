@@ -1,0 +1,12 @@
+name: 'Install dependencies via Homebrew'
+description: 'Installs required CLI tools and LibreOffice cask for Pasta CI'
+runs:
+  using: 'composite'
+  steps:
+    - name: Install dependencies via Homebrew
+      shell: bash
+      run: |
+        brew update --quiet
+        brew install ffmpeg imagemagick qpdf ghostscript poppler pandoc exiftool webp unar sevenzip librsvg
+        brew install --cask libreoffice
+        /Applications/LibreOffice.app/Contents/MacOS/soffice --version

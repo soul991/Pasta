@@ -20,6 +20,7 @@ public final class RadialWheelBackplateView: NSView {
     }
 
     private let visualEffect = NSVisualEffectView()
+    private let systemGlass = SystemGlassSurfaceView(cornerRadius: 200, tintColor: NSColor(white: 0.10, alpha: 0.75))
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: NSRect(x: 0, y: 0, width: 400, height: 400))
@@ -34,6 +35,14 @@ public final class RadialWheelBackplateView: NSView {
     private func setupView() {
         wantsLayer = true
         layer?.masksToBounds = false
+
+        addSubview(systemGlass)
+        NSLayoutConstraint.activate([
+            systemGlass.leadingAnchor.constraint(equalTo: leadingAnchor),
+            systemGlass.trailingAnchor.constraint(equalTo: trailingAnchor),
+            systemGlass.topAnchor.constraint(equalTo: topAnchor),
+            systemGlass.bottomAnchor.constraint(equalTo: bottomAnchor)
+        ])
 
         visualEffect.translatesAutoresizingMaskIntoConstraints = false
         visualEffect.blendingMode = .behindWindow
@@ -59,6 +68,8 @@ public final class RadialWheelBackplateView: NSView {
     }
 
     private func updateAnnulusMask() {
+        systemGlass.configure(cornerRadius: outerDiameter / 2.0, tintColor: NSColor(white: 0.10, alpha: 0.75), isInteractive: false)
+        visualEffect.isHidden = systemGlass.usesSystemGlass
         let center = CGPoint(x: bounds.midX, y: bounds.midY)
         let outerR = outerDiameter / 2.0
         let innerR = hubDiameter / 2.0
@@ -70,7 +81,7 @@ public final class RadialWheelBackplateView: NSView {
         let maskLayer = CAShapeLayer()
         maskLayer.path = path
         maskLayer.fillRule = .evenOdd
-        visualEffect.layer?.mask = maskLayer
+        (systemGlass.usesSystemGlass ? systemGlass.layer : visualEffect.layer)?.mask = maskLayer
         visualEffect.layer?.backgroundColor = (ThemeManager.shared.isReduceTransparency
             ? ThemeManager.shared.reduceTransparencyBackground
             : NSColor(red: 0.10, green: 0.10, blue: 0.11, alpha: 0.75)).cgColor

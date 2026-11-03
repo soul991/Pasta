@@ -46,6 +46,57 @@ do {
         threwMissing = false
     }
     assertTest(threwMissing, "ToolLocator throws PastaError.missingTool for nonexistent tool")
+
+    ToolLocator.shared.setUnavailableOverride(tool: "soffice", isUnavailable: true)
+    assertTest(!ToolLocator.shared.isOptionalToolAvailable("soffice"), "ToolLocator missing override hides optional LibreOffice regardless of runner state")
+    ToolLocator.shared.setUnavailableOverride(tool: "soffice", isUnavailable: false)
+
+    let overriddenSoffice = URL(fileURLWithPath: "/usr/bin/true")
+    ToolLocator.shared.setOverride(tool: "soffice", url: overriddenSoffice)
+    assertTest(ToolLocator.shared.findOptionalTool("soffice") == overriddenSoffice, "ToolLocator present override takes precedence for optional LibreOffice")
+    ToolLocator.shared.setOverride(tool: "soffice", url: nil)
+
+    let doctorStatuses = ToolLocator.shared.doctorStatuses()
+    assertTest(doctorStatuses.contains { $0.name == "ffmpeg" && !$0.isOptional && $0.path != nil }, "ToolLocator doctor report includes required tool paths")
+    assertTest(doctorStatuses.contains { $0.name == "soffice" && $0.isOptional }, "ToolLocator doctor report includes optional LibreOffice status")
+}
+
+// MARK: - 1.2 System glass availability
+print("\n--- 1.2 System Glass Availability Tests ---")
+do {
+    let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        .appendingPathComponent("PastaCore/Views/SystemGlassSurfaceView.swift")
+    let source = (try? String(contentsOf: sourceURL, encoding: .utf8)) ?? ""
+    assertTest(
+        source.contains("NSGlassEffectView") &&
+        source.contains("NSGlassEffectContainerView") &&
+        source.contains("#available(macOS 26") &&
+        source.contains("#available(macOS 27"),
+        "1.2 System glass uses public macOS 26 classes and gates macOS 27 interaction API"
+    )
+}
+
+// MARK: - 1.1 Notification delivery safety
+print("\n--- 1.1 Notification Delivery Safety Tests ---")
+do {
+    let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        .appendingPathComponent("PastaCore/PastaCLI.swift")
+    let source = (try? String(contentsOf: sourceURL, encoding: .utf8)) ?? ""
+    let notificationStart = source.range(of: "public static func showNotification")
+    let notificationSource = notificationStart.map { String(source[$0.lowerBound...]) } ?? ""
+    assertTest(
+        notificationSource.contains("UNUserNotificationCenter") &&
+        !notificationSource.contains("display notification") &&
+        !notificationSource.contains("/usr/bin/osascript"),
+        "1.1 Notifications use UserNotifications rather than interpolated AppleScript"
+    )
+    let title = "Pasta \"Converted\""
+    let message = "Created file with $; & and \"quotes\""
+    let request = PastaCLI.makeNotificationRequest(title: title, message: message)
+    assertTest(
+        request.content.title == title && request.content.body == message && request.trigger == nil,
+        "1.1 Native notification request preserves literal title and message content"
+    )
 }
 
 // MARK: - 2. OutputPlanner Tests
@@ -705,9 +756,30 @@ do {
         assertTest(out != nil && FileManager.default.fileExists(atPath: out!.path) && hashBefore == hashAfter, "Step 2: Hostile filename 'sample with spaces.png' converts to PDF safely")
     }
 
-    // 7.8 Optional LibreOffice detection & Doctor
-    let sofficeAvailable = ToolLocator.shared.isOptionalToolAvailable("soffice")
-    assertTest(sofficeAvailable == false, "Step 2: soffice is correctly reported as missing optional tool without failure")
+    // 7.8 Optional LibreOffice detection: missing and present states are forced so CI does not depend on its image.
+    ToolLocator.shared.setUnavailableOverride(tool: "soffice", isUnavailable: true)
+    let hiddenSofficeAction = FormatRegistry.shared.action(for: sampleDocx, actionID: "docx.to.pdf")
+    assertTest(hiddenSofficeAction == nil, "Step 2: forced-missing soffice hides docx.to.pdf without failure")
+    ToolLocator.shared.setUnavailableOverride(tool: "soffice", isUnavailable: false)
+
+    let fakeSoffice = URL(fileURLWithPath: "/usr/bin/true")
+    ToolLocator.shared.setOverride(tool: "soffice", url: fakeSoffice)
+    let presentSofficeAction = FormatRegistry.shared.action(for: sampleDocx, actionID: "docx.to.pdf")
+    assertTest(presentSofficeAction != nil, "Step 2: forced-present soffice exposes docx.to.pdf")
+    ToolLocator.shared.setOverride(tool: "soffice", url: nil)
+
+    // This executes only on runners with a real LibreOffice binary; fake overrides never reach it.
+    if let realSoffice = ToolLocator.shared.findOptionalTool("soffice") {
+        let realSofficeAction = FormatRegistry.shared.action(for: sampleDocx, actionID: "docx.to.pdf")
+        let realSofficeOutput = realSofficeAction.flatMap { try? JobRunner.shared.run(action: $0, input: sampleDocx, destinationDirectory: testTempDir) }
+        assertTest(
+            FileManager.default.isExecutableFile(atPath: realSoffice.path) &&
+                realSofficeOutput.map { FileManager.default.fileExists(atPath: $0.path) } == true,
+            "Step 2: real LibreOffice converts DOCX to PDF when soffice is installed"
+        )
+    } else {
+        print("  ⓘ SKIP: real LibreOffice DOCX-to-PDF integration (soffice unavailable)")
+    }
 }
 
 // MARK: - 8. Phase 9 Step 3: Compression Modes Tests
@@ -3147,7 +3219,7 @@ do {
                "23.6 More actions count (\(moreVideoActions.count)) == all minus pinned (\(expectedMoreCount))")
 
     // 23.7 Unavailable tools (missing optional binary) excluded
-    ToolLocator.shared.setOverride(tool: "soffice", url: nil)
+    ToolLocator.shared.setUnavailableOverride(tool: "soffice", isUnavailable: true)
     let docxFile = URL(fileURLWithPath: "sample.docx")
     let docxSlots = testLayoutModel.slots(for: docxFile, isAdvanced: false)
     let hasSofficeAction = docxSlots.contains { slot in
@@ -3157,6 +3229,7 @@ do {
         return false
     }
     assertTest(!hasSofficeAction, "23.7 Unavailable tool docx.to.pdf (missing soffice) excluded from slots")
+    ToolLocator.shared.setUnavailableOverride(tool: "soffice", isUnavailable: false)
 
     // 23.8 Theme contrast: every theme's label-on-accent ratio is >= 4.5:1
     for theme in WheelTheme.allCases {
@@ -3350,6 +3423,8 @@ do {
     assertTest(settingsController.headerView.titleLabel.stringValue == "Pasta", "25.6 Settings header displays 'Pasta' title")
     assertTest(settingsController.headerView.subtitleLabel.stringValue.contains("Settings"), "25.6 Settings header displays descriptive subtitle")
     assertTest(settingsController.customizeSheet.superview != nil, "25.6 SettingsWindowController embeds Customize sheet")
+    assertTest(settingsController.doctorLabel.stringValue.contains("ffmpeg:"), "25.6 Settings window displays required tool doctor results")
+    assertTest(settingsController.doctorLabel.stringValue.contains("soffice:"), "25.6 Settings window displays optional-tool doctor results")
 
     // 25.7 Bundle assets existence and size check
     let appIconPath = "assets/AppIcon.icns"
@@ -3891,6 +3966,29 @@ do {
     assertTest(PreferencesManager.shared.autoDismissWheelAfterRunning == true, "33.7b autoDismissWheelAfterRunning toggles to true")
     PreferencesManager.shared.autoDismissWheelAfterRunning = false
     assertTest(PreferencesManager.shared.autoDismissWheelAfterRunning == false, "33.7b autoDismissWheelAfterRunning toggles back to false")
+
+    // 33.7c Sticky outcome retention: with auto-close disabled, all terminal results remain for at least 10 seconds.
+    PreferencesManager.shared.autoDismissWheelAfterRunning = false
+    let successOverlay = RadialWheelOverlayViewController()
+    successOverlay.loadView()
+    successOverlay.viewDidLoad()
+    successOverlay.showStickyResultForTesting()
+    let cancelOverlay = RadialWheelOverlayViewController()
+    cancelOverlay.loadView()
+    cancelOverlay.viewDidLoad()
+    cancelOverlay.currentConversionJobID = UUID()
+    cancelOverlay.compactProgressContainer.isHidden = false
+    cancelOverlay.compactProgressBar.isHidden = false
+    cancelOverlay.compactProgressButton.title = "Cancel"
+    cancelOverlay.compactProgressButton.performClick(nil)
+    let errorOverlay = RadialWheelOverlayViewController()
+    errorOverlay.loadView()
+    errorOverlay.viewDidLoad()
+    errorOverlay.showStickyResultForTesting(error: "Synthetic conversion failure")
+    RunLoop.main.run(until: Date(timeIntervalSinceNow: 10.0))
+    assertTest(!successOverlay.compactProgressContainer.isHidden && successOverlay.compactProgressButton.title == "Reveal" && !successOverlay.isAutoDismissScheduled, "33.7c Successful conversion remains visible for 10s when auto-close is off")
+    assertTest(!cancelOverlay.compactProgressContainer.isHidden && cancelOverlay.compactProgressButton.title == "Dismiss" && !cancelOverlay.isAutoDismissScheduled, "33.7c Cancel result remains visible for 10s when auto-close is off")
+    assertTest(!errorOverlay.compactProgressContainer.isHidden && errorOverlay.compactProgressButton.title == "Copy Details" && !errorOverlay.isAutoDismissScheduled, "33.7c Error remains visible with Copy Details when auto-close is off")
 
     // --- 34. Phase 10B Fix 8: P3 Hint Pill Tests ---
     print("\n--- 34. Phase 10B Fix 8: P3 Hint Pill Tests ---")
