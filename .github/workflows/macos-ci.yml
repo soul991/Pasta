@@ -2,15 +2,20 @@ name: macOS CI
 
 on:
   push:
-    branches: [ "**" ]
+    branches: [ main ]
   pull_request:
-    branches: [ "**" ]
+    branches: [ main ]
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   xcode-27:
     name: Build & Verify (Xcode 27 arm64)
     runs-on: xcode-27
+    timeout-minutes: 30
 
     steps:
       - name: Check out repository
@@ -58,7 +63,9 @@ jobs:
 
   fallback:
     name: Compatibility fallback (macos-latest)
+    needs: xcode-27
     runs-on: macos-latest
+    timeout-minutes: 30
 
     steps:
       - name: Check out repository

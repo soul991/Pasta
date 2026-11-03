@@ -67,9 +67,13 @@ public final class PDFTools {
             effectivePageSpec = "1-z"
         }
 
-        // Validate pages in effectivePageSpec
+        // Validate pages in effectivePageSpec while preserving page order exactly as requested.
+        // qpdf honors descending ranges like "3-1" as a reverse-order selection; expanding to
+        // a comma-separated list can lose the intended descending range semantics.
         let pageTokens = effectivePageSpec.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
         var resolvedPages: [Int] = []
+        var resolvedRangeTokens: [String] = []
+
         for token in pageTokens {
             if token.contains("-") {
                 let parts = token.split(separator: "-").map(String.init)
@@ -80,6 +84,12 @@ public final class PDFTools {
                     if start < 1 || start > total || end < 1 || end > total {
                         throw PastaError.invalidInput("Page range '\(token)' exceeds total page count (\(total))")
                     }
+
+                    if deleteSet.isEmpty {
+                        resolvedRangeTokens.append("\(start)-\(end)")
+                        continue
+                    }
+
                     if start <= end {
                         for p in start...end {
                             if !deleteSet.contains(p) {
@@ -95,6 +105,10 @@ public final class PDFTools {
                     }
                 }
             } else if token.lowercased() == "z" {
+                if deleteSet.isEmpty {
+                    resolvedRangeTokens.append("\(total)")
+                    continue
+                }
                 if !deleteSet.contains(total) {
                     resolvedPages.append(total)
                 }
@@ -102,7 +116,9 @@ public final class PDFTools {
                 if p < 1 || p > total {
                     throw PastaError.invalidInput("Page number \(p) exceeds total page count (\(total))")
                 }
-                if !deleteSet.contains(p) {
+                if deleteSet.isEmpty {
+                    resolvedRangeTokens.append(String(p))
+                } else if !deleteSet.contains(p) {
                     resolvedPages.append(p)
                 }
             }
@@ -112,7 +128,13 @@ public final class PDFTools {
             throw PastaError.invalidInput("All pages were deleted; resulting PDF would be empty")
         }
 
-        let finalPagesArg = resolvedPages.map(String.init).joined(separator: ",")
+        let finalPagesArg: String
+        if deleteSet.isEmpty {
+            finalPagesArg = resolvedRangeTokens.joined(separator: ",")
+        } else {
+            finalPagesArg = resolvedPages.map(String.init).joined(separator: ",")
+        }
+
         let rotAngle = rotate.trimmingCharacters(in: .whitespaces)
 
         var args: [String] = ["--empty"]
