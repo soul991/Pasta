@@ -74,9 +74,14 @@ public struct ConversionAction: Identifiable, Equatable {
             name = String(name.dropFirst("Convert to ".count))
         } else if name.hasPrefix("Remux to ") {
             name = String(name.dropFirst("Remux to ".count))
+        } else if name.hasPrefix("Compress to ") {
+            name = String(name.dropFirst("Compress to ".count))
         }
         if name == "Extract MP3 Audio" {
             name = "Extract MP3"
+        }
+        if name == "Plain Text" {
+            name = "TXT"
         }
         return name.isEmpty ? outputExtension.uppercased() : name
     }

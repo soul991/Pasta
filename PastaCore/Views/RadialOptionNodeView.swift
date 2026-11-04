@@ -147,12 +147,15 @@ public final class RadialOptionNodeView: NSView {
         setAccessibilityRole(.button)
         switch slotKind {
         case .action(let act):
+            toolTip = act.displayName
             setAccessibilityLabel(act.displayName)
             setAccessibilityHelp("Convert file to \(act.outputExtension.uppercased())")
         case .more:
+            toolTip = "More Tools"
             setAccessibilityLabel("More Tools")
             setAccessibilityHelp("Open full categorized tools list")
         case .customize:
+            toolTip = "Customize Wheel"
             setAccessibilityLabel("Customize Wheel")
             setAccessibilityHelp("Open wheel customization settings")
         }

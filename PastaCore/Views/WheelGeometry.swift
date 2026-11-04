@@ -92,7 +92,8 @@ public struct WheelGeometry {
 
     /// Fitts' Law Infinite Sector Hit-Testing:
     /// Maps any point outside the central hub to a contiguous 45-degree sector index (0 to 7).
-    /// Slot 0 is Top (North), Slot 2 is Right (East), Slot 4 is Bottom (South), Slot 6 is Left (West).
+    /// Slot 0 is Bottom (South), Slot 2 is Right (East), Slot 4 is Top (North), Slot 6 is Left (West),
+    /// matching slotAngle(s) = -pi/2 + s * (2*pi / totalSlots).
     public static func sectorIndex(
         for point: CGPoint,
         center: CGPoint = CGPoint(x: wheelCenterX, y: wheelCenterY),
@@ -104,16 +105,16 @@ public struct WheelGeometry {
         guard dist >= hubRadius else { return nil } // Inside hub dead-zone
 
         // In macOS AppKit, y increases upwards.
-        // Slot 0 (North) is at angle pi/2.
+        // Slot 0 (South) is centered at angle -pi/2, advancing counter-clockwise:
+        // slotAngle(s) = -pi/2 + s * (2*pi / totalSlots)
         let angle = atan2(dy, dx)
-        var normalizedAngle = (CGFloat.pi / 2.0) - angle
-        if normalizedAngle < 0 {
-            normalizedAngle += 2.0 * CGFloat.pi
-        }
-
         let sliceAngle = (2.0 * CGFloat.pi) / CGFloat(totalSlots)
         let halfSlice = sliceAngle / 2.0
-        let shifted = (normalizedAngle + halfSlice).truncatingRemainder(dividingBy: 2.0 * CGFloat.pi)
-        return Int(shifted / sliceAngle) % totalSlots
+        let offset = angle + (CGFloat.pi / 2.0) + halfSlice
+        var normalized = offset.truncatingRemainder(dividingBy: 2.0 * CGFloat.pi)
+        if normalized < 0 {
+            normalized += 2.0 * CGFloat.pi
+        }
+        return Int(normalized / sliceAngle) % totalSlots
     }
 }
