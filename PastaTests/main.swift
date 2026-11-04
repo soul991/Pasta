@@ -4069,6 +4069,40 @@ do {
     let originNearDock = CGPoint(x: 300, y: 110) // 110 <= 80 + 60 = 140 -> cramped!
     assertTest(WheelGeometry.isBottomCramped(panelOrigin: originNearDock, visibleFrame: dockScreen),
                "34.4 WheelGeometry detects dock encroachment as cramped (y=110 near minY=80)")
+
+    // 34.5 WheelGeometry sectorIndex & Fitts' Law Sector Hit-Testing
+    let testCenter = CGPoint(x: 200, y: 200)
+    assertTest(WheelGeometry.sectorIndex(for: CGPoint(x: 200, y: 200), center: testCenter) == nil, "34.5 Dead-zone returns nil at center")
+    assertTest(WheelGeometry.sectorIndex(for: CGPoint(x: 200, y: 240), center: testCenter) == nil, "34.5 Dead-zone returns nil within 59pt hub radius")
+
+    // Node-aligned directional hits:
+    // Slot 0: Bottom (South, -pi/2) -> HTML
+    assertTest(WheelGeometry.sectorIndex(for: CGPoint(x: 200, y: 50), center: testCenter) == 0, "34.5 Bottom sector (y < center.y) maps to Slot 0")
+    // Slot 1: Bottom-Right (South-East, -pi/4) -> DOCX
+    assertTest(WheelGeometry.sectorIndex(for: CGPoint(x: 320, y: 80), center: testCenter) == 1, "34.5 Bottom-Right sector maps to Slot 1")
+    // Slot 2: Right (East, 0) -> TXT
+    assertTest(WheelGeometry.sectorIndex(for: CGPoint(x: 350, y: 200), center: testCenter) == 2, "34.5 Right sector (x > center.x) maps to Slot 2")
+    // Slot 3: Top-Right (North-East, pi/4) -> EPUB
+    assertTest(WheelGeometry.sectorIndex(for: CGPoint(x: 320, y: 320), center: testCenter) == 3, "34.5 Top-Right sector maps to Slot 3")
+    // Slot 4: Top (North, pi/2) -> ZIP
+    assertTest(WheelGeometry.sectorIndex(for: CGPoint(x: 200, y: 350), center: testCenter) == 4, "34.5 Top sector (y > center.y) maps to Slot 4")
+    // Slot 5: Top-Left (North-West, 3pi/4) -> GZIP
+    assertTest(WheelGeometry.sectorIndex(for: CGPoint(x: 80, y: 320), center: testCenter) == 5, "34.5 Top-Left sector maps to Slot 5")
+    // Slot 6: Left (West, pi) -> More
+    assertTest(WheelGeometry.sectorIndex(for: CGPoint(x: 50, y: 200), center: testCenter) == 6, "34.5 Left sector (x < center.x) maps to Slot 6")
+    // Slot 7: Bottom-Left (South-West, -3pi/4) -> Settings
+    assertTest(WheelGeometry.sectorIndex(for: CGPoint(x: 80, y: 80), center: testCenter) == 7, "34.5 Bottom-Left sector maps to Slot 7")
+
+    // 34.6 ShortHumanName formatting for archive actions and plain text
+    if let zipAct = FormatRegistry.shared.action(byId: "archive.create.zip") {
+        assertTest(zipAct.shortHumanName == "ZIP", "34.6 archive.create.zip shortHumanName is ZIP (got: \(zipAct.shortHumanName))")
+    }
+    if let gzipAct = FormatRegistry.shared.action(byId: "archive.create.gzip") {
+        assertTest(gzipAct.shortHumanName == "GZIP", "34.6 archive.create.gzip shortHumanName is GZIP (got: \(gzipAct.shortHumanName))")
+    }
+    if let txtAct = FormatRegistry.shared.action(byId: "md.to.txt") {
+        assertTest(txtAct.shortHumanName == "TXT", "34.6 md.to.txt shortHumanName is TXT (got: \(txtAct.shortHumanName))")
+    }
 }
 
 // ==================================================

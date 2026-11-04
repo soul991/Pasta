@@ -109,6 +109,7 @@ public final class RadialWheelOverlayViewController: NSViewController {
         // Fitts' Law W = ∞ Sector Drag Routing
         backplateView.onSectorHovered = { [weak self] hoveredSlot in
             guard let self = self else { return }
+            self.focusedSlotIndex = hoveredSlot
             for (index, node) in self.nodeViews.enumerated() {
                 node.isKeyFocused = (index == hoveredSlot)
             }
