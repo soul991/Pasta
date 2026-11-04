@@ -83,7 +83,7 @@ public final class JobRunner {
         let fm = FileManager.default
         if fm.fileExists(atPath: destination.path) {
             do {
-                _ = try fm.replaceItemAt(destination, withItemAt: source, backupItemName: nil, options: [], resultingItemURL: nil)
+                _ = try fm.replaceItemAt(destination, withItemAt: source, backupItemName: nil, options: [])
                 return
             } catch {
                 try? fm.removeItem(at: destination)
