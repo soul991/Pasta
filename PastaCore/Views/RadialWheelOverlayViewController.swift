@@ -1104,14 +1104,22 @@ public final class RadialWheelOverlayViewController: NSViewController {
                             let inSize = files.reduce(Int64(0)) { $0 + ((try? FileManager.default.attributesOfItem(atPath: $1.path)[.size] as? Int64) ?? 0) }
                             let outSize = (try? FileManager.default.attributesOfItem(atPath: output.path)[.size] as? Int64) ?? 0
                             if inSize > 0 && outSize > 0 {
-                                let inMB = String(format: "%.1f MB", Double(inSize) / 1_048_576.0)
-                                let outMB = String(format: "%.1f MB", Double(outSize) / 1_048_576.0)
+                                let inStr = Self.formatByteSize(inSize)
+                                let outStr = Self.formatByteSize(outSize)
                                 if outSize < inSize {
                                     let savedPct = Int(round((1.0 - Double(outSize) / Double(inSize)) * 100.0))
-                                    self.compactProgressLabel.stringValue = "Done · Saved \(savedPct)% (\(inMB) → \(outMB))"
+                                    if savedPct > 0 {
+                                        self.compactProgressLabel.stringValue = "Done · Saved \(savedPct)% (\(inStr) → \(outStr))"
+                                    } else {
+                                        self.compactProgressLabel.stringValue = "Done · (\(inStr) → \(outStr))"
+                                    }
                                 } else if outSize > inSize {
                                     let incPct = Int(round((Double(outSize) / Double(inSize) - 1.0) * 100.0))
-                                    self.compactProgressLabel.stringValue = "Done · (\(inMB) → \(outMB) [+\(incPct)%])"
+                                    if incPct > 0 {
+                                        self.compactProgressLabel.stringValue = "Done · (\(inStr) → \(outStr) [+\(incPct)%])"
+                                    } else {
+                                        self.compactProgressLabel.stringValue = "Done · (\(inStr) → \(outStr))"
+                                    }
                                 } else {
                                     self.compactProgressLabel.stringValue = "Done · \(output.lastPathComponent)"
                                 }
@@ -1176,5 +1184,14 @@ public final class RadialWheelOverlayViewController: NSViewController {
             compactProgressLabel.stringValue = "Done: pasta-success-output"
             compactProgressButton.title = "Reveal"
         }
+    }
+
+    public static func formatByteSize(_ bytes: Int64) -> String {
+        guard bytes > 0 else { return "0 B" }
+        return ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+    }
+
+    public func formatByteSize(_ bytes: Int64) -> String {
+        return Self.formatByteSize(bytes)
     }
 }

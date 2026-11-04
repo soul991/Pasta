@@ -3484,9 +3484,11 @@ do {
     assertTest(cancelCalled == true, "26.1 Clicking actionButton while running calls onCancel")
 
     // 26.2 JobStatusRowView: real size change calculation & formatting
+    assertTest(statusRow.formatByteSize(0) == "0 B", "26.2 formatByteSize handles 0 bytes")
     assertTest(statusRow.formatByteSize(500) == "500 B", "26.2 formatByteSize handles bytes")
     assertTest(statusRow.formatByteSize(2048) == "2.0 KB", "26.2 formatByteSize handles kilobytes")
     assertTest(statusRow.formatByteSize(5_242_880) == "5.0 MB", "26.2 formatByteSize handles megabytes")
+    assertTest(statusRow.formatByteSize(1_073_741_824) == "1.0 GB", "26.2 formatByteSize handles gigabytes")
 
     // 26.3 JobStatusRowView: error report copying
     statusRow.update(state: .failed("Corrupt input file header"))
@@ -3997,6 +3999,40 @@ do {
     assertTest(!successOverlay.compactProgressContainer.isHidden && successOverlay.compactProgressButton.title == "Reveal" && !successOverlay.isAutoDismissScheduled, "33.7c Successful conversion remains visible for 10s when auto-close is off")
     assertTest(!cancelOverlay.compactProgressContainer.isHidden && cancelOverlay.compactProgressButton.title == "Dismiss" && !cancelOverlay.isAutoDismissScheduled, "33.7c Cancel result remains visible for 10s when auto-close is off")
     assertTest(!errorOverlay.compactProgressContainer.isHidden && errorOverlay.compactProgressButton.title == "Copy Details" && !errorOverlay.isAutoDismissScheduled, "33.7c Error remains visible with Copy Details when auto-close is off")
+
+    // 33.8 Wheel overlay Done status size formatting (no 0.0 MB display bug for small files)
+    assertTest(RadialWheelOverlayViewController.formatByteSize(0) == "0 B", "33.8 formatByteSize handles 0 bytes")
+    assertTest(RadialWheelOverlayViewController.formatByteSize(500) == "500 bytes", "33.8 formatByteSize handles 500 bytes")
+    let smallMdFormatted = RadialWheelOverlayViewController.formatByteSize(19_456)
+    assertTest(smallMdFormatted == "19 KB", "33.8 formatByteSize formats 19 KB correctly (got: \(smallMdFormatted))")
+    assertTest(!smallMdFormatted.contains("0.0 MB") && !smallMdFormatted.contains("0 MB"), "33.8 formatByteSize never shows 0.0 MB for 19 KB file")
+    let convertedFormatted = RadialWheelOverlayViewController.formatByteSize(31_744)
+    assertTest(convertedFormatted == "32 KB", "33.8 formatByteSize formats 31.7 KB correctly (got: \(convertedFormatted))")
+    assertTest(!convertedFormatted.contains("0.0 MB") && !convertedFormatted.contains("0 MB"), "33.8 formatByteSize never shows 0.0 MB for 31.7 KB file")
+    assertTest(RadialWheelOverlayViewController.formatByteSize(5_242_880) == "5.2 MB", "33.8 formatByteSize formats 5.2 MB correctly")
+    assertTest(RadialWheelOverlayViewController.formatByteSize(2_147_483_648) == "2.15 GB", "33.8 formatByteSize formats gigabytes correctly")
+
+    // 33.8b Real file size conversion string calculation for small files
+    let tmpSizeDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: tmpSizeDir, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: tmpSizeDir) }
+
+    let testInURL = tmpSizeDir.appendingPathComponent("MANUAL.md")
+    let testOutURL = tmpSizeDir.appendingPathComponent("MANUAL.html")
+    let inData = Data(repeating: 0x41, count: 19_456)
+    let outData = Data(repeating: 0x42, count: 31_744)
+    try inData.write(to: testInURL)
+    try outData.write(to: testOutURL)
+
+    let inSize = (try? FileManager.default.attributesOfItem(atPath: testInURL.path)[.size] as? Int64) ?? 0
+    let outSize = (try? FileManager.default.attributesOfItem(atPath: testOutURL.path)[.size] as? Int64) ?? 0
+    let inStr = RadialWheelOverlayViewController.formatByteSize(inSize)
+    let outStr = RadialWheelOverlayViewController.formatByteSize(outSize)
+    let incPct = Int(round((Double(outSize) / Double(inSize) - 1.0) * 100.0))
+    let doneText = "Done · (\(inStr) → \(outStr) [+\(incPct)%])"
+
+    assertTest(!doneText.contains("0.0 MB") && !doneText.contains("0 MB"), "33.8b Small markdown file conversion never produces '0.0 MB' string (got: \(doneText))")
+    assertTest(doneText.contains("19 KB") && doneText.contains("32 KB"), "33.8b Small markdown file conversion accurately displays 19 KB and 32 KB")
 
     // --- 34. Phase 10B Fix 8: P3 Hint Pill Tests ---
     print("\n--- 34. Phase 10B Fix 8: P3 Hint Pill Tests ---")
