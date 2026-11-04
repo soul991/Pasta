@@ -66,11 +66,43 @@ public final class JobRunner {
 
     public func terminateGracefully(_ proc: Process, gracePeriod: TimeInterval = 2.0) {
         guard proc.isRunning else { return }
-        proc.terminate()
         let pid = proc.processIdentifier
+        if pid > 0 {
+            kill(pid, SIGTERM)
+        } else {
+            proc.terminate()
+        }
         DispatchQueue.global().asyncAfter(deadline: .now() + gracePeriod) {
             if proc.isRunning && pid > 0 {
                 kill(pid, SIGKILL)
+            }
+        }
+    }
+
+    public static func safelyMoveOrReplace(source: URL, destination: URL) throws {
+        let fm = FileManager.default
+        if fm.fileExists(atPath: destination.path) {
+            do {
+                _ = try fm.replaceItemAt(destination, withItemAt: source, backupItemName: nil, options: [])
+                return
+            } catch {
+                try? fm.removeItem(at: destination)
+            }
+        }
+        try fm.moveItem(at: source, to: destination)
+    }
+
+    public static func validateFolderJail(at rootURL: URL) throws {
+        let fm = FileManager.default
+        let rootCanon = rootURL.resolvingSymlinksInPath().standardizedFileURL.path
+        let rootWithSlash = rootCanon.hasSuffix("/") ? rootCanon : rootCanon + "/"
+        if let enumerator = fm.enumerator(at: rootURL, includingPropertiesForKeys: nil) {
+            for case let fileURL as URL in enumerator {
+                let resolved = fileURL.resolvingSymlinksInPath().standardizedFileURL.path
+                if resolved != rootCanon && !resolved.hasPrefix(rootWithSlash) {
+                    try? fm.removeItem(at: fileURL)
+                    throw PastaError.executionFailed(tool: "engine", exitCode: 1, output: "Path traversal detected in extracted archive")
+                }
             }
         }
     }
@@ -87,6 +119,7 @@ public final class JobRunner {
     ) throws -> URL {
         processLock.lock()
         if cancelledJobIds.contains(jobId) {
+            cancelledJobIds.remove(jobId)
             processLock.unlock()
             throw PastaError.cancelled
         }
@@ -129,6 +162,9 @@ public final class JobRunner {
         // Create temporary isolated scratch space
         let tempDir = try OutputPlanner.makeTempDirectory()
         defer {
+            processLock.lock()
+            cancelledJobIds.remove(jobId)
+            processLock.unlock()
             // Safe to swallow: best-effort temporary scratch directory removal on scope exit
             try? fm.removeItem(at: tempDir)
         }
@@ -180,7 +216,8 @@ public final class JobRunner {
                     try fm.moveItem(at: item, to: destFile)
                 }
             }
-            try fm.moveItem(at: tempWorkingOutputURL, to: finalDestinationURL)
+            try Self.validateFolderJail(at: tempWorkingOutputURL)
+            try Self.safelyMoveOrReplace(source: tempWorkingOutputURL, destination: finalDestinationURL)
             return finalDestinationURL
         }
 
@@ -198,10 +235,7 @@ public final class JobRunner {
         }
 
         // Safe atomic move
-        if fm.fileExists(atPath: finalDestinationURL.path) {
-            try fm.removeItem(at: finalDestinationURL)
-        }
-        try fm.moveItem(at: tempWorkingOutputURL, to: finalDestinationURL)
+        try Self.safelyMoveOrReplace(source: tempWorkingOutputURL, destination: finalDestinationURL)
 
         PastaLogger.shared.info("Successfully completed \(action.id) -> '\(finalDestinationURL.path)'")
         return finalDestinationURL
@@ -219,6 +253,7 @@ public final class JobRunner {
     ) throws -> URL {
         processLock.lock()
         if cancelledJobIds.contains(jobId) {
+            cancelledJobIds.remove(jobId)
             processLock.unlock()
             throw PastaError.cancelled
         }
@@ -265,6 +300,9 @@ public final class JobRunner {
 
         let tempDir = try OutputPlanner.makeTempDirectory()
         defer {
+            processLock.lock()
+            cancelledJobIds.remove(jobId)
+            processLock.unlock()
             // Safe to swallow: best-effort temporary scratch directory removal on scope exit
             try? fm.removeItem(at: tempDir)
         }
@@ -307,7 +345,7 @@ public final class JobRunner {
         }
 
         if isCompressBatch {
-            try fm.moveItem(at: tempWorkingOutputURL, to: finalDestinationURL)
+            try Self.safelyMoveOrReplace(source: tempWorkingOutputURL, destination: finalDestinationURL)
             PastaLogger.shared.info("Successfully completed batch \(action.id) -> '\(finalDestinationURL.path)'")
             return finalDestinationURL
         }
@@ -336,7 +374,8 @@ public final class JobRunner {
                     try fm.moveItem(at: item, to: destFile)
                 }
             }
-            try fm.moveItem(at: tempWorkingOutputURL, to: finalDestinationURL)
+            try Self.validateFolderJail(at: tempWorkingOutputURL)
+            try Self.safelyMoveOrReplace(source: tempWorkingOutputURL, destination: finalDestinationURL)
             return finalDestinationURL
         case .file:
             if !fm.fileExists(atPath: tempWorkingOutputURL.path) {
@@ -350,10 +389,7 @@ public final class JobRunner {
             guard fm.fileExists(atPath: tempWorkingOutputURL.path) else {
                 throw PastaError.outputNotFound(finalDestinationURL.path)
             }
-            if fm.fileExists(atPath: finalDestinationURL.path) {
-                try fm.removeItem(at: finalDestinationURL)
-            }
-            try fm.moveItem(at: tempWorkingOutputURL, to: finalDestinationURL)
+            try Self.safelyMoveOrReplace(source: tempWorkingOutputURL, destination: finalDestinationURL)
             PastaLogger.shared.info("Successfully completed batch \(action.id) -> '\(finalDestinationURL.path)'")
             return finalDestinationURL
         }
@@ -496,8 +532,10 @@ extension JobRunner {
             let t = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .default))
             t.schedule(deadline: .now() + timeout)
             t.setEventHandler { [weak process] in
+                activityLock.lock()
                 timedOut = true
-                process?.terminate()
+                activityLock.unlock()
+                if let p = process { JobRunner.shared.terminateGracefully(p) }
             }
             t.resume()
             timer = t
@@ -512,10 +550,12 @@ extension JobRunner {
             wt.setEventHandler { [weak process] in
                 activityLock.lock()
                 let elapsed = Date().timeIntervalSinceReferenceDate - lastActivityTime
-                activityLock.unlock()
                 if elapsed >= inact {
                     watchdogTimedOut = true
-                    process?.terminate()
+                    activityLock.unlock()
+                    if let p = process { JobRunner.shared.terminateGracefully(p) }
+                } else {
+                    activityLock.unlock()
                 }
             }
             wt.resume()
@@ -558,11 +598,16 @@ extension JobRunner {
             throw PastaError.cancelled
         }
 
-        if timedOut {
+        activityLock.lock()
+        let didTimeOut = timedOut
+        let didWatchdogTimeOut = watchdogTimedOut
+        activityLock.unlock()
+
+        if didTimeOut {
             throw PastaError.timedOut(tool: invocation.toolName)
         }
 
-        if watchdogTimedOut {
+        if didWatchdogTimeOut {
             throw PastaError.timedOut(tool: "\(invocation.toolName) (inactivity watchdog)")
         }
 
@@ -644,6 +689,9 @@ extension JobRunner {
 
             let tempDir = try OutputPlanner.makeTempDirectory()
             defer {
+                processLock.lock()
+                cancelledJobIds.remove(jobId)
+                processLock.unlock()
                 // Safe to swallow: best-effort temporary scratch directory removal on scope exit
                 try? fm.removeItem(at: tempDir)
             }
@@ -698,7 +746,8 @@ extension JobRunner {
                         try fm.moveItem(at: item, to: destFile)
                     }
                 }
-                try fm.moveItem(at: tempWorkingOutputURL, to: finalDestinationURL)
+                try Self.validateFolderJail(at: tempWorkingOutputURL)
+                try Self.safelyMoveOrReplace(source: tempWorkingOutputURL, destination: finalDestinationURL)
                 return finalDestinationURL
             }
 
@@ -715,10 +764,7 @@ extension JobRunner {
                 throw PastaError.outputNotFound(finalDestinationURL.path)
             }
 
-            if fm.fileExists(atPath: finalDestinationURL.path) {
-                try fm.removeItem(at: finalDestinationURL)
-            }
-            try fm.moveItem(at: tempWorkingOutputURL, to: finalDestinationURL)
+            try Self.safelyMoveOrReplace(source: tempWorkingOutputURL, destination: finalDestinationURL)
             PastaLogger.shared.info("Successfully completed async \(action.id) -> '\(finalDestinationURL.path)'")
             return finalDestinationURL
         } onCancel: {

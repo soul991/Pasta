@@ -16,14 +16,17 @@ public final class ToolLocator {
     public static let shared = ToolLocator()
 
     public static let doctorRequiredToolNames = [
-        "ffmpeg", "cwebp", "magick", "gs", "qpdf", "pdftoppm", "pdftotext",
+        "ffmpeg", "ffprobe", "cwebp", "magick", "gs", "qpdf", "pdftoppm", "pdftotext",
         "exiftool", "pandoc", "rsvg-convert", "unar", "7zz", "sips", "ditto", "tar"
     ]
     public static let doctorOptionalToolNames = ["soffice", "ebook-convert", "avifenc"]
 
     private let searchPaths = [
         "/opt/homebrew/bin",
+        "/opt/homebrew/sbin",
         "/usr/local/bin",
+        "/usr/local/sbin",
+        "/opt/local/bin",
         "/usr/bin",
         "/bin",
         "/usr/sbin"
@@ -84,11 +87,20 @@ public final class ToolLocator {
             }
         }
 
+        if name == "soffice" {
+            let defaultAppPath = "/Applications/LibreOffice.app/Contents/MacOS/soffice"
+            if fm.isExecutableFile(atPath: defaultAppPath) {
+                let candidate = URL(fileURLWithPath: defaultAppPath)
+                cache[name] = candidate
+                return candidate
+            }
+        }
+
         return nil
     }
 
     public func requireTool(_ name: String) throws -> URL {
-        guard let url = findTool(name) else {
+        guard let url = findTool(name) ?? findOptionalTool(name) else {
             throw PastaError.missingTool(name)
         }
         return url
@@ -112,7 +124,7 @@ public final class ToolLocator {
             if FileManager.default.isExecutableFile(atPath: defaultAppPath) {
                 return URL(fileURLWithPath: defaultAppPath)
             }
-            return nil
+            return findTool(name)
         }
         return findTool(name)
     }

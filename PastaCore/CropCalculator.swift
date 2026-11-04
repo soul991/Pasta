@@ -44,8 +44,8 @@ public enum CropCalculator {
         if w > containerWidth { w = makeEvenFloor(containerWidth) }
         if h > containerHeight { h = makeEvenFloor(containerHeight) }
 
-        let x = max(0, (containerWidth - w) / 2)
-        let y = max(0, (containerHeight - h) / 2)
+        let x = makeEvenFloor(max(0, (containerWidth - w) / 2))
+        let y = makeEvenFloor(max(0, (containerHeight - h) / 2))
         return (x: x, y: y, width: w, height: h)
     }
 

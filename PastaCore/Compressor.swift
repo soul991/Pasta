@@ -6,12 +6,15 @@ public final class Compressor {
     public init() {}
 
     public static func targetBytes(for sourceSize: Int64, parameters: ParameterValues) -> Int64 {
-        if let modeVal = parameters["mode"], modeVal.asString == "targetSize" {
+        let mode = parameters["mode"]?.asString
+        if mode == "targetSize" {
             if let targetVal = parameters["targetSize"]?.asInt64, targetVal > 0 {
                 return targetVal
             }
-        }
-        if let targetVal = parameters["targetSize"]?.asInt64, targetVal > 0 {
+        } else if mode == "percent" {
+            let percent = parameters["percent"]?.asDouble ?? 50.0
+            return max(1, Int64(Double(sourceSize) * (percent / 100.0)))
+        } else if let targetVal = parameters["targetSize"]?.asInt64, targetVal > 0 {
             return targetVal
         }
         let percent = parameters["percent"]?.asDouble ?? 50.0
@@ -32,7 +35,7 @@ public final class Compressor {
         } catch {
             PastaLogger.shared.warning("probeDuration failed for '\(url.lastPathComponent)': \(error.localizedDescription)")
         }
-        return 2.0
+        return 0.0
     }
 
     public func compressImage(
@@ -102,6 +105,9 @@ public final class Compressor {
                     high = mid - 1
                 }
             } catch {
+                if case PastaError.cancelled = error {
+                    throw error
+                }
                 high = mid - 1
             }
         }
@@ -141,6 +147,9 @@ public final class Compressor {
         let target = Self.targetBytes(for: sourceSize, parameters: parameters)
 
         let duration = probeDuration(url: input)
+        guard duration > 0 else {
+            throw PastaError.executionFailed(tool: "ffprobe", exitCode: 1, output: "Unable to probe media duration for '\(input.lastPathComponent)'")
+        }
         let totalTargetBits = Double(target) * 8.0
         let totalBitrate = max(10000.0, totalTargetBits / duration)
         let audioBitrate = min(64000.0, max(24000.0, totalBitrate * 0.15))
@@ -186,6 +195,9 @@ public final class Compressor {
             try runner.execute(invocation: pass1Inv, jobId: jobId)
             try runner.execute(invocation: pass2Inv, jobId: jobId)
         } catch {
+            if case PastaError.cancelled = error {
+                throw error
+            }
             // Fallback to single pass if two-pass fails
             if fm.fileExists(atPath: tempOut.path) {
                 try fm.removeItem(at: tempOut)
@@ -238,6 +250,9 @@ public final class Compressor {
         let target = Self.targetBytes(for: sourceSize, parameters: parameters)
 
         let duration = probeDuration(url: input)
+        guard duration > 0 else {
+            throw PastaError.executionFailed(tool: "ffprobe", exitCode: 1, output: "Unable to probe media duration for '\(input.lastPathComponent)'")
+        }
         let totalTargetBits = Double(target) * 8.0
         let targetBitrate = max(16000.0, totalTargetBits / duration)
 
@@ -333,7 +348,11 @@ public final class Compressor {
                         break // target satisfied
                     }
                 }
-            } catch {}
+            } catch {
+                if case PastaError.cancelled = error {
+                    throw error
+                }
+            }
         }
 
         guard let winner = bestCandidateURL ?? smallestOutputURL else {

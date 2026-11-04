@@ -398,7 +398,56 @@ public final class DropWindowViewController: NSViewController {
         let files = self.selectedFiles
         let count = files.count
 
-        if count > 1 {
+        if action.isBatch {
+            // Unified batch action execution (e.g. PDF merge, video join)
+            let batchId = UUID()
+            singleJobLock.lock()
+            activeSingleJobIDs.insert(batchId)
+            singleJobLock.unlock()
+
+            let row = JobStatusRowView(inputURL: files.first ?? URL(fileURLWithPath: ""), action: action)
+            row.jobID = batchId
+            row.onCancel = { [weak self] in
+                JobRunner.shared.cancel(jobId: batchId)
+                self?.singleJobLock.lock()
+                self?.activeSingleJobIDs.remove(batchId)
+                self?.singleJobLock.unlock()
+            }
+            jobsStack.insertArrangedSubview(row, at: 0)
+            row.update(state: .running)
+
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                defer {
+                    self?.singleJobLock.lock()
+                    self?.activeSingleJobIDs.remove(batchId)
+                    self?.singleJobLock.unlock()
+                }
+
+                let fileParams: ParameterValues
+                if let model = formModel {
+                    do {
+                        fileParams = try model.resolveParameters(for: files.first ?? URL(fileURLWithPath: ""))
+                    } catch {
+                        row.update(state: .failed(error.localizedDescription))
+                        return
+                    }
+                } else {
+                    fileParams = params
+                }
+
+                do {
+                    let output = try JobRunner.shared.runBatch(
+                        action: action,
+                        inputs: files,
+                        parameters: fileParams,
+                        jobId: batchId
+                    )
+                    row.update(state: .completed(output))
+                } catch {
+                    row.update(state: .failed(error.localizedDescription))
+                }
+            }
+        } else if count > 1 {
             // Batch execution using concurrent BatchJobQueue
             let batchRow = BatchProgressRowView(totalCount: count, action: action)
             jobsStack.insertArrangedSubview(batchRow, at: 0)

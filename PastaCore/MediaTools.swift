@@ -19,6 +19,19 @@ public final class MediaTools {
         }
     }
 
+    public func hasAudioStream(url: URL) -> Bool {
+        let inv = Invocation(
+            toolName: "ffprobe",
+            arguments: ["-v", "error", "-select_streams", "a:0", "-show_entries", "stream=codec_type", "-of", "default=noprint_wrappers=1:nokey=1", "--", url.path]
+        )
+        do {
+            let (outStr, _) = try JobRunner.shared.executeCapture(invocation: inv, timeoutSeconds: 30)
+            return !outStr.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        } catch {
+            return false
+        }
+    }
+
     public static func atempoFilter(factor: Double) -> String {
         var f = factor
         var filters: [String] = []
@@ -48,6 +61,9 @@ public final class MediaTools {
         }
 
         let totalDuration = Compressor.shared.probeDuration(url: input)
+        guard totalDuration > 0 else {
+            throw PastaError.executionFailed(tool: "ffprobe", exitCode: 1, output: "Unable to probe media duration for '\(input.lastPathComponent)'")
+        }
         let splitPoints = timesString
             .split(separator: ",")
             .compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
@@ -77,6 +93,7 @@ public final class MediaTools {
                     "-ss", startStr,
                     "-to", endStr,
                     "-i", input.path,
+                    "-avoid_negative_ts", "make_zero",
                     "-c", "copy",
                     partURL.path
                 ]
@@ -124,6 +141,9 @@ public final class MediaTools {
         do {
             try runner.execute(invocation: copyInv, jobId: jobId)
         } catch {
+            if case PastaError.cancelled = error {
+                throw error
+            }
             // Re-encode fallback using concat filter (handles differing video/audio codecs and sample rates)
             if fm.fileExists(atPath: output.path) {
                 try fm.removeItem(at: output)
@@ -132,15 +152,26 @@ public final class MediaTools {
             for inp in inputs {
                 reencodeArgs.append(contentsOf: ["-i", inp.path])
             }
-            let filterGraph = inputs.indices.map { "[\($0):v][\($0):a]" }.joined() + "concat=n=\(inputs.count):v=1:a=1[v][a]"
-            reencodeArgs.append(contentsOf: [
-                "-filter_complex", filterGraph,
-                "-map", "[v]",
-                "-map", "[a]",
-                "-c:v", "libx264", "-crf", "23", "-preset", "medium",
-                "-c:a", "aac",
-                output.path
-            ])
+            let allHaveAudio = inputs.allSatisfy { hasAudioStream(url: $0) }
+            if allHaveAudio {
+                let filterGraph = inputs.indices.map { "[\($0):v][\($0):a]" }.joined() + "concat=n=\(inputs.count):v=1:a=1[v][a]"
+                reencodeArgs.append(contentsOf: [
+                    "-filter_complex", filterGraph,
+                    "-map", "[v]",
+                    "-map", "[a]",
+                    "-c:v", "libx264", "-crf", "23", "-preset", "medium",
+                    "-c:a", "aac",
+                    output.path
+                ])
+            } else {
+                let filterGraph = inputs.indices.map { "[\($0):v]" }.joined() + "concat=n=\(inputs.count):v=1:a=0[v]"
+                reencodeArgs.append(contentsOf: [
+                    "-filter_complex", filterGraph,
+                    "-map", "[v]",
+                    "-c:v", "libx264", "-crf", "23", "-preset", "medium",
+                    output.path
+                ])
+            }
             let reencodeInv = Invocation(
                 toolName: "ffmpeg",
                 arguments: reencodeArgs

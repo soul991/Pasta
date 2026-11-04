@@ -265,8 +265,18 @@ public struct PastaCLI {
                 continue
             }
 
-            let actionTitles = actions.map { "\"\($0.displayName) (.\($0.outputExtension))\"" }.joined(separator: ", ")
-            let script = "choose from list {\(actionTitles)} with title \"Pasta\" with prompt \"Choose target format for \(url.lastPathComponent):\" without multiple selections allowed"
+            let safeFilename = url.lastPathComponent
+                .replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "\"", with: "\\\"")
+
+            let titleForAction: (ConversionAction) -> String = { "\($0.displayName) (.\($0.outputExtension))" }
+            let actionTitles = actions.map { act in
+                let escaped = titleForAction(act)
+                    .replacingOccurrences(of: "\\", with: "\\\\")
+                    .replacingOccurrences(of: "\"", with: "\\\"")
+                return "\"\(escaped)\""
+            }.joined(separator: ", ")
+            let script = "choose from list {\(actionTitles)} with title \"Pasta\" with prompt \"Choose target format for \(safeFilename):\" without multiple selections allowed"
 
             let proc = Process()
             proc.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
@@ -302,7 +312,7 @@ public struct PastaCLI {
             let chosen = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             guard !chosen.isEmpty && chosen != "false" else { continue }
 
-            if let matched = actions.first(where: { chosen.contains($0.displayName) }) {
+            if let matched = actions.first(where: { titleForAction($0) == chosen || $0.displayName == chosen }) {
                 do {
                     let out = try JobRunner.shared.run(action: matched, input: url)
                     showNotification(title: "Pasta Converted", message: "Successfully created \(out.lastPathComponent)")

@@ -460,10 +460,15 @@ public final class WheelLayoutModel {
             let fileCategory = allActions.first?.category ?? .image
             let pinnedIDs = pinnedToolIDs(for: fileCategory).filter { !isToolHidden($0, in: fileCategory) }
 
+            let fileExt = file.pathExtension.lowercased()
+
             // 1. Gather all pinned tools that are valid for this specific file
             var chosenActions: [ConversionAction] = []
             for targetID in pinnedIDs {
                 if let matched = allActions.first(where: { $0.id == targetID }) {
+                    if !isAdvanced && (matched.outputExtension.lowercased() == fileExt || matched.id == "image.to.\(fileExt)" || matched.id == "video.to.\(fileExt)") {
+                        continue
+                    }
                     chosenActions.append(matched)
                 }
             }
@@ -471,7 +476,13 @@ public final class WheelLayoutModel {
             // 2. If fewer than 6, fill remaining slots with other available actions for this file
             if chosenActions.count < 6 {
                 let chosenIDs = Set(chosenActions.map { $0.id })
-                let remaining = allActions.filter { !chosenIDs.contains($0.id) && !isToolHidden($0.id, in: fileCategory) }
+                let remaining = allActions.filter { act in
+                    guard !chosenIDs.contains(act.id) && !isToolHidden(act.id, in: fileCategory) else { return false }
+                    if !isAdvanced && (act.outputExtension.lowercased() == fileExt || act.id == "image.to.\(fileExt)" || act.id == "video.to.\(fileExt)") {
+                        return false
+                    }
+                    return true
+                }
                 for act in remaining {
                     chosenActions.append(act)
                     if chosenActions.count == 6 { break }
@@ -512,12 +523,12 @@ public final class WheelLayoutModel {
         guard let file = fileURL else { return [] }
         let allActions = FormatRegistry.shared.actions(for: file, isOptionHeld: isAdvanced)
         guard let first = allActions.first else { return [] }
-        let pinned = Set(pinnedToolIDs(for: first.category))
+        let visiblePinned = Set(pinnedToolIDs(for: first.category).prefix(6))
         let hidden = hiddenToolIDs(for: first.category)
 
         return allActions.filter { act in
-            // Exclude already pinned and hidden
-            guard !pinned.contains(act.id) && !hidden.contains(act.id) else { return false }
+            // Exclude visible pinned and hidden
+            guard !visiblePinned.contains(act.id) && !hidden.contains(act.id) else { return false }
             return true
         }
     }

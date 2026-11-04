@@ -137,12 +137,12 @@ public final class PDFTools {
 
         let rotAngle = rotate.trimmingCharacters(in: .whitespaces)
 
-        var args: [String] = ["--empty"]
+        var args: [String] = ["--empty", "--pages", input.path, finalPagesArg.isEmpty ? "1-z" : finalPagesArg, "--"]
         if rotAngle != "0" && !rotAngle.isEmpty {
             let prefix = (rotAngle.hasPrefix("+") || rotAngle.hasPrefix("-")) ? "" : "+"
             args.append(contentsOf: ["--rotate=\(prefix)\(rotAngle):1-z"])
         }
-        args.append(contentsOf: ["--pages", input.path, finalPagesArg.isEmpty ? "1-z" : finalPagesArg, "--", output.path])
+        args.append(output.path)
 
         let inv = Invocation(toolName: "qpdf", arguments: args)
         try runner.execute(invocation: inv, jobId: jobId)
