@@ -1119,7 +1119,7 @@ public final class FormatRegistry {
                 isAdvanced: false,
                 category: .audio,
                 iconName: FormatRegistry.icon(forFormat: "ogg"),
-                buildInvocations: { input, output in
+                buildInvocations: { input, output, _ in
                     [Invocation(toolName: "ffmpeg", arguments: ["-nostdin", "-n", "-i", input.path, "-vn", "-c:a", "libvorbis", "-ac", "2", "-b:a", "128k", output.path])]
                 },
                 customRunner: { input, output, params, runner, jobId in
