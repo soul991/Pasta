@@ -1118,10 +1118,21 @@ public final class FormatRegistry {
                 outputExtension: "ogg",
                 isAdvanced: false,
                 category: .audio,
-                iconName: FormatRegistry.icon(forFormat: "ogg")
-            ) { input, output in
-                [Invocation(toolName: "ffmpeg", arguments: ["-nostdin", "-n", "-i", input.path, "-vn", "-c:a", "libvorbis", "-ac", "2", "-b:a", "128k", output.path])]
-            })
+                iconName: FormatRegistry.icon(forFormat: "ogg"),
+                buildInvocations: { input, output in
+                    [Invocation(toolName: "ffmpeg", arguments: ["-nostdin", "-n", "-i", input.path, "-vn", "-c:a", "libvorbis", "-ac", "2", "-b:a", "128k", output.path])]
+                },
+                customRunner: { input, output, params, runner, jobId in
+                    let libvorbisInv = Invocation(toolName: "ffmpeg", arguments: ["-nostdin", "-y", "-i", input.path, "-vn", "-c:a", "libvorbis", "-ac", "2", "-b:a", "128k", output.path])
+                    do {
+                        try runner.execute(invocation: libvorbisInv, jobId: jobId)
+                    } catch {
+                        if case PastaError.cancelled = error { throw error }
+                        let nativeInv = Invocation(toolName: "ffmpeg", arguments: ["-nostdin", "-y", "-i", input.path, "-vn", "-c:a", "vorbis", "-strict", "-2", "-ac", "2", "-b:a", "128k", output.path])
+                        try runner.execute(invocation: nativeInv, jobId: jobId)
+                    }
+                }
+            ))
         }
 
         if inputExt != "aiff" && inputExt != "aif" {
