@@ -10,9 +10,11 @@ public final class RadialConversionHUDView: NSView {
     private let titleLabel = NSTextField(labelWithString: "Converting...")
     private let formatLabel = NSTextField(labelWithString: "")
     private let actionButton = NSButton(title: "Reveal", target: nil, action: nil)
+    private let quickLookButton = NSButton(title: "Quick Look (Space)", target: nil, action: nil)
 
     private var rotatingRingLayer: CAShapeLayer?
     private var outputURL: URL?
+    public var currentOutputURL: URL? { outputURL }
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: NSRect(x: 0, y: 0, width: 150, height: 150))
@@ -66,7 +68,15 @@ public final class RadialConversionHUDView: NSView {
         actionButton.target = self
         actionButton.action = #selector(actionClicked)
         actionButton.isHidden = true
+        quickLookButton.isHidden = true
         addSubview(actionButton)
+
+        quickLookButton.translatesAutoresizingMaskIntoConstraints = false
+        quickLookButton.bezelStyle = .inline
+        quickLookButton.target = self
+        quickLookButton.action = #selector(quickLookClicked)
+        quickLookButton.isHidden = true
+        addSubview(quickLookButton)
 
         NSLayoutConstraint.activate([
             visualEffect.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -87,8 +97,11 @@ public final class RadialConversionHUDView: NSView {
             formatLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
             formatLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
 
-            actionButton.topAnchor.constraint(equalTo: formatLabel.bottomAnchor, constant: 6),
-            actionButton.centerXAnchor.constraint(equalTo: centerXAnchor)
+            actionButton.topAnchor.constraint(equalTo: formatLabel.bottomAnchor, constant: 4),
+            actionButton.centerXAnchor.constraint(equalTo: centerXAnchor),
+
+            quickLookButton.topAnchor.constraint(equalTo: actionButton.bottomAnchor, constant: 3),
+            quickLookButton.centerXAnchor.constraint(equalTo: centerXAnchor)
         ])
 
         setupRotatingRing()
@@ -129,6 +142,7 @@ public final class RadialConversionHUDView: NSView {
     public func showConverting(action: ConversionAction, filename: String) {
         setupRotatingRing()
         actionButton.isHidden = true
+        quickLookButton.isHidden = true
         titleLabel.stringValue = "Converting..."
         formatLabel.stringValue = "→ \(action.outputExtension.uppercased().isEmpty ? action.displayName : action.outputExtension.uppercased())"
         formatLabel.textColor = ThemeManager.shared.accentColor
@@ -164,6 +178,9 @@ public final class RadialConversionHUDView: NSView {
 
         actionButton.title = "Reveal in Finder"
         actionButton.isHidden = false
+        quickLookButton.title = "Quick Look (Space)"
+        quickLookButton.isHidden = false
+
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) { [weak self] in
             self?.onDismiss?()
@@ -186,6 +203,8 @@ public final class RadialConversionHUDView: NSView {
 
         actionButton.title = "Dismiss"
         actionButton.isHidden = false
+        quickLookButton.isHidden = true
+
     }
 
     @objc private func actionClicked() {
@@ -193,5 +212,17 @@ public final class RadialConversionHUDView: NSView {
             NSWorkspace.shared.activateFileViewerSelecting([out])
         }
         onDismiss?()
+    }
+
+    public func triggerQuickLook() {
+        guard let out = outputURL else { return }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/qlmanage")
+        process.arguments = ["-p", out.path]
+        try? process.run()
+    }
+
+    @objc private func quickLookClicked() {
+        triggerQuickLook()
     }
 }

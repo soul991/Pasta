@@ -23,6 +23,8 @@ public final class DropWindowViewController: NSViewController {
 
     private let filesSummaryLabel = NSTextField(labelWithString: "")
     private let clearFilesButton = NSButton(title: "Clear", target: nil, action: nil)
+    private let targetFormatsLabel = NSTextField(labelWithString: "Target formats")
+    private let recentConversionsLabel = NSTextField(labelWithString: "Recent conversions")
 
     // Job history/results
     private let jobsScrollView = NSScrollView()
@@ -119,6 +121,11 @@ public final class DropWindowViewController: NSViewController {
         actionsContainer.isHidden = true
         view.addSubview(actionsContainer)
 
+        targetFormatsLabel.translatesAutoresizingMaskIntoConstraints = false
+        targetFormatsLabel.font = NSFont.systemFont(ofSize: 11, weight: .bold)
+        targetFormatsLabel.textColor = .secondaryLabelColor
+        actionsContainer.addSubview(targetFormatsLabel)
+
         filesSummaryLabel.translatesAutoresizingMaskIntoConstraints = false
         filesSummaryLabel.font = NSFont.systemFont(ofSize: 12, weight: .semibold)
         filesSummaryLabel.textColor = .secondaryLabelColor
@@ -145,6 +152,12 @@ public final class DropWindowViewController: NSViewController {
         parameterPanelContainer.translatesAutoresizingMaskIntoConstraints = false
         parameterPanelContainer.isHidden = true
         actionsContainer.addSubview(parameterPanelContainer)
+
+        // Recent Conversions Header
+        recentConversionsLabel.translatesAutoresizingMaskIntoConstraints = false
+        recentConversionsLabel.font = NSFont.systemFont(ofSize: 11, weight: .bold)
+        recentConversionsLabel.textColor = .secondaryLabelColor
+        view.addSubview(recentConversionsLabel)
 
         // Jobs ScrollView
         jobsScrollView.translatesAutoresizingMaskIntoConstraints = false
@@ -188,13 +201,16 @@ public final class DropWindowViewController: NSViewController {
             actionsContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
             containerHeight,
 
-            filesSummaryLabel.topAnchor.constraint(equalTo: actionsContainer.topAnchor, constant: 4),
-            filesSummaryLabel.leadingAnchor.constraint(equalTo: actionsContainer.leadingAnchor),
+            targetFormatsLabel.topAnchor.constraint(equalTo: actionsContainer.topAnchor, constant: 4),
+            targetFormatsLabel.leadingAnchor.constraint(equalTo: actionsContainer.leadingAnchor),
 
-            clearFilesButton.centerYAnchor.constraint(equalTo: filesSummaryLabel.centerYAnchor),
+            filesSummaryLabel.centerYAnchor.constraint(equalTo: targetFormatsLabel.centerYAnchor),
+            filesSummaryLabel.leadingAnchor.constraint(equalTo: targetFormatsLabel.trailingAnchor, constant: 6),
+
+            clearFilesButton.centerYAnchor.constraint(equalTo: targetFormatsLabel.centerYAnchor),
             clearFilesButton.trailingAnchor.constraint(equalTo: actionsContainer.trailingAnchor),
 
-            actionsScrollView.topAnchor.constraint(equalTo: filesSummaryLabel.bottomAnchor, constant: 8),
+            actionsScrollView.topAnchor.constraint(equalTo: targetFormatsLabel.bottomAnchor, constant: 8),
             actionsScrollView.leadingAnchor.constraint(equalTo: actionsContainer.leadingAnchor),
             actionsScrollView.trailingAnchor.constraint(equalTo: actionsContainer.trailingAnchor),
             actionsScrollView.bottomAnchor.constraint(equalTo: actionsContainer.bottomAnchor),
@@ -208,8 +224,13 @@ public final class DropWindowViewController: NSViewController {
             parameterPanelContainer.trailingAnchor.constraint(equalTo: actionsContainer.trailingAnchor),
             parameterPanelContainer.bottomAnchor.constraint(equalTo: actionsContainer.bottomAnchor),
 
+            // Recent Conversions Header
+            recentConversionsLabel.topAnchor.constraint(equalTo: actionsContainer.bottomAnchor, constant: 10),
+            recentConversionsLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
+            recentConversionsLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
+
             // Jobs ScrollView
-            jobsScrollView.topAnchor.constraint(equalTo: actionsContainer.bottomAnchor, constant: 10),
+            jobsScrollView.topAnchor.constraint(equalTo: recentConversionsLabel.bottomAnchor, constant: 6),
             jobsScrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
             jobsScrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
             jobsScrollView.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -16),
@@ -281,9 +302,9 @@ public final class DropWindowViewController: NSViewController {
         self.selectedFiles = urls
         hideParameterPanel()
         if urls.count == 1 {
-            filesSummaryLabel.stringValue = "Selected: \(urls[0].lastPathComponent)"
+            filesSummaryLabel.stringValue = "· \(urls[0].lastPathComponent)"
         } else {
-            filesSummaryLabel.stringValue = "\(urls.count) Files Selected"
+            filesSummaryLabel.stringValue = "· \(urls.count) files selected"
         }
         actionsContainer.isHidden = false
         updateAvailableActions()
