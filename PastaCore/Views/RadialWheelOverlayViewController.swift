@@ -106,6 +106,33 @@ public final class RadialWheelOverlayViewController: NSViewController {
         )
         contentHost.addSubview(backplateView)
 
+        // Fitts' Law W = ∞ Sector Drag Routing
+        backplateView.onSectorHovered = { [weak self] hoveredSlot in
+            guard let self = self else { return }
+            for (index, node) in self.nodeViews.enumerated() {
+                node.isKeyFocused = (index == hoveredSlot)
+            }
+        }
+
+        backplateView.onSectorDropped = { [weak self] slotIndex, droppedFiles in
+            guard let self = self else { return }
+            self.targetFiles = droppedFiles
+            guard slotIndex < self.nodeViews.count else { return }
+            let node = self.nodeViews[slotIndex]
+            switch node.slotKind {
+            case .action(let act):
+                if act.parameters.isEmpty {
+                    self.performConversion(action: act)
+                } else {
+                    self.showParameterPanel(for: act)
+                }
+            case .more:
+                self.showMoreView()
+            case .customize:
+                self.showCustomizeSheet()
+            }
+        }
+
         // Center Disc centered at (WheelGeometry.wheelCenterX, WheelGeometry.wheelCenterY)
         centerDisc.diameter = hubD
         centerDisc.frame = NSRect(
@@ -306,6 +333,14 @@ public final class RadialWheelOverlayViewController: NSViewController {
             compactProgressLabel.stringValue = "Error copied to clipboard ✓"
             compactProgressButton.title = "Dismiss"
         }
+    }
+
+    public func triggerQuickLook(for url: URL) {
+        cancelAutoDismiss()
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/qlmanage")
+        process.arguments = ["-p", url.path]
+        try? process.run()
     }
 
     public func updateConvertingProgress(progress: Double?, eta: Double? = nil) {
@@ -690,7 +725,18 @@ public final class RadialWheelOverlayViewController: NSViewController {
             }
             return true
 
-        case 36, 49: // Return or Space -> executes focused node
+        case 49: // Space -> Quick Look when conversion is complete, or executes focused node
+            if let output = lastOutputURL ?? hudView.currentOutputURL {
+                triggerQuickLook(for: output)
+                return true
+            }
+            if let idx = focusedSlotIndex, idx >= 0 && idx < nodeViews.count {
+                nodeViews[idx].performSelect()
+                return true
+            }
+            return false
+
+        case 36: // Return -> executes focused node
             if let idx = focusedSlotIndex, idx >= 0 && idx < nodeViews.count {
                 nodeViews[idx].performSelect()
                 return true
@@ -1078,6 +1124,7 @@ public final class RadialWheelOverlayViewController: NSViewController {
                             self.compactProgressIcon.image = img
                             self.compactProgressIcon.contentTintColor = .systemGreen
                         }
+                        self.hintPillLabel.stringValue = "Saved next to original · Press Space to Quick Look"
 
                         // Auto-dismiss the wheel after 2.2 seconds only if autoDismissWheelAfterRunning is enabled
                         if PreferencesManager.shared.autoDismissWheelAfterRunning {

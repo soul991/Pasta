@@ -83,4 +83,37 @@ public struct WheelGeometry {
     public static func isBottomCramped(panelOrigin: CGPoint, visibleFrame: CGRect, threshold: CGFloat = 60.0) -> Bool {
         return panelOrigin.y <= (visibleFrame.minY + threshold)
     }
+
+    // MARK: - Hybrid Morphing Iris Annular Dial (Fitts' Law W = ∞)
+
+    public static let hubRadius: CGFloat = 59.0
+    public static let annulusOuterRadius: CGFloat = 180.0
+    public static let sectorAngleRadians: CGFloat = (2.0 * CGFloat.pi) / 8.0 // 45 degrees
+
+    /// Fitts' Law Infinite Sector Hit-Testing:
+    /// Maps any point outside the central hub to a contiguous 45-degree sector index (0 to 7).
+    /// Slot 0 is Top (North), Slot 2 is Right (East), Slot 4 is Bottom (South), Slot 6 is Left (West).
+    public static func sectorIndex(
+        for point: CGPoint,
+        center: CGPoint = CGPoint(x: wheelCenterX, y: wheelCenterY),
+        totalSlots: Int = 8
+    ) -> Int? {
+        let dx = point.x - center.x
+        let dy = point.y - center.y
+        let dist = sqrt(dx * dx + dy * dy)
+        guard dist >= hubRadius else { return nil } // Inside hub dead-zone
+
+        // In macOS AppKit, y increases upwards.
+        // Slot 0 (North) is at angle pi/2.
+        let angle = atan2(dy, dx)
+        var normalizedAngle = (CGFloat.pi / 2.0) - angle
+        if normalizedAngle < 0 {
+            normalizedAngle += 2.0 * CGFloat.pi
+        }
+
+        let sliceAngle = (2.0 * CGFloat.pi) / CGFloat(totalSlots)
+        let halfSlice = sliceAngle / 2.0
+        let shifted = (normalizedAngle + halfSlice).truncatingRemainder(dividingBy: 2.0 * CGFloat.pi)
+        return Int(shifted / sliceAngle) % totalSlots
+    }
 }

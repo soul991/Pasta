@@ -9,8 +9,12 @@ public final class DropZoneView: NSView {
     }
 
     private let iconView = NSImageView()
-    private let titleLabel = NSTextField(labelWithString: "Drop files here to convert")
-    private let subtitleLabel = NSTextField(labelWithString: "or click anywhere to browse")
+    private let titleLabel = NSTextField(labelWithString: "Drop files to convert to MP4")
+    private let subtitleLabel = NSTextField(labelWithString: "or hold ⇧ Shift while dragging anywhere")
+
+    public func updateTargetPrompt(format: String) {
+        titleLabel.stringValue = "Drop files to convert to \(format)"
+    }
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)

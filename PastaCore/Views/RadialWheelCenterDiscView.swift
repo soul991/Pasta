@@ -97,7 +97,7 @@ public final class RadialWheelCenterDiscView: NSView {
 
         // Filename label (middle truncation)
         fileNameLabel.translatesAutoresizingMaskIntoConstraints = false
-        fileNameLabel.font = NSFont.systemFont(ofSize: 11, weight: .bold)
+        fileNameLabel.font = NSFont.systemFont(ofSize: 12, weight: .bold)
         fileNameLabel.textColor = .white
         fileNameLabel.alignment = .center
         fileNameLabel.lineBreakMode = .byTruncatingMiddle
@@ -105,7 +105,7 @@ public final class RadialWheelCenterDiscView: NSView {
 
         // Detail label: "type · size"
         detailLabel.translatesAutoresizingMaskIntoConstraints = false
-        detailLabel.font = NSFont.systemFont(ofSize: 9, weight: .medium)
+        detailLabel.font = NSFont.systemFont(ofSize: 11, weight: .medium)
         detailLabel.textColor = ThemeManager.shared.accentColor
         detailLabel.alignment = .center
         addSubview(detailLabel)
@@ -243,6 +243,7 @@ public final class RadialWheelCenterDiscView: NSView {
             let sizeStr = ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file)
             let ext = firstFile.pathExtension.uppercased()
             detailLabel.stringValue = "\(ext) · \(sizeStr)"
+            baseDetailString = detailLabel.stringValue
         } else {
             countBadge.isHidden = true
             fileNameLabel.stringValue = firstFile.lastPathComponent
@@ -254,6 +255,23 @@ public final class RadialWheelCenterDiscView: NSView {
             }
             let ext = firstFile.pathExtension.uppercased()
             detailLabel.stringValue = sizeStr.isEmpty ? ext : "\(ext) · \(sizeStr)"
+            baseDetailString = detailLabel.stringValue
+        }
+    }
+
+    private var baseDetailString: String = ""
+
+    public func setHoverTarget(actionTitle: String, estSize: String? = nil) {
+        if let est = estSize {
+            detailLabel.stringValue = "→ \(actionTitle) (Est. \(est))"
+        } else {
+            detailLabel.stringValue = "→ Convert to \(actionTitle)"
+        }
+    }
+
+    public func restoreBaseDetail() {
+        if !baseDetailString.isEmpty {
+            detailLabel.stringValue = baseDetailString
         }
     }
 }
