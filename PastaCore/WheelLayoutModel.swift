@@ -512,12 +512,12 @@ public final class WheelLayoutModel {
         guard let file = fileURL else { return [] }
         let allActions = FormatRegistry.shared.actions(for: file, isOptionHeld: isAdvanced)
         guard let first = allActions.first else { return [] }
-        let pinned = Set(pinnedToolIDs(for: first.category))
+        let visiblePinned = Set(pinnedToolIDs(for: first.category).prefix(6))
         let hidden = hiddenToolIDs(for: first.category)
 
         return allActions.filter { act in
-            // Exclude already pinned and hidden
-            guard !pinned.contains(act.id) && !hidden.contains(act.id) else { return false }
+            // Exclude visible pinned and hidden
+            guard !visiblePinned.contains(act.id) && !hidden.contains(act.id) else { return false }
             return true
         }
     }

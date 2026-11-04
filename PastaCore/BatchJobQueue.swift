@@ -141,7 +141,6 @@ public final class BatchJobQueue {
             onItemFinished?(item.id, item.file, .failure(PastaError.cancelled))
         }
 
-        Self.cleanLeftoverTempDirectories()
         onProgress?(comp, fail)
     }
 

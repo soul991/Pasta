@@ -128,7 +128,7 @@ public final class DragMonitor {
         case armed(startedAt: TimeInterval, files: [URL], location: NSPoint)
         case charging(startedAt: TimeInterval, files: [URL], location: NSPoint)
         case open(openedAt: TimeInterval, files: [URL], location: NSPoint, isAdvanced: Bool)
-        case secondHoldArmed(startedAt: TimeInterval, files: [URL], location: NSPoint)
+        case secondHoldArmed(startedAt: TimeInterval, files: [URL], location: NSPoint, isAdvanced: Bool)
 
         public static func == (lhs: State, rhs: State) -> Bool {
             switch (lhs, rhs) {
@@ -140,8 +140,8 @@ public final class DragMonitor {
                 return abs(t1 - t2) < 0.0001 && f1 == f2 && l1 == l2
             case (.open(let t1, let f1, let l1, let a1), .open(let t2, let f2, let l2, let a2)):
                 return abs(t1 - t2) < 0.0001 && f1 == f2 && l1 == l2 && a1 == a2
-            case (.secondHoldArmed(let t1, let f1, let l1), .secondHoldArmed(let t2, let f2, let l2)):
-                return abs(t1 - t2) < 0.0001 && f1 == f2 && l1 == l2
+            case (.secondHoldArmed(let t1, let f1, let l1, let a1), .secondHoldArmed(let t2, let f2, let l2, let a2)):
+                return abs(t1 - t2) < 0.0001 && f1 == f2 && l1 == l2 && a1 == a2
             default:
                 return false
             }
@@ -239,9 +239,9 @@ public final class DragMonitor {
             switch state {
             case .armed, .charging:
                 cancelCharging(reason: "Mouse button released or dragSession inactive during charging")
-            case .secondHoldArmed(let startedAt, _, let loc):
+            case .secondHoldArmed(let startedAt, _, let loc, let isAdv):
                 let oldState = state
-                state = .open(openedAt: startedAt, files: rememberedFiles, location: loc, isAdvanced: false)
+                state = .open(openedAt: startedAt, files: rememberedFiles, location: loc, isAdvanced: isAdv)
                 logTransition(event: "timer.secondHoldRevertMouseUp", oldState: oldState, newState: state)
             default:
                 break
@@ -284,13 +284,13 @@ public final class DragMonitor {
                     onChargingProgress?(ringProgress, location)
                 }
             }
-        case .secondHoldArmed(let startedAt, let newFiles, let location):
+        case .secondHoldArmed(let startedAt, let newFiles, let location, let isAdv):
             let elapsed = currentNow - startedAt
             if elapsed >= holdDurationSeconds - 0.0005 {
                 stopChargingTimer()
                 let oldState = state
                 rememberedFiles = newFiles
-                state = .open(openedAt: currentNow, files: newFiles, location: location, isAdvanced: false)
+                state = .open(openedAt: currentNow, files: newFiles, location: location, isAdvanced: isAdv)
                 logTransition(event: "timer.secondHoldReplacedFiles", location: location, oldState: oldState, newState: state)
                 onFilesReplaced?(newFiles)
             }
@@ -545,7 +545,7 @@ public final class DragMonitor {
                 }
             }
 
-        case .open(_, let currentFiles, _, _):
+        case .open(_, let currentFiles, _, let isAdv):
             // Sticky wheel: drag movements do NOT close the wheel.
             // Check if a NEW drag with Shift held has started:
             if isShiftHeld {
@@ -585,7 +585,7 @@ public final class DragMonitor {
                     )
                 } else {
                     let oldState = state
-                    state = .secondHoldArmed(startedAt: timestamp, files: newFiles, location: location)
+                    state = .secondHoldArmed(startedAt: timestamp, files: newFiles, location: location, isAdvanced: isAdv)
                     logArmingDecision(
                         allowed: true,
                         source: "mouseDragged.secondHold",
@@ -600,10 +600,10 @@ public final class DragMonitor {
                 }
             }
 
-        case .secondHoldArmed(let startedAt, let newFiles, let loc):
+        case .secondHoldArmed(let startedAt, let newFiles, let loc, let isAdv):
             guard isLeftDown && dragSessionActive else {
                 let oldState = state
-                state = .open(openedAt: startedAt, files: rememberedFiles, location: loc, isAdvanced: false)
+                state = .open(openedAt: startedAt, files: rememberedFiles, location: loc, isAdvanced: isAdv)
                 logTransition(event: "mouseDragged.secondHoldRevert", modifiers: modifiers, location: location, oldState: oldState, newState: state)
                 stopChargingTimer()
                 return
@@ -612,7 +612,7 @@ public final class DragMonitor {
                 // Shift released before second hold threshold:
                 // Revert to open state with current remembered files. Does NOT close wheel!
                 let oldState = state
-                state = .open(openedAt: startedAt, files: rememberedFiles, location: loc, isAdvanced: false)
+                state = .open(openedAt: startedAt, files: rememberedFiles, location: loc, isAdvanced: isAdv)
                 logTransition(event: "mouseDragged.secondHoldRevert", modifiers: modifiers, location: location, oldState: oldState, newState: state)
                 stopChargingTimer()
                 return
@@ -623,7 +623,7 @@ public final class DragMonitor {
                 stopChargingTimer()
                 let oldState = state
                 rememberedFiles = newFiles
-                state = .open(openedAt: timestamp, files: newFiles, location: location, isAdvanced: false)
+                state = .open(openedAt: timestamp, files: newFiles, location: location, isAdvanced: isAdv)
                 logTransition(event: "mouseDragged.secondHoldReplacedFiles", modifiers: modifiers, location: location, oldState: oldState, newState: state)
                 onFilesReplaced?(newFiles)
             }
@@ -733,7 +733,7 @@ public final class DragMonitor {
                     )
                 } else {
                     let oldState = state
-                    state = .secondHoldArmed(startedAt: timestamp, files: newFiles, location: loc)
+                    state = .secondHoldArmed(startedAt: timestamp, files: newFiles, location: loc, isAdvanced: isAdvanced)
                     logArmingDecision(
                         allowed: true,
                         source: "flagsChanged.secondHold",
@@ -748,11 +748,11 @@ public final class DragMonitor {
                 }
             }
 
-        case .secondHoldArmed(let startedAt, let newFiles, let loc):
+        case .secondHoldArmed(let startedAt, let newFiles, let loc, let isAdv):
             if !isShiftHeld || !isLeftDown || !dragSessionActive {
                 // Shift released or mouse up before second hold finished: revert to open with remembered files
                 let oldState = state
-                state = .open(openedAt: startedAt, files: rememberedFiles, location: loc, isAdvanced: false)
+                state = .open(openedAt: startedAt, files: rememberedFiles, location: loc, isAdvanced: isAdv)
                 logTransition(event: "flagsChanged.secondHoldRevert", modifiers: modifiers, oldState: oldState, newState: state)
                 stopChargingTimer()
             } else {
@@ -761,7 +761,7 @@ public final class DragMonitor {
                     stopChargingTimer()
                     let oldState = state
                     rememberedFiles = newFiles
-                    state = .open(openedAt: timestamp, files: newFiles, location: loc, isAdvanced: false)
+                    state = .open(openedAt: timestamp, files: newFiles, location: loc, isAdvanced: isAdv)
                     logTransition(event: "flagsChanged.secondHoldReplacedFiles", modifiers: modifiers, oldState: oldState, newState: state)
                     onFilesReplaced?(newFiles)
                 }
@@ -873,10 +873,10 @@ public final class DragMonitor {
                 logTransition(event: "mouseUp.openPreserved", oldState: state, newState: state, reason: "Sticky wheel preserved after mouseUp per stayOpenAfterRelease")
             }
 
-        case .secondHoldArmed(let startedAt, _, let loc):
+        case .secondHoldArmed(let startedAt, _, let loc, let isAdv):
             // Dropping during an incomplete second hold preserves the open wheel with original files
             let oldState = state
-            state = .open(openedAt: startedAt, files: rememberedFiles, location: loc, isAdvanced: false)
+            state = .open(openedAt: startedAt, files: rememberedFiles, location: loc, isAdvanced: isAdv)
             logTransition(event: "mouseUp.secondHoldRevert", oldState: oldState, newState: state)
 
         case .idle:

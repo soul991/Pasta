@@ -941,12 +941,15 @@ public final class RadialWheelOverlayViewController: NSViewController {
 
     private func performConversion(action: ConversionAction, params: ParameterValues = [:], formModel: ParameterFormModel? = nil) {
         cancelAutoDismiss()
-        guard let file = targetFiles.first else { return }
+        guard !targetFiles.isEmpty else { return }
+        let files = self.targetFiles
+        let file = files[0]
         DragMonitor.shared.actionExecuted()
 
         let jobID = UUID()
         self.currentConversionJobID = jobID
-        self.currentConvertingFileName = file.lastPathComponent
+        let displayFilename = action.isBatch ? "\(files.count) files" : (files.count > 1 ? "\(files.count) files" : file.lastPathComponent)
+        self.currentConvertingFileName = displayFilename
 
         let keepOpen = PreferencesManager.shared.keepWheelOpenAfterRunning
 
@@ -958,7 +961,7 @@ public final class RadialWheelOverlayViewController: NSViewController {
             compactProgressBar.isHidden = false
             compactProgressBar.isIndeterminate = true
             compactProgressBar.startAnimation(nil)
-            compactProgressLabel.stringValue = "Converting \(file.lastPathComponent)..."
+            compactProgressLabel.stringValue = "Converting \(displayFilename)..."
             if let img = NSImage(systemSymbolName: "arrow.triangle.2.circlepath", accessibilityDescription: nil) {
                 compactProgressIcon.image = img
                 compactProgressIcon.contentTintColor = ThemeManager.shared.accentColor
@@ -984,7 +987,7 @@ public final class RadialWheelOverlayViewController: NSViewController {
                 self.hudView.alphaValue = 0.0
                 self.hudView.layer?.transform = CATransform3DMakeScale(0.9, 0.9, 1.0)
 
-                self.hudView.showConverting(action: action, filename: file.lastPathComponent)
+                self.hudView.showConverting(action: action, filename: displayFilename)
 
                 NSAnimationContext.runAnimationGroup { ctx in
                     ctx.duration = 0.22
@@ -996,37 +999,47 @@ public final class RadialWheelOverlayViewController: NSViewController {
 
         // Execute conversion in background
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let fileParams: ParameterValues
-            if let model = formModel {
-                do {
-                    fileParams = try model.resolveParameters(for: file)
-                } catch {
-                    DispatchQueue.main.async {
-                        guard let self = self else { return }
-                        self.currentConversionJobID = nil
-                        if keepOpen {
-                            self.compactProgressBar.stopAnimation(nil)
-                            self.compactProgressBar.isHidden = true
-                            self.compactProgressContainer.isHidden = false
-                            self.compactProgressButton.isHidden = false
-                            self.compactProgressButton.title = "Copy Details"
-                            self.compactProgressLabel.stringValue = "Error: \(error.localizedDescription)"
-                            if let img = NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: nil) {
-                                self.compactProgressIcon.image = img
-                                self.compactProgressIcon.contentTintColor = .systemOrange
-                            }
-                        } else {
-                            self.hudView.showError(error.localizedDescription)
-                        }
-                    }
-                    return
-                }
-            } else {
-                fileParams = params
-            }
-
             do {
-                let output = try JobRunner.shared.run(action: action, input: file, parameters: fileParams, jobId: jobID)
+                let output: URL
+                var isMultiFileSequential = false
+                if action.isBatch {
+                    let fileParams: ParameterValues
+                    if let model = formModel {
+                        fileParams = try model.resolveParameters(for: file)
+                    } else {
+                        fileParams = params
+                    }
+                    output = try JobRunner.shared.runBatch(action: action, inputs: files, parameters: fileParams, jobId: jobID)
+                } else if files.count > 1 {
+                    isMultiFileSequential = true
+                    var lastOut: URL?
+                    for (index, f) in files.enumerated() {
+                        DispatchQueue.main.async {
+                            guard let self = self else { return }
+                            if keepOpen {
+                                self.compactProgressLabel.stringValue = "Converting (\(index + 1)/\(files.count)) \(f.lastPathComponent)..."
+                            }
+                        }
+                        let fileParams: ParameterValues
+                        if let model = formModel {
+                            fileParams = try model.resolveParameters(for: f)
+                        } else {
+                            fileParams = params
+                        }
+                        let out = try JobRunner.shared.run(action: action, input: f, parameters: fileParams, jobId: jobID)
+                        lastOut = out
+                    }
+                    output = lastOut ?? file
+                } else {
+                    let fileParams: ParameterValues
+                    if let model = formModel {
+                        fileParams = try model.resolveParameters(for: file)
+                    } else {
+                        fileParams = params
+                    }
+                    output = try JobRunner.shared.run(action: action, input: file, parameters: fileParams, jobId: jobID)
+                }
+
                 DispatchQueue.main.async {
                     guard let self = self else { return }
                     self.currentConversionJobID = nil
@@ -1039,22 +1052,26 @@ public final class RadialWheelOverlayViewController: NSViewController {
                         self.compactProgressButton.isHidden = false
                         self.compactProgressButton.title = "Reveal"
 
-                        let inSize = (try? FileManager.default.attributesOfItem(atPath: file.path)[.size] as? Int64) ?? 0
-                        let outSize = (try? FileManager.default.attributesOfItem(atPath: output.path)[.size] as? Int64) ?? 0
-                        if inSize > 0 && outSize > 0 {
-                            let inMB = String(format: "%.1f MB", Double(inSize) / 1_048_576.0)
-                            let outMB = String(format: "%.1f MB", Double(outSize) / 1_048_576.0)
-                            if outSize < inSize {
-                                let savedPct = Int(round((1.0 - Double(outSize) / Double(inSize)) * 100.0))
-                                self.compactProgressLabel.stringValue = "Done · Saved \(savedPct)% (\(inMB) → \(outMB))"
-                            } else if outSize > inSize {
-                                let incPct = Int(round((Double(outSize) / Double(inSize) - 1.0) * 100.0))
-                                self.compactProgressLabel.stringValue = "Done · (\(inMB) → \(outMB) [+\(incPct)%])"
-                            } else {
-                                self.compactProgressLabel.stringValue = "Done · \(output.lastPathComponent)"
-                            }
+                        if isMultiFileSequential {
+                            self.compactProgressLabel.stringValue = "Done · Converted \(files.count) files"
                         } else {
-                            self.compactProgressLabel.stringValue = "Done: \(output.lastPathComponent)"
+                            let inSize = files.reduce(Int64(0)) { $0 + ((try? FileManager.default.attributesOfItem(atPath: $1.path)[.size] as? Int64) ?? 0) }
+                            let outSize = (try? FileManager.default.attributesOfItem(atPath: output.path)[.size] as? Int64) ?? 0
+                            if inSize > 0 && outSize > 0 {
+                                let inMB = String(format: "%.1f MB", Double(inSize) / 1_048_576.0)
+                                let outMB = String(format: "%.1f MB", Double(outSize) / 1_048_576.0)
+                                if outSize < inSize {
+                                    let savedPct = Int(round((1.0 - Double(outSize) / Double(inSize)) * 100.0))
+                                    self.compactProgressLabel.stringValue = "Done · Saved \(savedPct)% (\(inMB) → \(outMB))"
+                                } else if outSize > inSize {
+                                    let incPct = Int(round((Double(outSize) / Double(inSize) - 1.0) * 100.0))
+                                    self.compactProgressLabel.stringValue = "Done · (\(inMB) → \(outMB) [+\(incPct)%])"
+                                } else {
+                                    self.compactProgressLabel.stringValue = "Done · \(output.lastPathComponent)"
+                                }
+                            } else {
+                                self.compactProgressLabel.stringValue = "Done: \(output.lastPathComponent)"
+                            }
                         }
 
                         if let img = NSImage(systemSymbolName: "checkmark.circle.fill", accessibilityDescription: nil) {
