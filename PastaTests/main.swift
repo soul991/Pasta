@@ -4496,7 +4496,7 @@ do {
         inputs.append(file)
     }
 
-    guard let action = FormatRegistry.shared.actions(for: "png").first(where: { $0.id == "image.to.jpg" }) else {
+    guard let action = FormatRegistry.shared.actions(for: inputs[0]).first(where: { $0.id == "image.to.jpg" }) else {
         fatalError("image.to.jpg action not found")
     }
 
