@@ -106,7 +106,7 @@ pasta convert --action image.collage --param columns=2 img1.png img2.png
 ## 🧪 Testing & Verification
 
 Pasta includes comprehensive unit, integration, and security hardening suites.
-The current Xcode 27.2 verification result is **749 / 749 PastaTests passing** in both
+The current Xcode 27 verification result is **782 / 782 PastaTests passing** in both
 Debug and Release, plus **33 / 33 Section 8 checks** against both the debug
 binary and the bundled app. Reprint live counts with:
 
