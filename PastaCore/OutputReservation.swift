@@ -39,14 +39,33 @@ public final class OutputReservation {
         let dstPath = url.path
 
         // On macOS / POSIX, rename(2) atomically replaces the target placeholder.
-        // For directories, rename(2) over an empty directory is permitted.
+        // For directories on macOS 27 APFS, rename(2) over an empty directory is permitted.
+        // On earlier macOS versions or non-APFS volumes, rename(dir, existing_empty_dir) may return EEXIST/ENOTEMPTY.
         if rename(srcPath, dstPath) != 0 {
             let err: Int32 = errno
+            if isDirectory && (err == EEXIST || err == ENOTEMPTY || err == EINVAL || err == EACCES) {
+                var statBuf = stat()
+                if stat(dstPath, &statBuf) == 0 && statBuf.st_dev == deviceId && statBuf.st_ino == inode {
+                    if rmdir(dstPath) == 0 {
+                        if rename(srcPath, dstPath) == 0 {
+                            isPublished = true
+                            OutputPlanner.unregisterReservation(url)
+                            return
+                        }
+                    }
+                }
+            }
             if err == EXDEV {
                 // Cross-device link fallback: stage inside target destination directory, then rename
                 let stagingURL = url.deletingLastPathComponent().appendingPathComponent(".pasta_stage_\(UUID().uuidString)")
                 let fm = FileManager.default
                 try fm.copyItem(at: tempWorkingURL, to: stagingURL)
+                if isDirectory {
+                    var statBuf = stat()
+                    if stat(dstPath, &statBuf) == 0 && statBuf.st_dev == deviceId && statBuf.st_ino == inode {
+                        _ = rmdir(dstPath)
+                    }
+                }
                 if rename(stagingURL.path, dstPath) != 0 {
                     let stageErr: Int32 = errno
                     if isDirectory {

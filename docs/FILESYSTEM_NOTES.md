@@ -16,7 +16,7 @@ Pasta adheres strictly to the **"Never Overwrite"** principle. Previously, `Outp
 
 ### Publication & Replacement Semantics (`rename(2)`)
 - On macOS 27 (APFS), `rename(src, dst)` replaces the placeholder atomically with the validated conversion output in a single filesystem transaction.
-- When `dst` is an empty directory created via `mkdir`, `rename(src, dst)` replaces the empty directory placeholder with the source directory atomically.
+- When `dst` is an empty directory created via `mkdir`, `rename(src, dst)` replaces the empty directory placeholder with the source directory atomically on macOS 27 APFS. On pre-27 macOS versions or older volumes where `rename` over an existing empty directory returns `EEXIST` or `ENOTEMPTY`, `OutputReservation.publish` safely confirms `st_dev` and `st_ino` match its own empty directory placeholder, removes the empty directory placeholder with `rmdir(2)`, and publishes via `rename(2)` atomically.
 - **Cross-Volume / External Drives**: If source and destination reside on distinct volumes, `rename(2)` returns `EXDEV`. `OutputReservation.publish` catches `EXDEV`, copies the temp output to a hidden staging path `.pasta_stage_<UUID>` within the target destination directory on the destination volume, and performs the atomic `rename` on the same filesystem.
 
 ### Release & Safe Cleanup Rules
