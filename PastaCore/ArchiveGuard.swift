@@ -31,7 +31,7 @@ public enum ArchiveGuard {
 
     /// Preflight inspects archive catalog before extraction for tools supporting safe listing.
     public static func preflightInspect(archiveURL: URL, toolName: String) throws {
-        guard let toolURL = ToolLocator.shared.toolPath(toolName) else {
+        guard let toolURL = ToolLocator.shared.findTool(toolName) else {
             return
         }
 
@@ -101,6 +101,8 @@ public enum ArchiveGuard {
 
         var entryCount = 0
         var totalExpandedBytes: Int64 = 0
+        var inodeCounts: [UInt64: Int] = [:]
+        var filesWithMultipleLinks: [(URL, nlink_t, UInt64)] = []
 
         for case let fileURL as URL in enumerator {
             entryCount += 1
@@ -126,6 +128,12 @@ public enum ArchiveGuard {
             }
 
             let mode = statBuf.st_mode
+            let fileType = (mode & S_IFMT)
+
+            // Reject special device nodes, FIFOs, and sockets
+            if fileType != S_IFREG && fileType != S_IFDIR && fileType != S_IFLNK {
+                throw PastaError.invalidInput("Archive contains prohibited special device or FIFO node: '\(fileURL.lastPathComponent)'")
+            }
 
             // Reject setuid and setgid permission bits
             if (mode & mode_t(S_ISUID)) != 0 || (mode & mode_t(S_ISGID)) != 0 {
@@ -140,20 +148,32 @@ public enum ArchiveGuard {
                 throw PastaError.invalidInput("Path traversal detected: item '\(fileURL.lastPathComponent)' escapes archive boundary (\(resolved))")
             }
 
-            // Check symlink destination specifically
-            if (mode & S_IFMT) == S_IFLNK {
+            // Check symlink destination specifically (both relative and absolute)
+            if fileType == S_IFLNK {
                 if let dest = try? fm.destinationOfSymbolicLink(atPath: pathStr) {
+                    let targetURL: URL
                     if dest.hasPrefix("/") {
-                        let linkResolved = URL(fileURLWithPath: dest).resolvingSymlinksInPath().standardizedFileURL.path
-                        if linkResolved != rootCanon && !linkResolved.hasPrefix(rootWithSlash) {
-                            throw PastaError.invalidInput("Path traversal detected: symlink '\(fileURL.lastPathComponent)' points outside archive jail (\(dest))")
-                        }
+                        targetURL = URL(fileURLWithPath: dest)
+                    } else {
+                        targetURL = fileURL.deletingLastPathComponent().appendingPathComponent(dest)
+                    }
+                    let targetCanon = targetURL.standardizedFileURL.path
+                    let linkResolved = targetURL.resolvingSymlinksInPath().standardizedFileURL.path
+                    if (targetCanon != rootCanon && !targetCanon.hasPrefix(rootWithSlash)) ||
+                       (linkResolved != rootCanon && !linkResolved.hasPrefix(rootWithSlash)) {
+                        throw PastaError.invalidInput("Path traversal detected: symlink '\(fileURL.lastPathComponent)' points outside archive jail (\(dest))")
                     }
                 }
             }
 
-            // Size checks for regular files
-            if (mode & S_IFMT) == S_IFREG {
+            // Size checks and hard link tracking for regular files
+            if fileType == S_IFREG {
+                let ino = UInt64(statBuf.st_ino)
+                inodeCounts[ino, default: 0] += 1
+                if statBuf.st_nlink > 1 {
+                    filesWithMultipleLinks.append((fileURL, statBuf.st_nlink, ino))
+                }
+
                 let fSize = statBuf.st_size
                 if fSize > limits.maxSingleFileSize {
                     throw PastaError.invalidInput("Archive file '\(fileURL.lastPathComponent)' size (\(fSize) bytes) exceeds single-file limit of \(limits.maxSingleFileSize) bytes")
@@ -162,6 +182,14 @@ public enum ArchiveGuard {
                 if totalExpandedBytes > limits.maxTotalExpandedSize {
                     throw PastaError.invalidInput("Archive total expanded size (\(totalExpandedBytes) bytes) exceeds maximum limit of \(limits.maxTotalExpandedSize) bytes")
                 }
+            }
+        }
+
+        // Verify hard links: every hard link to a file inside the archive must reside inside the archive
+        for (fileURL, expectedLinks, ino) in filesWithMultipleLinks {
+            let actualInRoot = inodeCounts[ino] ?? 0
+            if actualInRoot < Int(expectedLinks) {
+                throw PastaError.invalidInput("Hard link escape detected: item '\(fileURL.lastPathComponent)' links to a file outside the archive boundary")
             }
         }
     }

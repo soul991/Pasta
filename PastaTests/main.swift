@@ -4709,7 +4709,8 @@ do {
     // Generate hostile fixtures dynamically using scripts/make_hostile_archives.sh
     let genProcess = Process()
     genProcess.executableURL = URL(fileURLWithPath: "/bin/bash")
-    genProcess.arguments = ["scripts/make_hostile_archives.sh", fixtureTempRoot.path]
+    let scriptURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent("scripts/make_hostile_archives.sh")
+    genProcess.arguments = [scriptURL.path, fixtureTempRoot.path]
     try? genProcess.run()
     genProcess.waitUntilExit()
 
@@ -4822,11 +4823,17 @@ do {
     if fm.fileExists(atPath: bombGzURL.path) {
         let bombUnpackDir = fixtureTempRoot.appendingPathComponent("bomb_test")
         try fm.createDirectory(at: bombUnpackDir, withIntermediateDirectories: true)
-        let un7z = Process()
-        un7z.executableURL = ToolLocator.shared.toolPath("7zz") ?? URL(fileURLWithPath: "/opt/homebrew/bin/7zz")
-        un7z.arguments = ["x", "-y", bombGzURL.path, "-o\(bombUnpackDir.path)"]
-        try? un7z.run()
-        un7z.waitUntilExit()
+        let unpacker = Process()
+        if let tarURL = ToolLocator.shared.findTool("tar") ?? ToolLocator.shared.findTool("7zz") {
+            unpacker.executableURL = tarURL
+            if tarURL.lastPathComponent == "tar" {
+                unpacker.arguments = ["-xzf", bombGzURL.path, "-C", bombUnpackDir.path]
+            } else {
+                unpacker.arguments = ["x", "-y", bombGzURL.path, "-o\(bombUnpackDir.path)"]
+            }
+            try? unpacker.run()
+            unpacker.waitUntilExit()
+        }
 
         var tightLimits = ArchiveLimits.standard
         tightLimits.maxTotalExpandedSize = 1024 * 1024 // 1 MB limit
