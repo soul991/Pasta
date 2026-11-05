@@ -4477,6 +4477,59 @@ do {
     assertTest(replaced7Files == [fileNew], "36.7 Step 5: onFilesReplaced called with fileNew")
 }
 
+// MARK: - 38. Step 1 Atomic Output Reservation & Collision Race Tests
+print("\n--- 38. Output Collision Race Tests (Proving the Bug) ---")
+do {
+    let fm = FileManager.default
+    let tempRoot = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("Pasta_RaceTest_\(UUID().uuidString)")
+    try fm.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+    let destDir = tempRoot.appendingPathComponent("destination")
+    try fm.createDirectory(at: destDir, withIntermediateDirectories: true)
+
+    var inputs: [URL] = []
+    let sampleData = try Data(contentsOf: URL(fileURLWithPath: "Fixtures/sample.png"))
+    for i in 0..<20 {
+        let subDir = tempRoot.appendingPathComponent("input_\(i)")
+        try fm.createDirectory(at: subDir, withIntermediateDirectories: true)
+        let file = subDir.appendingPathComponent("photo.png")
+        try sampleData.write(to: file)
+        inputs.append(file)
+    }
+
+    guard let action = FormatRegistry.shared.actions(for: "png").first(where: { $0.id == "image.to.jpg" }) else {
+        fatalError("image.to.jpg action not found")
+    }
+
+    let group = DispatchGroup()
+    let queue = DispatchQueue(label: "test.race.queue", attributes: .concurrent)
+    var results: [URL] = []
+    let lock = NSLock()
+
+    for input in inputs {
+        group.enter()
+        queue.async {
+            do {
+                let out = try JobRunner.shared.run(action: action, input: input, destinationDirectory: destDir)
+                lock.lock()
+                results.append(out)
+                lock.unlock()
+            } catch {
+                print("Concurrent job failed: \(error)")
+            }
+            group.leave()
+        }
+    }
+    group.wait()
+
+    let destContents = (try? fm.contentsOfDirectory(at: destDir, includingPropertiesForKeys: nil)) ?? []
+    print("Race test completed: \(results.count) results returned, \(destContents.count) files in destination")
+
+    // Proving the bug: Without atomic reservation, jobs plan the same name and overwrite each other!
+    assertTest(destContents.count == 20, "38.1 20 concurrent jobs with same-basename inputs produce 20 unique output files")
+
+    try? fm.removeItem(at: tempRoot)
+}
+
 print("\n==================================================")
 print("Test Suite Summary: \(passedTests)/\(totalTests) Passed, \(failedTests) Failed")
 print("==================================================")
