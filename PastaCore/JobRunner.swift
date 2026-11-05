@@ -485,10 +485,22 @@ extension JobRunner {
         let activityLock = NSLock()
         var lastActivityTime = Date().timeIntervalSinceReferenceDate
 
+        let outGroup = DispatchGroup()
+        var outDrained = false
+        let outDrainLock = NSLock()
         if redirectHandle == nil {
+            outGroup.enter()
             outPipe.fileHandleForReading.readabilityHandler = { handle in
                 let chunk = handle.availableData
-                if !chunk.isEmpty {
+                if chunk.isEmpty {
+                    handle.readabilityHandler = nil
+                    outDrainLock.lock()
+                    if !outDrained {
+                        outDrained = true
+                        outGroup.leave()
+                    }
+                    outDrainLock.unlock()
+                } else {
                     collector.appendOut(chunk)
                     activityLock.lock()
                     lastActivityTime = Date().timeIntervalSinceReferenceDate
@@ -497,9 +509,21 @@ extension JobRunner {
             }
         }
 
+        let errGroup = DispatchGroup()
+        var errDrained = false
+        let errDrainLock = NSLock()
+        errGroup.enter()
         errPipe.fileHandleForReading.readabilityHandler = { handle in
             let chunk = handle.availableData
-            if !chunk.isEmpty {
+            if chunk.isEmpty {
+                handle.readabilityHandler = nil
+                errDrainLock.lock()
+                if !errDrained {
+                    errDrained = true
+                    errGroup.leave()
+                }
+                errDrainLock.unlock()
+            } else {
                 collector.appendErr(chunk)
                 activityLock.lock()
                 lastActivityTime = Date().timeIntervalSinceReferenceDate
@@ -585,6 +609,8 @@ extension JobRunner {
         } catch {
             timer?.cancel()
             watchdogTimer?.cancel()
+            outPipe.fileHandleForReading.readabilityHandler = nil
+            errPipe.fileHandleForReading.readabilityHandler = nil
             throw PastaError.executionFailed(tool: invocation.toolName, exitCode: 1, output: error.localizedDescription)
         }
 
@@ -592,12 +618,14 @@ extension JobRunner {
         timer?.cancel()
         watchdogTimer?.cancel()
 
-        outPipe.fileHandleForReading.readabilityHandler = nil
-        errPipe.fileHandleForReading.readabilityHandler = nil
         if redirectHandle == nil {
+            _ = outGroup.wait(timeout: .now() + 2.0)
+            outPipe.fileHandleForReading.readabilityHandler = nil
             let remOut = outPipe.fileHandleForReading.readDataToEndOfFile()
             if !remOut.isEmpty { collector.appendOut(remOut) }
         }
+        _ = errGroup.wait(timeout: .now() + 2.0)
+        errPipe.fileHandleForReading.readabilityHandler = nil
         let remErr = errPipe.fileHandleForReading.readDataToEndOfFile()
         if !remErr.isEmpty { collector.appendErr(remErr) }
         // Safe to swallow: best-effort closing of redirected output handle
