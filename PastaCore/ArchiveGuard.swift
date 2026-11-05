@@ -31,16 +31,23 @@ public enum ArchiveGuard {
 
     /// Preflight inspects archive catalog before extraction for tools supporting safe listing.
     public static func preflightInspect(archiveURL: URL, toolName: String) throws {
-        guard let toolURL = ToolLocator.shared.findTool(toolName) else {
-            return
-        }
-
         let proc = Process()
-        proc.executableURL = toolURL
         if toolName == "tar" {
+            guard let toolURL = ToolLocator.shared.findTool("tar") else { return }
+            proc.executableURL = toolURL
             proc.arguments = ["-tf", archiveURL.path]
         } else if toolName == "7zz" {
+            guard let toolURL = ToolLocator.shared.findTool("7zz") else { return }
+            proc.executableURL = toolURL
             proc.arguments = ["l", "-slt", archiveURL.path]
+        } else if toolName == "ditto" {
+            if archiveURL.pathExtension.lowercased() == "zip",
+               FileManager.default.isExecutableFile(atPath: "/usr/bin/zipinfo") {
+                proc.executableURL = URL(fileURLWithPath: "/usr/bin/zipinfo")
+                proc.arguments = ["-1", archiveURL.path]
+            } else {
+                return
+            }
         } else {
             return
         }
@@ -64,12 +71,18 @@ public enum ArchiveGuard {
             return
         }
 
+        var in7zEntries = (toolName != "7zz")
         let lines = output.components(separatedBy: .newlines)
         for line in lines {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             guard !trimmed.isEmpty else { continue }
             let entryPath: String
             if toolName == "7zz" {
+                if trimmed.hasPrefix("----------") {
+                    in7zEntries = true
+                    continue
+                }
+                guard in7zEntries else { continue }
                 if trimmed.hasPrefix("Path = ") {
                     entryPath = String(trimmed.dropFirst("Path = ".count))
                 } else {
@@ -79,7 +92,16 @@ public enum ArchiveGuard {
                 entryPath = trimmed
             }
 
-            if entryPath.hasPrefix("/") || entryPath.contains("../") || entryPath.contains("..\\") || entryPath == ".." {
+            if entryPath == archiveURL.path || entryPath == archiveURL.lastPathComponent {
+                continue
+            }
+
+            if entryPath.hasPrefix("/") ||
+               entryPath.contains("../") ||
+               entryPath.contains("..\\") ||
+               entryPath == ".." ||
+               entryPath.hasSuffix("/..") ||
+               entryPath.hasSuffix("\\..") {
                 throw PastaError.invalidInput("Prohibited path traversal entry in archive: '\(entryPath)'")
             }
         }

@@ -692,7 +692,7 @@ do {
             assertTest(extractAction != nil, "Step 2: archive.extract available for .gz input")
             if let extractAction = extractAction {
                 let outDir = try? JobRunner.shared.run(action: extractAction, input: outGz, destinationDirectory: testTempDir)
-                let extractedFiles = (try? FileManager.default.contentsOfDirectory(at: outDir!, includingPropertiesForKeys: nil)) ?? []
+                let extractedFiles = outDir.flatMap { try? FileManager.default.contentsOfDirectory(at: $0, includingPropertiesForKeys: nil) } ?? []
                 assertTest(!extractedFiles.isEmpty, "Step 2: Extraction of .gz archive produces uncompressed file")
             }
         }
