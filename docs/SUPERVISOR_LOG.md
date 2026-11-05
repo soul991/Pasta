@@ -12,7 +12,7 @@
 As the read-only supervisor sub-agent, the supervisor adheres strictly to the following mandate:
 1. **File Access Guard**: NEVER edit production code, tests, fixtures, or CI workflows. The **ONLY** file the supervisor may create or append to is `docs/SUPERVISOR_LOG.md`.
 2. **Pre-Step Gate Check**: Before each step begins, confirm the step's scope and gate criteria, recording them in this log.
-3. **Execution Guard**: Monitor the driving agent's execution for scope creep, skipped steps, reordered steps, and standing rule violations.
+3. **Execution Guard**: Monitor the driving agent's execution for scope creep, skipped steps, reordered steps, and standing rule violations. Required execution order: A1, A2, A3, A4, A5, A6, A7, A7b, A8, A9, then B1, B2, then C1, C2, C3.
 4. **Post-Step Independent Verification**:
    - Verify commit hash exists on `origin/codex/r0`.
    - Check GitHub Actions CI runs via `gh run view` / `gh run list` (verifying both `macos-27` and `macos-latest` jobs are green).
@@ -45,11 +45,12 @@ As the read-only supervisor sub-agent, the supervisor adheres strictly to the fo
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **A1** | App Icon Verification (1024x1024, alpha, transparent corners, CI gate) | **PASS** | `a3945e7` | `42116157196` | Yes (828 u, 41 s8) | Yes (830 u, 41 s8) | **PASS** |
 | **A2** | Hostile Archive Fixtures Coverage (Assert all 15 fixtures) | **PASS** | `fb5ab7c` | `42119719613` | Yes (834 u, 41 s8) | Yes (836 u, 41 s8) | **PASS** |
-| **A3** | Stop Damage During Extraction (Preflight link inspection, sentinel tests) | **READY TO SUPERVISE** | - | - | - | - | - |
-| **A4** | Archive Bomb Limits Before Disk Fills (Catalog check, running scratch cap) | PENDING | - | - | - | - | - |
+| **A3** | Stop Damage During Extraction (Preflight link inspection, sentinel tests) | **PASS** | `9259de1` | `42124240749` | Yes (838 u, 41 s8) | Yes (840 u, 41 s8) | **PASS** |
+| **A4** | Archive Bomb Limits Before Disk Fills (Catalog check, running scratch cap) | **READY TO SUPERVISE** | - | - | - | - | - |
 | **A5** | Real-Timer Smoke Test (Section 33.7, 50x loop local + CI) | PENDING | - | - | - | - | - |
 | **A6** | Full Local Mac Verification Script (`scripts/local_verify.sh`) | PENDING | - | - | - | - | - |
 | **A7** | Wording & Hygiene (`SECURITY.md`, notices count reconciliation, LICENSE) | PENDING | - | - | - | - | - |
+| **A7b**| License Audit & Bundling Policy (`docs/LICENSE_AUDIT.md`, 19 tools, test) | PENDING | - | - | - | - | - |
 | **A8** | Release Workflow Proof (Throwaway tag `v0.0.0-test`, download & verify) | PENDING | - | - | - | - | - |
 | **A9** | Merge to `main` and Tag Beta (`v0.1.0-beta`, release assets) | PENDING | - | - | - | - | - |
 | **B1** | Fix Phase 11 Block A 9 Failing Assertions (`soffice` stubs + root causes) | PENDING | - | - | - | - | - |
@@ -129,17 +130,58 @@ As the read-only supervisor sub-agent, the supervisor adheres strictly to the fo
 ---
 
 ### Step A3 — Stop Damage During Extraction
+- **Status**: **PASS**
+- **Verified Commits**:
+  - `9259de1e1f30c6ad0ac6a67d37be846951803e90`: feat(A3): stop damage during extraction with preflight link inspection and sentinel hop defenses
+  - `7663b951040a05ea57995f4fb84dfd22efa8fa05`: docs: add PHASE_R1.md with updated plan including Step A7b
+- **GitHub Actions CI Run**: `42124240749` (Status: completed, conclusion: success)
+  - Job 1: `Build & Verify (Xcode 27 arm64)` (ID `127584186599`) — **Success** (840/840 unit tests, 41/41 Section 8)
+  - Job 2: `Compatibility fallback (macos-latest)` (ID `127587284992`) — **Success** (840/840 unit tests)
+- **Independent Verification of Gate Items**:
+  1. **Preflight Rejection of Link Targets (RED & GREEN)**: **PASS**
+     - `ArchiveGuard.preflightInspect` inspects verbose catalog output before extraction:
+       - `tar`: runs `tar -tvf` and parses symlink targets (` -> `) and hardlink targets (` link to `). Targets with leading `/` or containing `..` throw `PastaError.invalidInput`.
+       - `7zz`: parses `7zz l -slt` and inspects `Path = `, `Symbolic Link = `, and `Hard Link = `.
+       - `unar`: inspects catalog via `lsar -l` (with `7zz l -slt` fallback) and parses link targets (`Name -> Target`).
+       - `ditto`: uses `zipinfo -s` to detect symlinks (`l...`) and queries target safely using `unzip -p` without disk extraction.
+     - RED evidence: unpatched preflight missed external link targets for `tar`, `7zz`, and `unar`, causing tests 39.18, 39.19, and 39.20 to fail (835/838 passed, 3 failed).
+     - GREEN evidence: with `isProhibitedPath` and verbose link target parsing, tests 39.18, 39.19, and 39.20 pass in CI and locally.
+  2. **Sentinel-Outside-Root Test Across All Wired Extractors**: **PASS**
+     - Test 39.21 creates an independent sentinel directory outside the extraction root and crafts hostile archives (`crafted_sentinel_hop.tar` and `crafted_sentinel_hop.zip`) with symlink directory hops pointing into the sentinel directory followed by payload writes.
+     - Extraction attempts executed against all 4 wired extractors: `tar`, `ditto`, `7zz`, and `unar`.
+     - In all 4 extractors: sentinel directory remains 100% empty and untouched.
+     - All 4 extractors proved safe and retained in the extraction pipeline.
+  3. **Documentation in docs/commands.md**: **PASS**
+     - Section 6 updated with comprehensive "Per-Extractor Protection & Symlink Hop Defense Analysis (Step A3)" detailing the three layers of defense (Preflight, Extractor native limits, Ephemeral scratch isolation + post-validation) and sentinel test results for `tar`, `ditto`, `7zz`, and `unar`.
+  4. **Both CI Jobs Green**: **PASS**
+     - CI run `42124240749` completed with conclusion `success`.
+     - Job 127584186599 passed (macOS 27.0.1, Xcode 27.1, Swift 6.4).
+     - Job 127587284992 passed (macOS 26.7.2, Xcode 26.6, Swift 6.3.3).
+  5. **Local Execution & Assertion Integrity**: **PASS**
+     - Re-run locally on this Mac:
+       - Environment: macOS 27.2 (Build 26B123), Xcode 27.2 (Build 27B52), Swift 6.4.2.
+       - `swift run PastaTests`: 838/838 Passed, 0 Failed.
+       - Difference explained: CI runs 2 additional tests requiring `soffice` (LibreOffice installed in CI via brew; skipped gracefully when absent locally).
+       - `./scripts/run_section8_tests.sh`: 41/41 Passed, 0 Failed.
+       - `./scripts/check_archive_fixture_coverage.sh`: 16/16 fixtures covered, clean exit code 0.
+     - Inspected `git diff fb5ab7c..9259de1 -- PastaTests/main.swift scripts/run_section8_tests.sh`: 158 lines added, 0 assertions loosened or deleted.
+  6. **Standing Rules & Hygiene**: **PASS**
+     - Zero network calls in app binary, zero third-party Swift packages, no shell strings, no force-pushes, no deleted branches.
+- **Supervisor Verdict**: **PASS**
+
+---
+
+### Step A4 — Archive Bomb Limits Before Disk Fills
 - **Status**: **READY TO SUPERVISE**
 - **Scope**:
-  1. Test symlink hop (`symlink_hop.tar`, and a zip/7z/rar variant if extractor supports it) with an external sentinel directory.
-  2. Assert that NO file is created outside the scratch root at ANY point during extraction (sentinel directory remains empty/untouched after extraction attempts).
-  3. Test this across all wired extractors: `tar`, `ditto`, `7zz`, `unar`.
-  4. Preflight inspection must catch link targets (not just names): inspect verbose listings (`tar -tvf`, `7zz l -slt`, `zipinfo -v`) and reject symlink or hardlink entries whose targets are absolute or contain `..`.
-  5. Document in `docs/commands.md`, per extractor, exactly what protects it. If an extractor cannot be made safe by preflight + scratch isolation, remove it from the extraction path and fall back to a safe extractor.
+  1. Add pre-extraction check using archive catalog: sum declared uncompressed sizes and entry count against `ArchiveLimits`. Reject before extraction when catalog already exceeds limits.
+  2. For formats where catalog can lie or is unavailable, enforce a running cap while extracting (poll scratch folder size, kill extractor process and wipe scratch when limit exceeded).
+  3. Report limit values test 39.9 uses. Add one test that runs with the REAL default limits against a catalog-declared oversize case that does not actually write gigabytes (e.g. catalog declaring huge uncompressed size), ensuring the default production path is covered.
 - **Gate Criteria**:
-  - Sentinel-outside-root test passes for each wired extractor.
-  - RED run shows failure for any extractor that needed a fix.
-  - Preflight catches escaping symlink and hardlink targets.
-  - `docs/commands.md` documents per-extractor defense and fallback decisions.
+  - Bomb fixture rejected before or during extraction.
+  - Scratch directory wiped cleanly with zero leftover `/tmp/Pasta_*`.
+  - Zero orphan extractor processes.
+  - Destination directory untouched.
+  - Real default limits tested without generating excessive disk artifacts.
   - Both CI jobs green on `origin/codex/r0`.
-  - Local tests (`swift run PastaTests`, Section 8) pass.
+  - Local tests pass (`swift run PastaTests`, Section 8).

@@ -1773,9 +1773,9 @@ public final class FormatRegistry {
                     }
 
                     // 1. Preflight inspection where tool supports safe catalog listing
-                    try ArchiveGuard.preflightInspect(archiveURL: input, toolName: toolName)
+                    try ArchiveGuard.preflightInspect(archiveURL: input, toolName: toolName, limits: .standard)
 
-                    // 2. Extract into scratch output directory
+                    // 2. Extract into scratch output directory with running cap
                     let invocations: [Invocation]
                     if inputExt == "zip" {
                         invocations = [Invocation(toolName: "ditto", arguments: ["-x", "-k", input.path, output.path])]
@@ -1790,11 +1790,17 @@ public final class FormatRegistry {
                     }
 
                     for inv in invocations {
-                        try runner.execute(invocation: inv, jobId: jobId)
+                        try ArchiveGuard.executeWithRunningCap(
+                            runner: runner,
+                            invocation: inv,
+                            scratchURL: output,
+                            jobId: jobId,
+                            limits: .standard
+                        )
                     }
 
                     // 3. Post-extraction validation
-                    try ArchiveGuard.validate(root: output)
+                    try ArchiveGuard.validate(root: output, limits: .standard)
                 }
             )
         ]

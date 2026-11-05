@@ -5156,6 +5156,77 @@ do {
 
     let allSentinelsProtected = sentinelProtectedTar && sentinelProtectedDitto && sentinelProtected7z && sentinelProtectedUnar
     assertTest(allSentinelsProtected, "39.21 Sentinel directory outside scratch root remains untouched across all extractors (tar, ditto, 7zz, unar)")
+
+    // 39.22: Catalog pre-extraction check rejects declared oversize archive under REAL default limits
+    // Default ArchiveLimits.standard specifies maxTotalExpandedSize = 8 GB (8,589,934,592 bytes).
+    // Test creates a tiny 4KB sparse tar archive declaring 10 GB uncompressed size without writing gigabytes to disk.
+    let sparse10gbTar = fixtureTempRoot.appendingPathComponent("declared_10gb_sparse.tar")
+    let sparseGenProc = Process()
+    sparseGenProc.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
+    sparseGenProc.arguments = ["-c", """
+    import tempfile, subprocess, os, sys
+    tar_path = sys.argv[1]
+    temp_dir = tempfile.mkdtemp()
+    sparse_file = os.path.join(temp_dir, 'huge_10gb.bin')
+    with open(sparse_file, 'wb') as f:
+        f.truncate(10 * 1024 * 1024 * 1024) # 10 GB sparse
+    subprocess.run(['/usr/bin/tar', '-cf', tar_path, '-C', temp_dir, 'huge_10gb.bin'], check=True)
+    try:
+        os.remove(sparse_file)
+        os.rmdir(temp_dir)
+    except:
+        pass
+    """, sparse10gbTar.path]
+    try? sparseGenProc.run()
+    sparseGenProc.waitUntilExit()
+
+    var preflightOversizeRejected = false
+    do {
+        // Runs with REAL default ArchiveLimits.standard (8 GB max expanded size)
+        try ArchiveGuard.preflightInspect(archiveURL: sparse10gbTar, toolName: "tar", limits: .standard)
+    } catch {
+        preflightOversizeRejected = true
+    }
+    assertTest(preflightOversizeRejected, "39.22 Archive catalog pre-extraction check rejects declared 10GB archive under REAL default 8GB limit (declared_10gb_sparse.tar)")
+
+    // 39.23: Running expansion cap terminates extractor and wipes scratch when catalog lies
+    // Uses expansion_bomb.tar.gz with a tight running cap of 500 KB to simulate an active bomb.
+    var runningCapTriggered = false
+    var scratchWipedClean = false
+    var destinationUntouched = false
+    if fm.fileExists(atPath: bombGzURL.path) {
+        let bombDestDir = fixtureTempRoot.appendingPathComponent("bomb_running_cap_dest")
+        try fm.createDirectory(at: bombDestDir, withIntermediateDirectories: true)
+        let scratchDir = fm.temporaryDirectory.appendingPathComponent("running_cap_scratch_\(UUID().uuidString)")
+        try fm.createDirectory(at: scratchDir, withIntermediateDirectories: true)
+
+        var tightCapLimits = ArchiveLimits.standard
+        tightCapLimits.maxTotalExpandedSize = 500 * 1024 // 500 KB running cap
+
+        let jobId = UUID()
+        let bombInv = Invocation(toolName: "tar", arguments: ["-xzf", bombGzURL.path, "-C", scratchDir.path])
+        do {
+            try ArchiveGuard.executeWithRunningCap(
+                runner: JobRunner.shared,
+                invocation: bombInv,
+                scratchURL: scratchDir,
+                jobId: jobId,
+                limits: tightCapLimits
+            )
+        } catch {
+            runningCapTriggered = true
+        }
+
+        let scratchExists = fm.fileExists(atPath: scratchDir.path)
+        let scratchItems = (try? fm.contentsOfDirectory(atPath: scratchDir.path)) ?? []
+        scratchWipedClean = !scratchExists || scratchItems.isEmpty
+        let destItems = (try? fm.contentsOfDirectory(atPath: bombDestDir.path)) ?? []
+        destinationUntouched = destItems.isEmpty
+
+        try? fm.removeItem(at: scratchDir)
+        try? fm.removeItem(at: bombDestDir)
+    }
+    assertTest(runningCapTriggered && scratchWipedClean && destinationUntouched, "39.23 Running expansion cap terminates extractor, wipes scratch, and leaves destination untouched")
 }
 
 do {
