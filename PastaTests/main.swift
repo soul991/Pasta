@@ -4564,7 +4564,8 @@ do {
         // Expected failure
     }
     // Check that no orphaned zero-byte placeholder remains
-    let remainingPlaceholders = destContents.filter { (try? Data(contentsOf: $0).count) == 0 }
+    let postFailContents = (try? fm.contentsOfDirectory(at: destDir, includingPropertiesForKeys: nil)) ?? []
+    let remainingPlaceholders = postFailContents.filter { (try? Data(contentsOf: $0).count) == 0 }
     assertTest(remainingPlaceholders.isEmpty, "38.3 Injected failure cleanly removes placeholder without leaving 0-byte orphan")
     let readSentinelAfterFail = (try? String(contentsOf: sentinelURL, encoding: .utf8)) ?? ""
     assertTest(readSentinelAfterFail == "ORIGINAL_SENTINEL_CONTENT", "38.3 Injected failure does not modify pre-existing file")
@@ -4575,8 +4576,13 @@ do {
         displayName: "Slow Action",
         outputExtension: "jpg",
         category: .image,
-        customRunner: { _, _, _, _, _ in
-            Thread.sleep(forTimeInterval: 5.0)
+        customRunner: { _, _, _, runner, jId in
+            for _ in 0..<50 {
+                Thread.sleep(forTimeInterval: 0.1)
+                if runner.isCancelled(jId) {
+                    throw PastaError.cancelled
+                }
+            }
         }
     )
     let cancelJobId = UUID()

@@ -9,10 +9,14 @@ public final class JobRunner {
 
     public init() {}
 
-    private func isJobCancelled(_ jobId: UUID) -> Bool {
+    public func isCancelled(_ jobId: UUID) -> Bool {
         processLock.lock()
         defer { processLock.unlock() }
         return cancelledJobIds.contains(jobId)
+    }
+
+    private func isJobCancelled(_ jobId: UUID) -> Bool {
+        return isCancelled(jobId)
     }
 
     private func trackProcess(_ process: Process, for jobId: UUID) -> Bool {
@@ -184,6 +188,9 @@ public final class JobRunner {
 
         if let custom = action.customRunner {
             try custom(input, tempWorkingOutputURL, effectiveParams, self, jobId)
+            if isJobCancelled(jobId) {
+                throw PastaError.cancelled
+            }
         } else {
             let invocations = action.buildInvocationsWithParams(input, tempWorkingOutputURL, effectiveParams)
             guard !invocations.isEmpty else {
@@ -332,10 +339,19 @@ public final class JobRunner {
 
         if let customBatch = action.customBatchRunner {
             try customBatch(inputs, tempWorkingOutputURL, effectiveParams, self, jobId)
+            if isJobCancelled(jobId) {
+                throw PastaError.cancelled
+            }
         } else if let custom = action.customRunner, isCompressBatch {
             for inp in inputs {
+                if isJobCancelled(jobId) {
+                    throw PastaError.cancelled
+                }
                 let dest = tempWorkingOutputURL.appendingPathComponent(inp.lastPathComponent)
                 try custom(inp, dest, effectiveParams, self, jobId)
+            }
+            if isJobCancelled(jobId) {
+                throw PastaError.cancelled
             }
         } else {
             let invocations = (action.buildBatchInvocationsWithParams ?? { ins, out, params in
@@ -719,6 +735,9 @@ extension JobRunner {
 
             if let custom = action.customRunner {
                 try custom(input, tempWorkingOutputURL, effectiveParams, self, jobId)
+                if self.isJobCancelled(jobId) {
+                    throw PastaError.cancelled
+                }
             } else {
                 let invocations = action.buildInvocationsWithParams(input, tempWorkingOutputURL, effectiveParams)
                 guard !invocations.isEmpty else {
