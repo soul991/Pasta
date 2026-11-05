@@ -4696,6 +4696,175 @@ do {
     try? fm.removeItem(at: tempRoot)
 }
 
+// --- 39. Hostile Archive Extraction Tests (ArchiveGuard) ---
+do {
+    print("\n--- 39. Hostile Archive Extraction Tests (ArchiveGuard) ---")
+    let fm = FileManager.default
+    let fixtureTempRoot = fm.temporaryDirectory.appendingPathComponent("Pasta_Hostile_Fixtures_\(UUID().uuidString)")
+    try fm.createDirectory(at: fixtureTempRoot, withIntermediateDirectories: true)
+    defer {
+        try? fm.removeItem(at: fixtureTempRoot)
+    }
+
+    // Generate hostile fixtures dynamically using scripts/make_hostile_archives.sh
+    let genProcess = Process()
+    genProcess.executableURL = URL(fileURLWithPath: "/bin/bash")
+    genProcess.arguments = ["scripts/make_hostile_archives.sh", fixtureTempRoot.path]
+    try? genProcess.run()
+    genProcess.waitUntilExit()
+
+    let extractDest = fm.temporaryDirectory.appendingPathComponent("Pasta_Extract_Dest_\(UUID().uuidString)")
+    try fm.createDirectory(at: extractDest, withIntermediateDirectories: true)
+    defer {
+        try? fm.removeItem(at: extractDest)
+    }
+
+    // 39.1: Relative escape (slip_rel.zip)
+    let slipZipURL = fixtureTempRoot.appendingPathComponent("slip_rel.zip")
+    if fm.fileExists(atPath: slipZipURL.path), let action = FormatRegistry.shared.action(for: slipZipURL, actionID: "archive.extract") {
+        var didReject = false
+        do {
+            _ = try JobRunner.shared.run(action: action, input: slipZipURL, destinationDirectory: extractDest)
+        } catch {
+            didReject = true
+        }
+        assertTest(didReject, "39.1 Relative path escape in zip rejected by ArchiveGuard")
+        assertTest(!fm.fileExists(atPath: "/tmp/escape.txt"), "39.1 No escape.txt created in /tmp")
+    }
+
+    // 39.2: Relative escape (slip_rel.tar)
+    let slipTarURL = fixtureTempRoot.appendingPathComponent("slip_rel.tar")
+    if fm.fileExists(atPath: slipTarURL.path), let action = FormatRegistry.shared.action(for: slipTarURL, actionID: "archive.extract") {
+        var didReject = false
+        do {
+            _ = try JobRunner.shared.run(action: action, input: slipTarURL, destinationDirectory: extractDest)
+        } catch {
+            didReject = true
+        }
+        assertTest(didReject, "39.2 Relative path escape in tar rejected by ArchiveGuard")
+    }
+
+    // 39.3: Absolute path escape (slip_abs.tar)
+    let slipAbsURL = fixtureTempRoot.appendingPathComponent("slip_abs.tar")
+    if fm.fileExists(atPath: slipAbsURL.path), let action = FormatRegistry.shared.action(for: slipAbsURL, actionID: "archive.extract") {
+        var didReject = false
+        do {
+            _ = try JobRunner.shared.run(action: action, input: slipAbsURL, destinationDirectory: extractDest)
+        } catch {
+            didReject = true
+        }
+        assertTest(didReject, "39.3 Absolute path escape in tar rejected by ArchiveGuard")
+        assertTest(!fm.fileExists(atPath: "/tmp/pasta_abs_escape.txt"), "39.3 No /tmp/pasta_abs_escape.txt created")
+    }
+
+    // 39.4: Symlink pointing outside (symlink_outside.tar)
+    let symlinkOutsideURL = fixtureTempRoot.appendingPathComponent("symlink_outside.tar")
+    if fm.fileExists(atPath: symlinkOutsideURL.path), let action = FormatRegistry.shared.action(for: symlinkOutsideURL, actionID: "archive.extract") {
+        var didReject = false
+        do {
+            _ = try JobRunner.shared.run(action: action, input: symlinkOutsideURL, destinationDirectory: extractDest)
+        } catch {
+            didReject = true
+        }
+        assertTest(didReject, "39.4 Symlink pointing outside rejected by ArchiveGuard")
+    }
+
+    // 39.5: Symlink pointing to /etc/passwd (symlink_passwd.tar)
+    let symlinkPasswdURL = fixtureTempRoot.appendingPathComponent("symlink_passwd.tar")
+    if fm.fileExists(atPath: symlinkPasswdURL.path), let action = FormatRegistry.shared.action(for: symlinkPasswdURL, actionID: "archive.extract") {
+        var didReject = false
+        do {
+            _ = try JobRunner.shared.run(action: action, input: symlinkPasswdURL, destinationDirectory: extractDest)
+        } catch {
+            didReject = true
+        }
+        assertTest(didReject, "39.5 Symlink targeting /etc/passwd rejected by ArchiveGuard")
+    }
+
+    // 39.6: Symlink hop (symlink_hop.tar)
+    let symlinkHopURL = fixtureTempRoot.appendingPathComponent("symlink_hop.tar")
+    if fm.fileExists(atPath: symlinkHopURL.path), let action = FormatRegistry.shared.action(for: symlinkHopURL, actionID: "archive.extract") {
+        var didReject = false
+        do {
+            _ = try JobRunner.shared.run(action: action, input: symlinkHopURL, destinationDirectory: extractDest)
+        } catch {
+            didReject = true
+        }
+        assertTest(didReject, "39.6 Symlink directory hop rejected by ArchiveGuard")
+    }
+
+    // 39.7: Setuid and setgid bits rejection (setuid_setgid.tar)
+    let setuidURL = fixtureTempRoot.appendingPathComponent("setuid_setgid.tar")
+    if fm.fileExists(atPath: setuidURL.path), let action = FormatRegistry.shared.action(for: setuidURL, actionID: "archive.extract") {
+        var didReject = false
+        do {
+            _ = try JobRunner.shared.run(action: action, input: setuidURL, destinationDirectory: extractDest)
+        } catch {
+            didReject = true
+        }
+        assertTest(didReject, "39.7 Setuid/setgid elevated privileges rejected by ArchiveGuard")
+    }
+
+    // 39.8: Deep nesting limit (deep_nesting.tar)
+    let deepTarURL = fixtureTempRoot.appendingPathComponent("deep_nesting.tar")
+    if fm.fileExists(atPath: deepTarURL.path), let action = FormatRegistry.shared.action(for: deepTarURL, actionID: "archive.extract") {
+        var didReject = false
+        do {
+            _ = try JobRunner.shared.run(action: action, input: deepTarURL, destinationDirectory: extractDest)
+        } catch {
+            didReject = true
+        }
+        assertTest(didReject, "39.8 Directory depth exceeding limit rejected by ArchiveGuard")
+    }
+
+    // 39.9: Expansion bomb (expansion_bomb.tar.gz) with reduced limit test
+    let bombGzURL = fixtureTempRoot.appendingPathComponent("expansion_bomb.tar.gz")
+    if fm.fileExists(atPath: bombGzURL.path) {
+        let bombUnpackDir = fixtureTempRoot.appendingPathComponent("bomb_test")
+        try fm.createDirectory(at: bombUnpackDir, withIntermediateDirectories: true)
+        let un7z = Process()
+        un7z.executableURL = ToolLocator.shared.toolPath("7zz") ?? URL(fileURLWithPath: "/opt/homebrew/bin/7zz")
+        un7z.arguments = ["x", "-y", bombGzURL.path, "-o\(bombUnpackDir.path)"]
+        try? un7z.run()
+        un7z.waitUntilExit()
+
+        var tightLimits = ArchiveLimits.standard
+        tightLimits.maxTotalExpandedSize = 1024 * 1024 // 1 MB limit
+        var bombRejected = false
+        do {
+            try ArchiveGuard.validate(root: bombUnpackDir, limits: tightLimits)
+        } catch {
+            bombRejected = true
+        }
+        assertTest(bombRejected, "39.9 Expansion bomb exceeding size limit rejected by ArchiveGuard")
+    }
+
+    // 39.10: Benign archive extraction (guard against false positives)
+    let benignZipURL = fixtureTempRoot.appendingPathComponent("benign_valid.zip")
+    if fm.fileExists(atPath: benignZipURL.path), let action = FormatRegistry.shared.action(for: benignZipURL, actionID: "archive.extract") {
+        var extractSuccess = false
+        var extractedFilesCount = 0
+        do {
+            let outDir = try JobRunner.shared.run(action: action, input: benignZipURL, destinationDirectory: extractDest)
+            let items = try fm.subpathsOfDirectory(atPath: outDir.path)
+            extractedFilesCount = items.count
+            extractSuccess = extractedFilesCount >= 3
+        } catch {
+            extractSuccess = false
+        }
+        assertTest(extractSuccess, "39.10 Benign valid archive extracts cleanly without false positives (\(extractedFilesCount) items)")
+    }
+
+    // 39.11: Preflight inspection rejects prohibited entry early
+    var preflightCatchRelative = false
+    do {
+        try ArchiveGuard.preflightInspect(archiveURL: slipTarURL, toolName: "tar")
+    } catch {
+        preflightCatchRelative = true
+    }
+    assertTest(preflightCatchRelative, "39.11 Preflight tar inspection rejects relative traversal early")
+}
+
 print("\n==================================================")
 print("Test Suite Summary: \(passedTests)/\(totalTests) Passed, \(failedTests) Failed")
 print("==================================================")

@@ -97,18 +97,7 @@ public final class JobRunner {
     }
 
     public static func validateFolderJail(at rootURL: URL) throws {
-        let fm = FileManager.default
-        let rootCanon = rootURL.resolvingSymlinksInPath().standardizedFileURL.path
-        let rootWithSlash = rootCanon.hasSuffix("/") ? rootCanon : rootCanon + "/"
-        if let enumerator = fm.enumerator(at: rootURL, includingPropertiesForKeys: nil) {
-            for case let fileURL as URL in enumerator {
-                let resolved = fileURL.resolvingSymlinksInPath().standardizedFileURL.path
-                if resolved != rootCanon && !resolved.hasPrefix(rootWithSlash) {
-                    try? fm.removeItem(at: fileURL)
-                    throw PastaError.executionFailed(tool: "engine", exitCode: 1, output: "Path traversal detected in extracted archive")
-                }
-            }
-        }
+        try ArchiveGuard.validate(root: rootURL)
     }
 
     @discardableResult

@@ -361,6 +361,55 @@ fi
 
 rm -rf "$RACE_DIR"
 
+# 7.3 Hostile Archive Hardening Tests
+echo -e "\n--- 7.3 Hostile Archive Hardening Tests ---"
+HOSTILE_DIR="/tmp/Pasta_Sec8_Hostile_$$"
+mkdir -p "$HOSTILE_DIR"
+HOSTILE_OUT="$HOSTILE_DIR/extracted"
+mkdir -p "$HOSTILE_OUT"
+
+# Generate fixtures dynamically
+./scripts/make_hostile_archives.sh "$HOSTILE_DIR" > /dev/null 2>&1
+
+# 1. Relative slip zip rejection
+"$PASTA_BIN" convert "$HOSTILE_DIR/slip_rel.zip" --action archive.extract --dest "$HOSTILE_OUT" > /dev/null 2>&1 || true
+if [ ! -f "/tmp/escape.txt" ] && [ ! -f "$HOSTILE_DIR/escape.txt" ]; then
+    pass "Hostile slip_rel.zip prevented from writing outside extraction root"
+else
+    fail "Zip slip escape" "Found escape.txt outside archive root!"
+fi
+
+# 2. Absolute slip tar rejection
+"$PASTA_BIN" convert "$HOSTILE_DIR/slip_abs.tar" --action archive.extract --dest "$HOSTILE_OUT" > /dev/null 2>&1 || true
+if [ ! -f "/tmp/pasta_abs_escape.txt" ]; then
+    pass "Hostile slip_abs.tar prevented from writing to /tmp/pasta_abs_escape.txt"
+else
+    fail "Tar absolute path escape" "Found /tmp/pasta_abs_escape.txt on disk!"
+fi
+
+# 3. Symlink outside rejection
+"$PASTA_BIN" convert "$HOSTILE_DIR/symlink_outside.tar" --action archive.extract --dest "$HOSTILE_OUT" > /dev/null 2>&1 || true
+SYMLINKS_OUT=$(find "$HOSTILE_OUT" -type l 2>/dev/null | wc -l | tr -d ' ')
+if [ "$SYMLINKS_OUT" -eq 0 ]; then
+    pass "Hostile symlink_outside.tar was rejected and published nothing to destination"
+else
+    fail "Symlink outside leaked" "Found $SYMLINKS_OUT symlinks published to destination"
+fi
+
+# 4. Benign archive extracts safely without false positives
+BENIGN_OUT="$HOSTILE_DIR/benign_dest"
+mkdir -p "$BENIGN_OUT"
+"$PASTA_BIN" convert "$HOSTILE_DIR/benign_valid.zip" --action archive.extract --dest "$BENIGN_OUT" > /dev/null 2>&1 || true
+BENIGN_COUNT=$(find "$BENIGN_OUT" -type f 2>/dev/null | wc -l | tr -d ' ')
+if [ "$BENIGN_COUNT" -ge 3 ]; then
+    pass "Benign archive extracts all files cleanly without false positives ($BENIGN_COUNT files)"
+else
+    fail "Benign archive extraction failed" "Expected >= 3 files, got $BENIGN_COUNT"
+fi
+
+rm -rf "$HOSTILE_DIR"
+rm -f /tmp/escape.txt /tmp/pasta_abs_escape.txt
+
 # 8. Network verification
 echo -e "\n--- 8. 100% Offline Network Verification ---"
 NETWORK_STRINGS=$(strings "$PASTA_BIN" | grep -Ei "https?://|URLSession|Socket|connect\(" | grep -v "http://www.apple.com" | grep -v "http://www.w3.org" | head -n 5 || true)

@@ -268,6 +268,30 @@ rm -f TEMP_COPY
 
 ---
 
+### Hostile Archive Hardening & Tool Behavior (Phase R0 Step 2)
+Archives are treated as untrusted input. The real behavior of each underlying tool and the corresponding defense provided by `ArchiveGuard` is documented below:
+
+| Fixture / Attack Vector | Underlying Tool Behavior | ArchiveGuard Defense |
+| :--- | :--- | :--- |
+| `slip_rel.zip` (`../escape.txt`) | `ditto -x -k` strips leading `../` components on modern macOS, but does not error. | `ArchiveGuard.validate(root:)` verifies all resolved paths remain inside `rootCanon`. Preflight inspection catches escaping paths. |
+| `slip_rel.tar` (`../escape.txt`) | `bsdtar -xf` warns about leading `../` but may extract depending on flags. | `ArchiveGuard.preflightInspect` runs `tar -tf` and rejects archive before extraction. Post-extraction `validate` checks every resolved path. |
+| `slip_abs.tar` (`/tmp/pasta_abs_escape.txt`) | `bsdtar` strips leading `/` by default. | `ArchiveGuard.preflightInspect` catches leading `/` and rejects early with `PastaError.invalidInput`. |
+| `symlink_outside.tar` (`symlink -> /tmp`) | `bsdtar` creates the symlink inside destination pointing to `/tmp`. | `ArchiveGuard.validate` inspects `destinationOfSymbolicLink` and resolved paths; throws `PastaError.invalidInput` on any link pointing outside jail. |
+| `symlink_passwd.tar` (`link -> /etc/passwd`) | Creates direct symlink to sensitive system file. | `ArchiveGuard.validate` identifies symlink target escaping jail and rejects entire job. Scratch directory is wiped; destination untouched. |
+| `symlink_hop.tar` (`dir_link -> /tmp` + subfile) | Extractor writes through symlink to target directory outside root. | `ArchiveGuard.validate` checks canonical resolved path for all contents; detects hop outside `rootCanon` and rejects. |
+| `hardlink_outside.tar` | Hard link targeting outside inode. | `ArchiveGuard.validate` verifies inode boundaries. |
+| `duplicate_names.zip` | Second file silently overwrites first. | Safely handled in scratch jail without escaping boundaries. |
+| `case_collision.zip` (`A.txt` vs `a.txt`) | APFS is case-preserving but case-insensitive; collision in same directory. | Handled without crash; destination stays in scratch directory. |
+| `unicode_normalization.zip` (NFC vs NFD) | APFS normalizes Unicode representations. | Handled safely in scratch directory. |
+| `deep_nesting.tar` (100 levels) | Can cause stack overflow or filesystem path errors. | `ArchiveGuard.validate` enforces `maxDirectoryDepth = 64`. Rejects with `PastaError.invalidInput`. |
+| `very_long_names.tar` (>255 chars) | Filesystem error or buffer overflow attempt. | `ArchiveGuard.validate` enforces `maxPathLength = 1024`. |
+| `many_files.zip` (tiny files) | Inode exhaustion attack. | `ArchiveGuard.validate` enforces `maxTotalEntries = 100_000`. |
+| `expansion_bomb.tar.gz` (decompression bomb) | 10KB archive expanding to excessive size. | `ArchiveGuard.validate` enforces `maxSingleFileSize = 4 GB` and `maxTotalExpandedSize = 8 GB`. Rejects on limit breach. |
+| `setuid_setgid.tar` (`04755` / `02755`) | Preserves elevated executable permissions. | `ArchiveGuard.validate` checks `st_mode & (S_ISUID | S_ISGID)` and rejects privilege escalation with `PastaError.invalidInput`. |
+| `benign_valid.zip` | Standard multi-folder archive. | Passes `ArchiveGuard.validate` with 0 false positives; extracts cleanly. |
+
+---
+
 ## 7. Compression Modes (Phase 9 Step 3)
 
 ### Image Compression (Binary Search Quality & Color Quantization)
