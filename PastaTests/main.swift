@@ -3952,6 +3952,23 @@ do {
     RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.25))
     assertTest(autoCloseCalled, "33.7 Auto-dismiss fires onCloseRequested after deadline")
 
+    // 33.7 Loop verification: 50 consecutive runs of scheduleAutoDismiss timer check
+    var loopPassCount = 0
+    for _ in 1...50 {
+        var loopClosed = false
+        wheelOverlay.onCloseRequested = { loopClosed = true }
+        wheelOverlay.scheduleAutoDismiss(delay: 0.15)
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.03))
+        let notEarly = !loopClosed
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.20))
+        let didFire = loopClosed
+        if notEarly && didFire {
+            loopPassCount += 1
+        }
+    }
+    print("33.7 Timer Loop Verification: \(loopPassCount)/50 passed (pass rate: \(Double(loopPassCount) / 50.0 * 100.0)%)")
+    assertTest(loopPassCount == 50, "33.7 scheduleAutoDismiss passes 50/50 consecutive runs with 0 flakiness")
+
     // Test cancelAutoDismiss prevents close
     autoCloseCalled = false
     wheelOverlay.scheduleAutoDismiss(delay: 0.2)

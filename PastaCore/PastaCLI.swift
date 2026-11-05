@@ -72,8 +72,8 @@ public struct PastaCLI {
         print("""
         Pasta - Offline macOS File Converter
         Usage:
-          pasta convert --action <action_id> [--param key=value] <file>...
-          pasta convert <file> --to <format>
+          pasta convert --action <action_id> [--dest <dir>] [--param key=value] <file>...
+          pasta convert <file> --to <format> [--dest <dir>]
           pasta list-actions <file>
           pasta doctor
           pasta help
@@ -128,6 +128,7 @@ public struct PastaCLI {
     private static func runConvert(args: [String]) {
         var actionId: String?
         var targetFormat: String?
+        var destinationDir: URL?
         var rawParams: [String: String] = [:]
         var files: [String] = []
 
@@ -143,6 +144,9 @@ public struct PastaCLI {
                 i += 1
             } else if arg == "--action" && i + 1 < args.count {
                 actionId = args[i + 1]
+                i += 2
+            } else if (arg == "--dest" || arg == "--destination") && i + 1 < args.count {
+                destinationDir = URL(fileURLWithPath: args[i + 1])
                 i += 2
             } else if arg == "--to" && i + 1 < args.count {
                 targetFormat = args[i + 1]
@@ -196,7 +200,7 @@ public struct PastaCLI {
                 }
             }
             do {
-                let output = try JobRunner.shared.runBatch(action: act, inputs: fileURLs, parameters: effectiveParams)
+                let output = try JobRunner.shared.runBatch(action: act, inputs: fileURLs, destinationDirectory: destinationDir, parameters: effectiveParams)
                 print("OK: \(output.path)")
                 return
             } catch {
@@ -242,7 +246,7 @@ public struct PastaCLI {
             }
 
             do {
-                let output = try JobRunner.shared.run(action: selectedAction, input: url, parameters: effectiveParams)
+                let output = try JobRunner.shared.run(action: selectedAction, input: url, destinationDirectory: destinationDir, parameters: effectiveParams)
                 print("OK: \(output.path)")
             } catch {
                 fputs("Failed to convert '\(url.lastPathComponent)': \(error.localizedDescription)\n", stderr)

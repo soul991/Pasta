@@ -27,5 +27,8 @@ Pasta adheres strictly to the **"Never Overwrite"** principle. Previously, `Outp
   2. `st_ino == reservation.inode` (same exact inode created during reservation)
   3. `st_size == 0` for files (or directory is empty).
 
+### Finder Visibility of Placeholder Files
+Because the placeholder file is created with `open(O_CREAT | O_EXCL, 0o600)` at the target destination, it is briefly visible in macOS Finder as a 0-byte file during the duration of the conversion job. Once the conversion succeeds, `rename(2)` atomically replaces it with the full file content without changing its path. If the conversion fails or is cancelled, `cleanup()` immediately removes the empty placeholder. Users observing the destination folder during active conversions may see this temporary 0-byte placeholder. Pasta never removes any path that does not match its own recorded device and inode.
+
 ### Crash Edge-Case Limitation
 If a process is abruptly terminated (`SIGKILL` or system power failure), a 0-byte placeholder file may remain on disk. Pasta intentionally **does not auto-delete user-visible files** to prevent any risk of data loss. Instead, `pasta doctor` reports stale zero-byte placeholders older than 1 hour.
