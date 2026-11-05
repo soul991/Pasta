@@ -121,9 +121,9 @@
 | Image to PDF: batch images (`image.to.pdf`) | Step 2 | Documents | **DONE** | `Step 2: Batch images to PDF produces merged PDF` |
 | PDF merge: multi-file batch action (`pdf.merge`) | Step 2 | Documents | **DONE** | `Step 2: pdf.merge produces combined PDF` |
 | Documents: DOCX &harr; EPUB (`docx.to.epub`, `epub.to.docx`) | Step 2 | Documents | **DONE** | `Step 2: Convert docx -> epub produces valid file` |
-| Documents: Markdown &harr; EPUB (`md.to.epub`, `epub.to.md`) | Step 2 | Documents | **DONE** | `Step 2: md.to.epub action is registered` |
-| Documents: HTML &harr; EPUB (`html.to.epub`, `epub.to.html`) | Step 2 | Documents | **DONE** | `Step 2: html.to.epub action is registered` |
-| Documents: TXT &harr; EPUB (`epub.to.txt`) | Step 2 | Documents | **DONE** | `Step 2: epub conversions to docx, md, html, txt are registered` |
+| Documents: Markdown &harr; EPUB (`md.to.epub`, `epub.to.md`) | Step 2 | Documents | **DONE (structure only)** | `Step 2: md.to.epub action is registered` |
+| Documents: HTML &harr; EPUB (`html.to.epub`, `epub.to.html`) | Step 2 | Documents | **DONE (structure only)** | `Step 2: html.to.epub action is registered` |
+| Documents: TXT &harr; EPUB (`epub.to.txt`) | Step 2 | Documents | **DONE (structure only)** | `Step 2: epub conversions to docx, md, html, txt are registered` |
 | LibreOffice (`soffice`) optional detection & doctor | Step 2 | Tools | **DONE** | `Step 2: soffice is correctly reported as missing optional tool without failure` |
 | Image compression by percent (`image.compress`) | Step 3 | Compression | **DONE** | `Step 3: Image compression by 50% produces file <= 50% original` |
 | Image compression by exact target size (`image.compress`) | Step 3 | Compression | **DONE** | `Step 3: Image compression by target size 25000 bytes produces file <= 25000` |
@@ -169,10 +169,10 @@
 | Drop outside / mouseUp preserves wheel open | Phase 10B Step 1 | Wheel State | **DONE** | `21.5 Drop outside preserves open wheel and remembered files` |
 | `stayOpenAfterRelease` and `keepWheelOpenAfterRunning` preferences default & honor | Phase 10B Step 1 | Preferences | **DONE** | `21.6 stayOpenAfterRelease and keepWheelOpenAfterRunning defaults and production honor` |
 | Close control (×) & manual open/close | Phase 10B Step 1 | UI / Control | **DONE** | `21.7 Close control (×) and manual open/close` |
-| Hub empty state when opened without files ("Drag a file onto the wheel") | Phase 10B Step 1 | Hub UI | **DONE** | `21.8 RadialWheelCenterDiscView empty state displays 'Drag a file onto the wheel'` |
+| Hub empty state when opened without files ("Drag a file onto the wheel") | Phase 10B Step 1 | Hub UI | **DONE (structure only)** | `21.8 RadialWheelCenterDiscView empty state displays 'Drag a file onto the wheel'` |
 | WheelGeometry layout & metrics (520x560 panel, 148pt orbit, center at 260,310) | Phase 10B Step 2 | Geometry | **DONE** | `22.1 Headless geometry: 8 slots >= 8pt margin at 1.06 scale with 18pt glow` |
 | Screen edge repositioning (keeps full panel on screen, clears menu bar & dock) | Phase 10B Step 2 | Window Manager | **DONE** | `22.2 Screen-edge repositioning for 4 edges and 4 corners` |
-| Disabled masksToBounds on all glow ancestor layers (`panel.contentView`, `view`, `node`) | Phase 10B Step 2 | Anti-Clipping | **DONE** | `22.3 Ancestor masksToBounds disabled` |
+| Disabled masksToBounds on all glow ancestor layers (`panel.contentView`, `view`, `node`) | Phase 10B Step 2 | Anti-Clipping | **DONE (structure only)** | `22.3 Ancestor masksToBounds disabled` |
 | Circular glass backplate annulus (400pt outer / 128pt inner, 0.12 connecting radial wedge) | Phase 10B Step 3 | Wheel Redesign | **DONE** | `23.1 Backplate annulus path and connecting wedge` |
 | 64pt circular glass node buttons (1.00–1.06 hover scale, no clipping, theme ink) | Phase 10B Step 3 | Wheel Redesign | **DONE** | `23.2 Circular button node views and hover scale` |
 | Center hub (64pt single file thumbnail, middle truncation, multi-file stacked badge, idle rigatoni) | Phase 10B Step 3 | Hub Redesign | **DONE** | `23.3 Center disc single, multi-file stacked, and idle states` |
@@ -185,21 +185,21 @@
 | Reduce Transparency accessible rendering (opaque dark background #242426) | Phase 10B Step 4 | Accessibility | **DONE** | `24.2 Reduce Transparency opaque surface rendering` |
 | Increase Contrast accessible rendering (2.0pt border, high contrast stroke) | Phase 10B Step 4 | Accessibility | **DONE** | `24.3 Increase Contrast strengthened border rendering` |
 | Reduce Motion accessible behavior (instant alpha crossfade, zero spring, no pulsing glows) | Phase 10B Step 4 | Accessibility | **DONE** | `24.4 Reduce Motion crossfade animation behavior` |
-| VoiceOver accessibility (button roles, descriptive labels and help on all 8 slots, group on hub) | Phase 10B Step 4 | Accessibility | **DONE** | `24.5 Full VoiceOver accessibility coverage on wheel slots and hub` |
+| VoiceOver accessibility (button roles, descriptive labels and help on all 8 slots, group on hub) | Phase 10B Step 4 | Accessibility | **DONE (structure only)** | `24.5 Full VoiceOver accessibility coverage on wheel slots and hub` |
 | Full keyboard navigation (Arrow keys cyclic navigation, Tab cycle, Return/Space execute, Esc hierarchy) | Phase 10B Step 4 | Keyboard Nav | **DONE** | `24.6 Keyboard navigation cyclic focus, execution, and dismissal` |
 | Liquid glass design tokens in theme_tokens.json (specular stroke, sheen, inner shadow, scrim) | Phase 10B Step 4 | Design Tokens | **DONE** | `24.7 Liquid glass design tokens validation` |
-| Menu bar icon template glyph (`MenuBarIcon.pdf`, 18pt x 18pt, isTemplate=true) | Phase 10B Step 5 | Brand Presence | **DONE** | `25.1 Menu bar icon loads as template with 18x18 size` |
+| Menu bar icon template glyph (`MenuBarIcon.pdf`, 18pt x 18pt, isTemplate=true) | Phase 10B Step 5 | Brand Presence | **DONE (structure only)** | `25.1 Menu bar icon loads as template with 18x18 size` |
 | Status item button verification helper & diagnostic logging | Phase 10B Step 5 | Brand Presence | **DONE** | `25.2–25.3 Status item button verification and error logging` |
-| App icon loading with valid positive dimensions | Phase 10B Step 5 | Brand Presence | **DONE** | `25.4 BrandAssetManager.loadAppIcon loads successfully` |
-| Idle wheel hub displays rigatoni Pasta icon tinted with accent color | Phase 10B Step 5 | Hub Brand | **DONE** | `25.5 Center disc empty state displays rigatoni Pasta icon` |
-| SettingsWindowController header contains brand icon, 'Pasta' title, and subtitle | Phase 10B Step 5 | Settings UI | **DONE** | `25.6 SettingsWindowController header contains brand icon and title` |
-| Bundle assets valid (AppIcon.icns > 50KB, MenuBarIcon.pdf vector template < 5KB) | Phase 10B Step 5 | Bundle Assets | **DONE** | `25.7 Bundle assets existence and size check` |
+| App icon loading with valid positive dimensions | Phase 10B Step 5 | Brand Presence | **DONE (structure only)** | `25.4 BrandAssetManager.loadAppIcon loads successfully` |
+| Idle wheel hub displays rigatoni Pasta icon tinted with accent color | Phase 10B Step 5 | Hub Brand | **DONE (structure only)** | `25.5 Center disc empty state displays rigatoni Pasta icon` |
+| SettingsWindowController header contains brand icon, 'Pasta' title, and subtitle | Phase 10B Step 5 | Settings UI | **DONE (structure only)** | `25.6 SettingsWindowController header contains brand icon and title` |
+| Bundle assets valid (AppIcon.icns > 50KB, MenuBarIcon.pdf vector template < 5KB) | Phase 10B Step 5 | Bundle Assets | **DONE (structure only)** | `25.7 Bundle assets existence and size check` |
 | Progress rows with ETA and active Cancel button | Phase 10B Step 6 | Results & Progress | **DONE** | `26.1 JobStatusRowView shows ETA in running state and Cancel button` |
 | Real size change computation and formatting (`inMB → outMB [-XX%]`) | Phase 10B Step 6 | Results & Progress | **DONE** | `26.2 formatByteSize handles bytes, KB, and MB` |
 | Readable errors with 'Copy Details' clipboard reporting | Phase 10B Step 6 | Error Reporting | **DONE** | `26.3 Copy Details copied error report header to pasteboard` |
 | BatchProgressRowView ETA estimation during multi-file conversion | Phase 10B Step 6 | Batch Progress | **DONE** | `26.4 BatchProgressRow completed count and summary label` |
-| First-run Accessibility onboarding view & permission detection polling | Phase 10B Step 6 | Onboarding | **DONE** | `26.5–26.6 AccessibilityOnboardingView UI and permission detection` |
-| Unsupported file and empty states in Wheel and Drop Window | Phase 10B Step 6 | Empty States | **DONE** | `26.7 Center disc and DropWindow unsupported file states` |
+| First-run Accessibility onboarding view & permission detection polling | Phase 10B Step 6 | Onboarding | **DONE (structure only)** | `26.5–26.6 AccessibilityOnboardingView UI and permission detection` |
+| Unsupported file and empty states in Wheel and Drop Window | Phase 10B Step 6 | Empty States | **DONE (structure only)** | `26.7 Center disc and DropWindow unsupported file states` |
 | Customize sheet z-order: hide nodes and backplate when sheet opens, restore on close; headless geometry test | Phase 10B Fix 1 (P0) | Customize Z-Order | **DONE** | `27.1–27.4 Zero node intersection with sheet` |
 | Tools tab human display names & glyphs, 6 pinned list with keyboard up/down, Remove control, Add tool picker | Phase 10B Fix 2 (P1) | Tools Customization | **DONE** | `28.1–28.4 Action human names, icons, pinned slots, add picker` |
 | Two-row category tabs, 32pt circular theme swatches with label, un-truncated labels with longest strings test | Phase 10B Fix 3 (P1) | Sheet Layout | **DONE** | `29.1–29.4 Category tabs, swatches, and string widths` |
