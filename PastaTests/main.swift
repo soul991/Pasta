@@ -4998,6 +4998,164 @@ do {
         }
         assertTest(didExtract1000 && tightLimitRejected, "39.17 Many files extracted safely under standard limits and rejected under tight limit (many_files.zip)")
     }
+
+    // 39.18: Preflight tar inspection rejects symlink and hardlink targets pointing outside
+    var preflightTarSymlinkHop = false
+    var preflightTarHardlink = false
+    let hopTarURL = fixtureTempRoot.appendingPathComponent("symlink_hop.tar")
+    if fm.fileExists(atPath: hopTarURL.path) {
+        do {
+            try ArchiveGuard.preflightInspect(archiveURL: hopTarURL, toolName: "tar")
+        } catch {
+            preflightTarSymlinkHop = true
+        }
+    }
+    if fm.fileExists(atPath: hardlinkOutsideURL.path) {
+        do {
+            try ArchiveGuard.preflightInspect(archiveURL: hardlinkOutsideURL, toolName: "tar")
+        } catch {
+            preflightTarHardlink = true
+        }
+    }
+    assertTest(preflightTarSymlinkHop && preflightTarHardlink, "39.18 Preflight tar inspection catches link targets pointing outside (symlink_hop.tar, hardlink_outside.tar)")
+
+    // 39.19: Preflight 7zz inspection rejects link targets pointing outside
+    var preflight7zSymlinkHop = false
+    var preflight7zHardlink = false
+    if fm.fileExists(atPath: hopTarURL.path) {
+        do {
+            try ArchiveGuard.preflightInspect(archiveURL: hopTarURL, toolName: "7zz")
+        } catch {
+            preflight7zSymlinkHop = true
+        }
+    }
+    if fm.fileExists(atPath: hardlinkOutsideURL.path) {
+        do {
+            try ArchiveGuard.preflightInspect(archiveURL: hardlinkOutsideURL, toolName: "7zz")
+        } catch {
+            preflight7zHardlink = true
+        }
+    }
+    assertTest(preflight7zSymlinkHop && preflight7zHardlink, "39.19 Preflight 7zz inspection catches link targets pointing outside (symlink_hop.tar, hardlink_outside.tar)")
+
+    // 39.20: Preflight unar inspection rejects link targets pointing outside
+    var preflightUnarSymlinkHop = false
+    if fm.fileExists(atPath: hopTarURL.path) {
+        do {
+            try ArchiveGuard.preflightInspect(archiveURL: hopTarURL, toolName: "unar")
+        } catch {
+            preflightUnarSymlinkHop = true
+        }
+    }
+    assertTest(preflightUnarSymlinkHop, "39.20 Preflight unar inspection catches link targets pointing outside (symlink_hop.tar)")
+
+    // 39.21: Sentinel directory outside scratch root remains untouched during extraction attempts for all extractors
+    let sentinelDir = fm.temporaryDirectory.appendingPathComponent("pasta_sentinel_\(UUID().uuidString)")
+    try fm.createDirectory(at: sentinelDir, withIntermediateDirectories: true)
+    defer { try? fm.removeItem(at: sentinelDir) }
+
+    // Create crafted hostile archives specifically targeting sentinelDir
+    let craftedTar = fixtureTempRoot.appendingPathComponent("crafted_sentinel_hop.tar")
+    let craftedZip = fixtureTempRoot.appendingPathComponent("crafted_sentinel_hop.zip")
+    
+    // Generate crafted tar and zip targeting sentinelDir
+    let genProc = Process()
+    genProc.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
+    genProc.arguments = ["-c", """
+    import tarfile, zipfile, io, sys
+    sentinel = sys.argv[1]
+    tar_path = sys.argv[2]
+    zip_path = sys.argv[3]
+    with tarfile.open(tar_path, 'w') as tf:
+        ti1 = tarfile.TarInfo('escaped_dir')
+        ti1.type = tarfile.SYMTYPE
+        ti1.linkname = sentinel
+        tf.addfile(ti1)
+        ti2 = tarfile.TarInfo('escaped_dir/attack_payload.txt')
+        ti2.size = 14
+        tf.addfile(ti2, fileobj=io.BytesIO(b'ATTACK_PAYLOAD'))
+    with zipfile.ZipFile(zip_path, 'w') as zf:
+        zi1 = zipfile.ZipInfo('escaped_dir')
+        zi1.create_system = 3
+        zi1.external_attr = 0o120777 << 16
+        zf.writestr(zi1, sentinel)
+        zi2 = zipfile.ZipInfo('escaped_dir/attack_payload.txt')
+        zi2.create_system = 3
+        zi2.external_attr = 0o100644 << 16
+        zf.writestr(zi2, 'ATTACK_PAYLOAD')
+    """, sentinelDir.path, craftedTar.path, craftedZip.path]
+    try genProc.run()
+    genProc.waitUntilExit()
+
+    var sentinelProtectedTar = false
+    var sentinelProtectedDitto = false
+    var sentinelProtected7z = false
+    var sentinelProtectedUnar = false
+
+    // Test tar extractor
+    let tarScratch = fm.temporaryDirectory.appendingPathComponent("tar_scratch_\(UUID().uuidString)")
+    try fm.createDirectory(at: tarScratch, withIntermediateDirectories: true)
+    let tarProc = Process()
+    tarProc.executableURL = URL(fileURLWithPath: "/usr/bin/tar")
+    tarProc.arguments = ["-xf", craftedTar.path, "-C", tarScratch.path]
+    tarProc.standardError = FileHandle.nullDevice
+    try? tarProc.run()
+    tarProc.waitUntilExit()
+    let sentinelAfterTar = (try? fm.contentsOfDirectory(atPath: sentinelDir.path)) ?? []
+    sentinelProtectedTar = sentinelAfterTar.isEmpty
+    try? fm.removeItem(at: tarScratch)
+
+    // Test ditto extractor
+    let dittoScratch = fm.temporaryDirectory.appendingPathComponent("ditto_scratch_\(UUID().uuidString)")
+    try fm.createDirectory(at: dittoScratch, withIntermediateDirectories: true)
+    let dittoProc = Process()
+    dittoProc.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
+    dittoProc.arguments = ["-x", "-k", craftedZip.path, dittoScratch.path]
+    dittoProc.standardError = FileHandle.nullDevice
+    try? dittoProc.run()
+    dittoProc.waitUntilExit()
+    let sentinelAfterDitto = (try? fm.contentsOfDirectory(atPath: sentinelDir.path)) ?? []
+    sentinelProtectedDitto = sentinelAfterDitto.isEmpty
+    try? fm.removeItem(at: dittoScratch)
+
+    // Test 7zz extractor
+    let sevenzScratch = fm.temporaryDirectory.appendingPathComponent("7z_scratch_\(UUID().uuidString)")
+    try fm.createDirectory(at: sevenzScratch, withIntermediateDirectories: true)
+    if let sevenzTool = ToolLocator.shared.findTool("7zz") {
+        let sevenzProc = Process()
+        sevenzProc.executableURL = sevenzTool
+        sevenzProc.arguments = ["x", "-y", craftedTar.path, "-o\(sevenzScratch.path)"]
+        sevenzProc.standardOutput = FileHandle.nullDevice
+        sevenzProc.standardError = FileHandle.nullDevice
+        try? sevenzProc.run()
+        sevenzProc.waitUntilExit()
+        let sentinelAfter7z = (try? fm.contentsOfDirectory(atPath: sentinelDir.path)) ?? []
+        sentinelProtected7z = sentinelAfter7z.isEmpty
+    } else {
+        sentinelProtected7z = true
+    }
+    try? fm.removeItem(at: sevenzScratch)
+
+    // Test unar extractor
+    let unarScratch = fm.temporaryDirectory.appendingPathComponent("unar_scratch_\(UUID().uuidString)")
+    try fm.createDirectory(at: unarScratch, withIntermediateDirectories: true)
+    if let unarTool = ToolLocator.shared.findTool("unar") {
+        let unarProc = Process()
+        unarProc.executableURL = unarTool
+        unarProc.arguments = ["-o", unarScratch.path, craftedTar.path]
+        unarProc.standardOutput = FileHandle.nullDevice
+        unarProc.standardError = FileHandle.nullDevice
+        try? unarProc.run()
+        unarProc.waitUntilExit()
+        let sentinelAfterUnar = (try? fm.contentsOfDirectory(atPath: sentinelDir.path)) ?? []
+        sentinelProtectedUnar = sentinelAfterUnar.isEmpty
+    } else {
+        sentinelProtectedUnar = true
+    }
+    try? fm.removeItem(at: unarScratch)
+
+    let allSentinelsProtected = sentinelProtectedTar && sentinelProtectedDitto && sentinelProtected7z && sentinelProtectedUnar
+    assertTest(allSentinelsProtected, "39.21 Sentinel directory outside scratch root remains untouched across all extractors (tar, ditto, 7zz, unar)")
 }
 
 do {

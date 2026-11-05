@@ -268,18 +268,18 @@ rm -f TEMP_COPY
 
 ---
 
-### Hostile Archive Hardening & Tool Behavior (Phase R0 Step 2)
+### Hostile Archive Hardening & Tool Behavior (Phase R0 Step 2 & Phase R1 Step A3)
 Archives are treated as untrusted input. The real behavior of each underlying tool and the corresponding defense provided by `ArchiveGuard` is documented below:
 
 | Fixture / Attack Vector | Underlying Tool Behavior | ArchiveGuard Defense |
 | :--- | :--- | :--- |
 | `slip_rel.zip` (`../escape.txt`) | `ditto -x -k` strips leading `../` components on modern macOS, but does not error. | `ArchiveGuard.validate(root:)` verifies all resolved paths remain inside `rootCanon`. Preflight inspection catches escaping paths. |
-| `slip_rel.tar` (`../escape.txt`) | `bsdtar -xf` warns about leading `../` but may extract depending on flags. | `ArchiveGuard.preflightInspect` runs `tar -tf` and rejects archive before extraction. Post-extraction `validate` checks every resolved path. |
+| `slip_rel.tar` (`../escape.txt`) | `bsdtar -xf` warns about leading `../` but may extract depending on flags. | `ArchiveGuard.preflightInspect` runs `tar -tvf` and rejects archive before extraction. Post-extraction `validate` checks every resolved path. |
 | `slip_abs.tar` (`/tmp/pasta_abs_escape.txt`) | `bsdtar` strips leading `/` by default. | `ArchiveGuard.preflightInspect` catches leading `/` and rejects early with `PastaError.invalidInput`. |
-| `symlink_outside.tar` (`symlink -> /tmp`) | `bsdtar` creates the symlink inside destination pointing to `/tmp`. | `ArchiveGuard.validate` inspects `destinationOfSymbolicLink` and resolved paths; throws `PastaError.invalidInput` on any link pointing outside jail. |
-| `symlink_passwd.tar` (`link -> /etc/passwd`) | Creates direct symlink to sensitive system file. | `ArchiveGuard.validate` identifies symlink target escaping jail and rejects entire job. Scratch directory is wiped; destination untouched. |
-| `symlink_hop.tar` (`dir_link -> /tmp` + subfile) | Extractor writes through symlink to target directory outside root. | `ArchiveGuard.validate` checks canonical resolved path for all contents; detects hop outside `rootCanon` and rejects. |
-| `hardlink_outside.tar` (`link -> /etc/hosts`) | `bsdtar` removes leading `/` from hard-link target, finds no local target in scratch, and aborts with exit code 1. | **Expected: Reject**. `ArchiveGuard.validate` tracks inode link counts (`expectedLinks` vs `actualInRoot`) and rejects link escapes. External files (`/etc/hosts`) remain completely unmodified and unlinked. |
+| `symlink_outside.tar` (`symlink -> /tmp`) | `bsdtar` creates the symlink inside destination pointing to `/tmp`. | `ArchiveGuard.preflightInspect` detects external symlink target in catalog; `ArchiveGuard.validate` inspects `destinationOfSymbolicLink` and resolved paths; throws `PastaError.invalidInput` on any link pointing outside jail. |
+| `symlink_passwd.tar` (`link -> /etc/passwd`) | Creates direct symlink to sensitive system file. | `ArchiveGuard.preflightInspect` catches target `/etc/passwd` before extraction; `ArchiveGuard.validate` identifies symlink target escaping jail and rejects entire job. Scratch directory is wiped; destination untouched. |
+| `symlink_hop.tar` (`dir_link -> /tmp` + subfile) | Extractor encounters symlink directory. bsdtar halts with "Cannot extract through symlink". | `ArchiveGuard.preflightInspect` parses verbose catalog, rejects external symlink target early. External sentinel remains 100% untouched. |
+| `hardlink_outside.tar` (`link -> /etc/hosts`) | `bsdtar` removes leading `/` from hard-link target, finds no local target in scratch, and aborts with exit code 1. | **Expected: Reject**. `ArchiveGuard.preflightInspect` catches hardlink target early. `ArchiveGuard.validate` tracks inode link counts (`expectedLinks` vs `actualInRoot`) and rejects link escapes. External files (`/etc/hosts`) remain completely unmodified and unlinked. |
 | `duplicate_names.zip` (`duplicate.txt` x2) | `ditto` unpacks both entries into scratch root; subsequent entry deterministically overwrites earlier entry. | **Expected: Extract safely with deterministic naming**. Extracted directory contains single valid `duplicate.txt` with final content; validates safely. |
 | `case_collision.zip` (`A.txt` vs `a.txt`) | APFS is case-insensitive, case-preserving. `ditto` writes both entries into the same filesystem node without crashing. | **Expected: Extract safely with deterministic naming**. Handled safely on macOS APFS without corruption; validates safely. |
 | `unicode_normalization.zip` (NFC vs NFD `café.txt`) | APFS normalizes Unicode representations (canonical equivalence). `ditto` writes safely to the normalized name. | **Expected: Extract safely with deterministic naming**. Normalization handled without crash or path escape; validates safely. |
@@ -289,6 +289,34 @@ Archives are treated as untrusted input. The real behavior of each underlying to
 | `expansion_bomb.tar.gz` (decompression bomb) | 10KB archive expanding to excessive size. | `ArchiveGuard.validate` enforces `maxSingleFileSize = 4 GB` and `maxTotalExpandedSize = 8 GB`. Rejects on limit breach. |
 | `setuid_setgid.tar` (`04755` / `02755`) | Preserves elevated executable permissions. | `ArchiveGuard.validate` checks `st_mode & (S_ISUID | S_ISGID)` and rejects privilege escalation with `PastaError.invalidInput`. |
 | `benign_valid.zip` | Standard multi-folder archive. | Passes `ArchiveGuard.validate` with 0 false positives; extracts cleanly. |
+
+### Per-Extractor Protection & Symlink Hop Defense Analysis (Step A3)
+
+Every wired extractor has been tested against symlink hop attacks (`dir_link -> /external/sentinel` followed by `dir_link/payload`) using an independent sentinel directory outside the extraction root:
+
+1. **`tar` (`/usr/bin/tar` - macOS bsdtar)**:
+   - **Primary Defense (Preflight)**: `ArchiveGuard.preflightInspect` executes `tar -tvf` and parses verbose output, checking both entry paths and symlink/hardlink destinations (` -> ` and ` link to `). Targets with leading `/` or containing `..` are rejected with `PastaError.invalidInput` before extraction starts.
+   - **Secondary Defense (Extractor)**: macOS bsdtar has built-in protection against extracting through symlinks (`Cannot extract through symlink: Undefined error: 0`) and exits with error.
+   - **Tertiary Defense (Isolation & Post-validation)**: Ephemeral scratch directory isolation (`OutputPlanner.makeTempDirectory()`) followed by `ArchiveGuard.validate(root:)`.
+   - **Sentinel Hop Test Result**: **PASS** (sentinel directory untouched). Retained in extraction path.
+
+2. **`ditto` (`/usr/bin/ditto` - macOS native zip extractor)**:
+   - **Primary Defense (Preflight)**: `ArchiveGuard.preflightInspect` executes `zipinfo -s` to inspect all entries. If any entry has symlink mode (`l...`), it safely queries the target via `unzip -p` without disk extraction and rejects escaping targets.
+   - **Secondary Defense (Extractor)**: `ditto -x -k` refuses to traverse a symlink as a directory when writing subsequent path components (`Not a directory`) and aborts with exit code 1.
+   - **Tertiary Defense (Isolation & Post-validation)**: Ephemeral scratch directory isolation + `ArchiveGuard.validate(root:)`.
+   - **Sentinel Hop Test Result**: **PASS** (sentinel directory untouched). Retained in extraction path.
+
+3. **`7zz` (`/opt/homebrew/bin/7zz` - 7-Zip CLI for `.gz`, `.7z`)**:
+   - **Primary Defense (Preflight)**: `ArchiveGuard.preflightInspect` executes `7zz l -slt` and explicitly inspects `Path = `, `Symbolic Link = `, and `Hard Link = ` attributes. Any target escaping the jail triggers immediate preflight rejection.
+   - **Secondary Defense (Extractor)**: `7zz x -y` refuses to write files through intermediate symlinks (`Cannot open output file : errno=20 : Not a directory`) and aborts with exit code 2.
+   - **Tertiary Defense (Isolation & Post-validation)**: Ephemeral scratch directory isolation + `ArchiveGuard.validate(root:)`.
+   - **Sentinel Hop Test Result**: **PASS** (sentinel directory untouched). Retained in extraction path.
+
+4. **`unar` (`/opt/homebrew/bin/unar` - for `.rar`)**:
+   - **Primary Defense (Preflight)**: `ArchiveGuard.preflightInspect` executes `lsar -l` (with `7zz l -slt` fallback) and parses link targets (`Name -> Target`). Escaping targets are rejected before `unar` runs.
+   - **Secondary Defense (Extractor)**: `unar` fails to extract through symlink directories (`Failed! (Could not create directory)`) and exits with code 1.
+   - **Tertiary Defense (Isolation & Post-validation)**: Ephemeral scratch directory isolation + `ArchiveGuard.validate(root:)`.
+   - **Sentinel Hop Test Result**: **PASS** (sentinel directory untouched). Retained in extraction path.
 
 ---
 

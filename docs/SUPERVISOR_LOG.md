@@ -44,8 +44,8 @@ As the read-only supervisor sub-agent, the supervisor adheres strictly to the fo
 | Step | Description | Status | Commit | CI Run ID | Local Pass | CI Pass | Verdict |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **A1** | App Icon Verification (1024x1024, alpha, transparent corners, CI gate) | **PASS** | `a3945e7` | `42116157196` | Yes (828 u, 41 s8) | Yes (830 u, 41 s8) | **PASS** |
-| **A2** | Hostile Archive Fixtures Coverage (Assert all 15 fixtures) | **READY TO SUPERVISE** | - | - | - | - | - |
-| **A3** | Stop Damage During Extraction (Preflight link inspection, sentinel tests) | PENDING | - | - | - | - | - |
+| **A2** | Hostile Archive Fixtures Coverage (Assert all 15 fixtures) | **PASS** | `fb5ab7c` | `42119719613` | Yes (834 u, 41 s8) | Yes (836 u, 41 s8) | **PASS** |
+| **A3** | Stop Damage During Extraction (Preflight link inspection, sentinel tests) | **READY TO SUPERVISE** | - | - | - | - | - |
 | **A4** | Archive Bomb Limits Before Disk Fills (Catalog check, running scratch cap) | PENDING | - | - | - | - | - |
 | **A5** | Real-Timer Smoke Test (Section 33.7, 50x loop local + CI) | PENDING | - | - | - | - | - |
 | **A6** | Full Local Mac Verification Script (`scripts/local_verify.sh`) | PENDING | - | - | - | - | - |
@@ -96,21 +96,50 @@ As the read-only supervisor sub-agent, the supervisor adheres strictly to the fo
 ---
 
 ### Step A2 — Hostile Archive Fixtures Coverage
+- **Status**: **PASS**
+- **Verified Commits**:
+  - `fb5ab7c81e052e2910190b679e93ddda62a86327`: feat(A2): assert all hostile archive fixtures and add CI coverage verification script
+- **GitHub Actions CI Run**: `42119719613` (Status: completed, conclusion: success)
+  - Job 1: `Build & Verify (Xcode 27 arm64)` (ID `127568589596`) — **Success**
+  - Job 2: `Compatibility fallback (macos-latest)` (ID `127572579542`) — **Success**
+- **Independent Verification of Gate Items**:
+  1. **Fixture Coverage Verification Script**: **PASS**
+     - `scripts/check_archive_fixture_coverage.sh` executes `scripts/make_hostile_archives.sh`, checks every generated fixture against assertion names in `PastaTests/main.swift` and `scripts/run_section8_tests.sh`, and exits with code 1 if any fixture lacks an assertion.
+     - Confirmed in CI: Step 8 of Job 1 and Step 7 of Job 2 both passed (`Archive Fixture Coverage: 16/16 fixtures covered. ✓ Gate passed`).
+     - Independently re-run locally on Mac: 16/16 fixtures covered, clean exit code 0.
+  2. **RED Evidence on Unasserted Fixture**: **PASS**
+     - Created a synthetic fixture `unasserted_exploit.zip` in fixture directory; coverage verification script detected `Detected missing fixture: unasserted_exploit.zip`, printed `Missing count: 1`, and failed with non-zero exit code.
+  3. **GREEN Evidence & Fixture Behavior**: **PASS**
+     - Added named assertions 39.12 to 39.17 in `PastaTests/main.swift`:
+       - 39.12: `hardlink_outside.tar` verified rejected, external target (`/etc/hosts`) unmodified and unlinked (link count and inode verified before and after).
+       - 39.13: `duplicate_names.zip` extracts cleanly with deterministic overwrite.
+       - 39.14: `case_collision.zip` handled safely under filesystem semantics.
+       - 39.15: `unicode_normalization.zip` variants extracted safely (NFC/NFD canonical equivalence).
+       - 39.16: `very_long_names.tar` rejected safely without crash.
+       - 39.17: `many_files.zip` extracts safely under standard limits (1000 items) and is rejected when evaluated against tight limit (500 items).
+     - `docs/commands.md` Section 6 updated with comprehensive matrix defining expected behavior (reject vs deterministic naming) and `ArchiveGuard` defense for all 15 hostile fixtures + 1 benign fixture.
+  4. **Both CI Jobs Green**: **PASS**
+     - CI run `42119719613` green across both runners (`macos-27` and `macos-latest`).
+  5. **Assertion Integrity**: **PASS**
+     - Checked diff of `PastaTests/main.swift` and `scripts/run_section8_tests.sh`: no existing assertions removed or loosened. Test count increased from 828 to 834 locally (836 in CI with `soffice`). Section 8 remains 41/41 passed.
+  6. **No Hand-Typed Counts**: **PASS**
+     - All counts verified against CI and local test outputs.
+- **Supervisor Verdict**: **PASS**
+
+---
+
+### Step A3 — Stop Damage During Extraction
 - **Status**: **READY TO SUPERVISE**
 - **Scope**:
-  1. `scripts/make_hostile_archives.sh` generates 15 hostile fixtures. Section 39 must explicitly assert all 15 of them.
-  2. Add named assertions for:
-     - `hardlink_outside.tar`
-     - `duplicate_names.zip`
-     - `case_collision.zip`
-     - `unicode_normalization.zip`
-     - `very_long_names.tar`
-     - `many_files.zip`
-  3. For each case: define expected behavior (reject, or extract safely with deterministic naming), document in `docs/commands.md`, then assert it.
-  4. For `hardlink_outside.tar`: prove nothing outside the scratch root is modified or linked.
-  5. Add a small script check that lists fixtures from `scripts/make_hostile_archives.sh` and fails CI if any fixture has no matching test name in Section 39 or Section 7.3.
+  1. Test symlink hop (`symlink_hop.tar`, and a zip/7z/rar variant if extractor supports it) with an external sentinel directory.
+  2. Assert that NO file is created outside the scratch root at ANY point during extraction (sentinel directory remains empty/untouched after extraction attempts).
+  3. Test this across all wired extractors: `tar`, `ditto`, `7zz`, `unar`.
+  4. Preflight inspection must catch link targets (not just names): inspect verbose listings (`tar -tvf`, `7zz l -slt`, `zipinfo -v`) and reject symlink or hardlink entries whose targets are absolute or contain `..`.
+  5. Document in `docs/commands.md`, per extractor, exactly what protects it. If an extractor cannot be made safe by preflight + scratch isolation, remove it from the extraction path and fall back to a safe extractor.
 - **Gate Criteria**:
-  - Every fixture generated by `scripts/make_hostile_archives.sh` has at least one named assertion in Section 39 or Section 7.3.
-  - Script check passes in CI and locally.
+  - Sentinel-outside-root test passes for each wired extractor.
+  - RED run shows failure for any extractor that needed a fix.
+  - Preflight catches escaping symlink and hardlink targets.
+  - `docs/commands.md` documents per-extractor defense and fallback decisions.
+  - Both CI jobs green on `origin/codex/r0`.
   - Local tests (`swift run PastaTests`, Section 8) pass.
-  - Both CI jobs (`macos-27` and `macos-latest`) green on `origin/codex/r0`.
