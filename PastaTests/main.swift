@@ -4496,8 +4496,8 @@ do {
         inputs.append(file)
     }
 
-    guard let action = FormatRegistry.shared.actions(for: inputs[0]).first(where: { $0.id == "image.to.jpg" }) else {
-        fatalError("image.to.jpg action not found")
+    guard let action = FormatRegistry.shared.actions(for: inputs[0]).first(where: { $0.id == "image.to.jpeg" }) else {
+        fatalError("image.to.jpeg action not found")
     }
 
     let group = DispatchGroup()
