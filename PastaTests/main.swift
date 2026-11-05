@@ -3945,9 +3945,11 @@ do {
     var autoCloseCalled = false
     wheelOverlay.onCloseRequested = { autoCloseCalled = true }
 
-    // Test scheduleAutoDismiss fires after delay
-    wheelOverlay.scheduleAutoDismiss(delay: 0.05)
-    RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.12))
+    // Test scheduleAutoDismiss fires after delay with pre-deadline negative proof
+    wheelOverlay.scheduleAutoDismiss(delay: 0.20)
+    RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.04))
+    assertTest(!autoCloseCalled, "33.7 Auto-dismiss has not fired before deadline")
+    RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.25))
     assertTest(autoCloseCalled, "33.7 Auto-dismiss fires onCloseRequested after deadline")
 
     // Test cancelAutoDismiss prevents close
