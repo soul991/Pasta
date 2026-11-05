@@ -43,6 +43,9 @@ jobs:
       - name: Run Section 8 Hardening Tests
         run: PASTA_BIN=.build/debug/Pasta ./scripts/run_section8_tests.sh
 
+      - name: Verify Archive Fixture Coverage
+        run: ./scripts/check_archive_fixture_coverage.sh
+
       - name: Verify App Icon & Corners (RED and GREEN proof)
         run: |
           python3 -c "
@@ -143,3 +146,6 @@ jobs:
         run: |
           swift build
           swift run PastaTests
+
+      - name: Verify Archive Fixture Coverage
+        run: ./scripts/check_archive_fixture_coverage.sh

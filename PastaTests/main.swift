@@ -4729,7 +4729,7 @@ do {
         } catch {
             didReject = true
         }
-        assertTest(didReject, "39.1 Relative path escape in zip rejected by ArchiveGuard")
+        assertTest(didReject, "39.1 Relative path escape in zip rejected by ArchiveGuard (slip_rel.zip)")
         assertTest(!fm.fileExists(atPath: "/tmp/escape.txt"), "39.1 No escape.txt created in /tmp")
     }
 
@@ -4742,7 +4742,7 @@ do {
         } catch {
             didReject = true
         }
-        assertTest(didReject, "39.2 Relative path escape in tar rejected by ArchiveGuard")
+        assertTest(didReject, "39.2 Relative path escape in tar rejected by ArchiveGuard (slip_rel.tar)")
     }
 
     // 39.3: Absolute path escape (slip_abs.tar)
@@ -4754,7 +4754,7 @@ do {
         } catch {
             didReject = true
         }
-        assertTest(didReject, "39.3 Absolute path escape in tar rejected by ArchiveGuard")
+        assertTest(didReject, "39.3 Absolute path escape in tar rejected by ArchiveGuard (slip_abs.tar)")
         assertTest(!fm.fileExists(atPath: "/tmp/pasta_abs_escape.txt"), "39.3 No /tmp/pasta_abs_escape.txt created")
     }
 
@@ -4767,7 +4767,7 @@ do {
         } catch {
             didReject = true
         }
-        assertTest(didReject, "39.4 Symlink pointing outside rejected by ArchiveGuard")
+        assertTest(didReject, "39.4 Symlink pointing outside rejected by ArchiveGuard (symlink_outside.tar)")
     }
 
     // 39.5: Symlink pointing to /etc/passwd (symlink_passwd.tar)
@@ -4779,7 +4779,7 @@ do {
         } catch {
             didReject = true
         }
-        assertTest(didReject, "39.5 Symlink targeting /etc/passwd rejected by ArchiveGuard")
+        assertTest(didReject, "39.5 Symlink targeting /etc/passwd rejected by ArchiveGuard (symlink_passwd.tar)")
     }
 
     // 39.6: Symlink hop (symlink_hop.tar)
@@ -4791,7 +4791,7 @@ do {
         } catch {
             didReject = true
         }
-        assertTest(didReject, "39.6 Symlink directory hop rejected by ArchiveGuard")
+        assertTest(didReject, "39.6 Symlink directory hop rejected by ArchiveGuard (symlink_hop.tar)")
     }
 
     // 39.7: Setuid and setgid bits defense (ArchiveGuard)
@@ -4829,7 +4829,7 @@ do {
         } catch {
             suidClearedOrRejected = true
         }
-        assertTest(suidClearedOrRejected, "39.7 Setuid/setgid elevated bits cleared by extractor or rejected")
+        assertTest(suidClearedOrRejected, "39.7 Setuid/setgid elevated bits cleared by extractor or rejected (setuid_setgid.tar)")
     }
 
     // 39.8: Deep nesting limit (deep_nesting.tar)
@@ -4841,7 +4841,7 @@ do {
         } catch {
             didReject = true
         }
-        assertTest(didReject, "39.8 Directory depth exceeding limit rejected by ArchiveGuard")
+        assertTest(didReject, "39.8 Directory depth exceeding limit rejected by ArchiveGuard (deep_nesting.tar)")
     }
 
     // 39.9: Expansion bomb (expansion_bomb.tar.gz) with reduced limit test
@@ -4869,7 +4869,7 @@ do {
         } catch {
             bombRejected = true
         }
-        assertTest(bombRejected, "39.9 Expansion bomb exceeding size limit rejected by ArchiveGuard")
+        assertTest(bombRejected, "39.9 Expansion bomb exceeding size limit rejected by ArchiveGuard (expansion_bomb.tar.gz)")
     }
 
     // 39.10: Benign archive extraction (guard against false positives)
@@ -4885,7 +4885,7 @@ do {
         } catch {
             extractSuccess = false
         }
-        assertTest(extractSuccess, "39.10 Benign valid archive extracts cleanly without false positives (\(extractedFilesCount) items)")
+        assertTest(extractSuccess, "39.10 Benign valid archive extracts cleanly without false positives (benign_valid.zip)")
     }
 
     // 39.11: Preflight inspection rejects prohibited entry early
@@ -4895,7 +4895,109 @@ do {
     } catch {
         preflightCatchRelative = true
     }
-    assertTest(preflightCatchRelative, "39.11 Preflight tar inspection rejects relative traversal early")
+    assertTest(preflightCatchRelative, "39.11 Preflight tar inspection rejects relative traversal early (slip_rel.tar)")
+
+    // 39.12: Hardlink pointing outside (hardlink_outside.tar)
+    let hardlinkOutsideURL = fixtureTempRoot.appendingPathComponent("hardlink_outside.tar")
+    if fm.fileExists(atPath: hardlinkOutsideURL.path), let action = FormatRegistry.shared.action(for: hardlinkOutsideURL, actionID: "archive.extract") {
+        var hostsStatBefore = stat()
+        stat("/etc/hosts", &hostsStatBefore)
+        var didReject = false
+        do {
+            _ = try JobRunner.shared.run(action: action, input: hardlinkOutsideURL, destinationDirectory: extractDest)
+        } catch {
+            didReject = true
+        }
+        var hostsStatAfter = stat()
+        stat("/etc/hosts", &hostsStatAfter)
+        let hostsUntouched = (hostsStatBefore.st_nlink == hostsStatAfter.st_nlink) && (hostsStatBefore.st_ino == hostsStatAfter.st_ino)
+        let nothingPublished = !fm.fileExists(atPath: extractDest.appendingPathComponent("hardlink_to_etc").path)
+        assertTest(didReject && hostsUntouched && nothingPublished, "39.12 Hard link escape rejected and external target unmodified (hardlink_outside.tar)")
+    }
+
+    // 39.13: Duplicate entry names (duplicate_names.zip)
+    let dupNamesURL = fixtureTempRoot.appendingPathComponent("duplicate_names.zip")
+    if fm.fileExists(atPath: dupNamesURL.path), let action = FormatRegistry.shared.action(for: dupNamesURL, actionID: "archive.extract") {
+        var didExtract = false
+        var hasOverwrittenContent = false
+        do {
+            let outDir = try JobRunner.shared.run(action: action, input: dupNamesURL, destinationDirectory: extractDest)
+            let dupFile = outDir.appendingPathComponent("duplicate.txt")
+            if fm.fileExists(atPath: dupFile.path) {
+                didExtract = true
+                let content = (try? String(contentsOf: dupFile, encoding: .utf8)) ?? ""
+                hasOverwrittenContent = content.contains("SECOND_VERSION_OVERWRITE")
+            }
+        } catch {
+            didExtract = false
+        }
+        assertTest(didExtract && hasOverwrittenContent, "39.13 Duplicate entry names extracted safely with deterministic overwrite (duplicate_names.zip)")
+    }
+
+    // 39.14: Case collision (case_collision.zip)
+    let caseCollisionURL = fixtureTempRoot.appendingPathComponent("case_collision.zip")
+    if fm.fileExists(atPath: caseCollisionURL.path), let action = FormatRegistry.shared.action(for: caseCollisionURL, actionID: "archive.extract") {
+        var didHandleSafely = false
+        do {
+            let outDir = try JobRunner.shared.run(action: action, input: caseCollisionURL, destinationDirectory: extractDest)
+            let items = (try? fm.contentsOfDirectory(atPath: outDir.path)) ?? []
+            didHandleSafely = !items.isEmpty
+        } catch {
+            didHandleSafely = false
+        }
+        assertTest(didHandleSafely, "39.14 Case collision handled safely under filesystem semantics (case_collision.zip)")
+    }
+
+    // 39.15: Unicode normalization (unicode_normalization.zip)
+    let unicodeNormURL = fixtureTempRoot.appendingPathComponent("unicode_normalization.zip")
+    if fm.fileExists(atPath: unicodeNormURL.path), let action = FormatRegistry.shared.action(for: unicodeNormURL, actionID: "archive.extract") {
+        var didNormalizeSafely = false
+        do {
+            let outDir = try JobRunner.shared.run(action: action, input: unicodeNormURL, destinationDirectory: extractDest)
+            let items = (try? fm.contentsOfDirectory(atPath: outDir.path)) ?? []
+            didNormalizeSafely = items.contains {
+                $0.precomposedStringWithCanonicalMapping == "café.txt".precomposedStringWithCanonicalMapping
+            }
+        } catch {
+            didNormalizeSafely = false
+        }
+        assertTest(didNormalizeSafely, "39.15 Unicode normalization variants extracted safely (unicode_normalization.zip)")
+    }
+
+    // 39.16: Very long entry name (> 255 chars) (very_long_names.tar)
+    let veryLongNamesURL = fixtureTempRoot.appendingPathComponent("very_long_names.tar")
+    if fm.fileExists(atPath: veryLongNamesURL.path), let action = FormatRegistry.shared.action(for: veryLongNamesURL, actionID: "archive.extract") {
+        var didReject = false
+        do {
+            _ = try JobRunner.shared.run(action: action, input: veryLongNamesURL, destinationDirectory: extractDest)
+        } catch {
+            didReject = true
+        }
+        assertTest(didReject, "39.16 Very long filename rejected safely without crash (very_long_names.tar)")
+    }
+
+    // 39.17: Many files (many_files.zip)
+    let manyFilesURL = fixtureTempRoot.appendingPathComponent("many_files.zip")
+    if fm.fileExists(atPath: manyFilesURL.path), let action = FormatRegistry.shared.action(for: manyFilesURL, actionID: "archive.extract") {
+        var didExtract1000 = false
+        var tightLimitRejected = false
+        do {
+            let outDir = try JobRunner.shared.run(action: action, input: manyFilesURL, destinationDirectory: extractDest)
+            let items = (try? fm.contentsOfDirectory(atPath: outDir.path)) ?? []
+            didExtract1000 = (items.count == 1000)
+
+            var tightLimits = ArchiveLimits.standard
+            tightLimits.maxTotalEntries = 500
+            do {
+                try ArchiveGuard.validate(root: outDir, limits: tightLimits)
+            } catch {
+                tightLimitRejected = true
+            }
+        } catch {
+            didExtract1000 = false
+        }
+        assertTest(didExtract1000 && tightLimitRejected, "39.17 Many files extracted safely under standard limits and rejected under tight limit (many_files.zip)")
+    }
 }
 
 do {
