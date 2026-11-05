@@ -1,0 +1,86 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (build, sign, package, and upload artifacts without publishing release)'
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  release:
+    name: Build & Package Release
+    runs-on: macos-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Environment Diagnostics
+        run: |
+          sw_vers
+          xcodebuild -version
+          swift --version
+
+      - name: Install dependencies via Homebrew
+        uses: ./.github/actions/install-dependencies
+
+      - name: Build Pasta.app
+        run: |
+          ./scripts/build_app.sh
+          codesign --verify --deep --strict Pasta.app
+
+      - name: Package Release Archive & Checksum
+        run: |
+          ditto -c -k --keepParent Pasta.app Pasta-macOS.zip
+          shasum -a 256 Pasta-macOS.zip > Pasta-macOS.zip.sha256
+          echo "SHA-256 Checksum:"
+          cat Pasta-macOS.zip.sha256
+
+      - name: Upload Artifacts (Action Run)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Pasta-macOS-Release
+          path: |
+            Pasta-macOS.zip
+            Pasta-macOS.zip.sha256
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v') && (github.event_name != 'workflow_dispatch' || !inputs.dry_run)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG_NAME="${GITHUB_REF#refs/tags/}"
+          cat << 'EOF' > release_body.md
+          ## Pasta 🍝 Release
+
+          A fast, native, 100% offline macOS file converter and utility with an interactive Shift-hold radial wheel.
+
+          ### ⚠️ Security & Signing Notice
+          - **Ad-Hoc Signed (Not Notarized)**: This build is ad-hoc signed and **not notarized** by an Apple Developer account.
+          - **First Launch ("Open Anyway")**: On macOS Gatekeeper warning:
+            1. Right-click (or Control-click) `Pasta.app` in `/Applications` and select **Open**.
+            2. In the Gatekeeper dialog, click **Open Anyway**.
+            3. Alternatively, navigate to **System Settings > Privacy & Security** and click **Open Anyway**.
+          - **Accessibility Permission**: For the Shift-hold radial wheel to intercept drag gestures outside the window, grant Pasta Accessibility permissions in **System Settings > Privacy & Security > Accessibility**.
+
+          ### 📦 Homebrew Prerequisites
+          Pasta runs 100% offline and does not bundle third-party binary engines. Install dependencies via:
+          ```bash
+          brew install ffmpeg imagemagick webp ghostscript qpdf poppler exiftool pandoc librsvg unar sevenzip
+          ```
+
+          ### Checksums
+          Refer to `Pasta-macOS.zip.sha256` for SHA-256 verification.
+          EOF
+
+          gh release create "$TAG_NAME" Pasta-macOS.zip Pasta-macOS.zip.sha256 \
+            --title "Pasta $TAG_NAME" \
+            --notes-file release_body.md

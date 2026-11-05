@@ -1,0 +1,77 @@
+# Contributing to Pasta
+
+Thank you for contributing to Pasta! We welcome contributions that uphold Pasta's core principles of speed, local security, and zero bloat.
+
+Please read these guidelines thoroughly before proposing changes.
+
+---
+
+## Strict Development Rules
+
+Pasta follows non-negotiable architectural and reliability invariants:
+
+1. **Zero Network Calls**:
+   - The app and CLI binaries must never make network requests, initialize sockets, or connect to external endpoints.
+   - All conversions run locally.
+2. **Zero Third-Party Swift Packages**:
+   - No external Swift package dependencies (`Package.swift` has zero dependency declarations).
+   - Only native Swift, Foundation, AppKit, and POSIX system APIs are permitted.
+3. **No Private APIs**:
+   - Only documented, sanctioned Apple public APIs are allowed.
+4. **No Shell Strings**:
+   - Never use `sh -c` or concatenate arguments into a shell command string.
+   - All processes must be spawned via `Process` with explicit executable URL and argument arrays (`[String]`).
+5. **No Silent Failures**:
+   - Errors must be propagated with readable, descriptive errors (`PastaError`).
+6. **Atomic & Non-Destructive**:
+   - Never overwrite user files without atomic reservation (`OutputReservation`).
+   - Source files must remain completely untouched on conversion success or failure.
+7. **Test-Driven Development (RED → GREEN)**:
+   - Always write tests first. Prove the test fails before writing or updating implementation code.
+   - Never loosen or delete an existing test to make a suite pass.
+8. **Sanitization & Cleanup**:
+   - Every new format or action must be tested against hostile filenames (leading dashes, quotes, unicode, long paths).
+   - Temporary scratch files must be cleaned up in `defer` blocks (zero leftover `/tmp/Pasta_*` files, zero orphan processes).
+
+---
+
+## Development & Testing Workflow
+
+### Building
+```bash
+# Build debug binary
+swift build
+
+# Build release binary
+swift build -c release
+
+# Build macOS .app bundle
+./scripts/build_app.sh
+```
+
+### Running Tests
+```bash
+# Run unit & integration test suite (Debug)
+swift run PastaTests
+
+# Run unit & integration test suite (Release)
+swift run -c release PastaTests
+
+# Run Section 8 Hardening & Offline Verification against CLI
+PASTA_BIN=.build/debug/Pasta ./scripts/run_section8_tests.sh
+
+# Run Section 8 Hardening against Pasta.app bundle
+PASTA_BIN=./Pasta.app/Contents/MacOS/Pasta ./scripts/run_section8_tests.sh
+
+# Verify App Bundle Code Signature
+codesign --verify --deep --strict Pasta.app
+```
+
+---
+
+## Submitting Pull Requests
+
+- Work on a focused feature or fix branch branched from `main`.
+- Include proving tests for every bug fix or feature.
+- Verify full test suites pass in both Debug and Release configurations before pushing.
+- Clearly describe what changed and link any relevant issue.

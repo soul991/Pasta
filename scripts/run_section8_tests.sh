@@ -410,6 +410,22 @@ fi
 rm -rf "$HOSTILE_DIR"
 rm -f /tmp/escape.txt /tmp/pasta_abs_escape.txt
 
+# 7.4 CLI Doctor & Action List Tests
+echo -e "\n--- 7.4 CLI Doctor & Action List Tests ---"
+DOCTOR_JSON=$("$PASTA_BIN" doctor --json 2>/dev/null || true)
+if echo "$DOCTOR_JSON" | grep -q '"tools"' && echo "$DOCTOR_JSON" | grep -q '"allRequiredAvailable"'; then
+    pass "pasta doctor --json produces valid JSON schema with tools and availability"
+else
+    fail "Doctor JSON schema invalid" "Output did not contain required JSON fields: $DOCTOR_JSON"
+fi
+
+ACTIONS_MD=$("$PASTA_BIN" list-actions --all --markdown 2>/dev/null || true)
+if echo "$ACTIONS_MD" | grep -q '| Category | Action ID |' && echo "$ACTIONS_MD" | grep -q 'image.to.png'; then
+    pass "pasta list-actions --all --markdown generates valid markdown action table"
+else
+    fail "List actions markdown table invalid" "Output did not contain markdown table header or actions: $ACTIONS_MD"
+fi
+
 # 8. Network verification
 echo -e "\n--- 8. 100% Offline Network Verification ---"
 NETWORK_STRINGS=$(strings "$PASTA_BIN" | grep -Ei "https?://|URLSession|Socket|connect\(" | grep -v "http://www.apple.com" | grep -v "http://www.w3.org" | head -n 5 || true)

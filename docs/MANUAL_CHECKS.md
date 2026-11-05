@@ -290,3 +290,25 @@ Inspect `Pasta.app` on the macOS Dock, Launchpad, and Finder at standard resolut
 - [ ] **Active Slice Contrast**:
   - Hover over a sunset-filled active slice.
   - **Expected:** Active text label uses dark ink `#1A0F05`, ensuring > 8:1 contrast ratio against bright orange/amber fills.
+
+---
+
+## 9. Phase R0: Reliability, Hostile Archive & First Release Manual Checks
+
+- [ ] **Concurrent Conversion Collision Check**:
+  - Convert the same file twice quickly via Finder Quick Action or drop two same-named files from different folders onto the wheel into the same target directory.
+  - **Expected:** Both conversions succeed with unique numbered suffixes (e.g. `photo.jpg` and `photo 1.jpg`), both output files are completely intact, and neither file overwrites or truncates the other.
+- [ ] **Hostile Archive Wheel & Finder Rejection**:
+  - Open a hostile fixture archive (e.g. `slip_rel.zip` or `symlink_outside.tar`) via Finder Quick Action or drop onto the radial wheel.
+  - **Expected:** The job fails with a clear, readable error ("Path traversal detected" or "elevated privilege binary"). The destination directory is left untouched, and no files escape outside the scratch extraction jail into `/tmp` or the user directory.
+- [ ] **Fresh Mac / Restricted PATH Doctor & Settings**:
+  - Launch `Pasta.app` directly from Finder (where `PATH` is restricted to `/usr/bin:/bin:/usr/sbin:/sbin`).
+  - Open **Pasta Settings**.
+  - **Expected:** Settings shows the full `pasta doctor` status, detecting engines in `/opt/homebrew/bin` and `/usr/local/bin`. If any tools are missing, the "Copy Install Command" button copies the exact `brew install ...` command to the clipboard. Pasting and executing it in Terminal installs the tools, and reopening Settings updates the status to Available.
+- [ ] **First Release Clean Account Verification**:
+  - Download `Pasta-macOS.zip` from the GitHub Release (or workflow artifact) on a clean macOS test user account.
+  - Unzip and launch `Pasta.app`.
+  - Perform the Gatekeeper "Open Anyway" flow (Right click -> Open).
+  - Grant Accessibility permissions when prompted.
+  - Perform the Shift-hold drag test and verify the wheel opens, latches, and executes conversions cleanly.
+  - Capture clean screenshots and a screen recording / GIF of the wheel in action for the README.

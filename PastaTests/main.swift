@@ -4898,6 +4898,78 @@ do {
     assertTest(preflightCatchRelative, "39.11 Preflight tar inspection rejects relative traversal early")
 }
 
+do {
+    print("\n--- 40. Actionable Doctor, Homebrew Mappings & Action Catalog Tests ---")
+    let locator = ToolLocator.shared
+
+    // 40.1: ToolLocator forced unavailable override
+    locator.setUnavailableOverride(tool: "ffmpeg", isUnavailable: true)
+    let ffmpegMissing = locator.findTool("ffmpeg") == nil
+    assertTest(ffmpegMissing, "40.1 ToolLocator reports missing tool when forced unavailable")
+
+    // 40.2: ToolLocator override present
+    let fakeToolURL = URL(fileURLWithPath: "/usr/bin/true")
+    locator.setOverride(tool: "ffmpeg", url: fakeToolURL)
+    let ffmpegFound = locator.findTool("ffmpeg") == fakeToolURL
+    assertTest(ffmpegFound, "40.2 ToolLocator reports present tool when overridden with custom URL")
+
+    // Reset ffmpeg overrides
+    locator.setOverride(tool: "ffmpeg", url: nil)
+    locator.setUnavailableOverride(tool: "ffmpeg", isUnavailable: false)
+
+    // 40.3: Formula mapping and brew install command generation for missing required tool
+    locator.setUnavailableOverride(tool: "magick", isUnavailable: true)
+    locator.setUnavailableOverride(tool: "qpdf", isUnavailable: true)
+    let reqReport = locator.doctorReportData(fetchVersions: false)
+    let hasMissingReq = reqReport.missingRequired.contains("magick") && reqReport.missingRequired.contains("qpdf")
+    assertTest(hasMissingReq, "40.3 Doctor report identifies missing required tools (magick, qpdf)")
+    
+    let reqCmd = reqReport.requiredInstallCommand ?? ""
+    let cmdContainsFormulas = reqCmd.contains("imagemagick") && reqCmd.contains("qpdf") && reqCmd.hasPrefix("brew install")
+    assertTest(cmdContainsFormulas, "40.3 Doctor generates copy-paste 'brew install' command mapping magick->imagemagick and qpdf->qpdf")
+
+    // Reset overrides
+    locator.setUnavailableOverride(tool: "magick", isUnavailable: false)
+    locator.setUnavailableOverride(tool: "qpdf", isUnavailable: false)
+
+    // 40.4: Optional cask install command generation
+    locator.setUnavailableOverride(tool: "soffice", isUnavailable: true)
+    locator.setUnavailableOverride(tool: "ebook-convert", isUnavailable: true)
+    let optReport = locator.doctorReportData(fetchVersions: false)
+    let optCmd = optReport.optionalInstallCommand ?? ""
+    let caskCmdCorrect = optCmd.contains("--cask") && optCmd.contains("libreoffice") && optCmd.contains("calibre")
+    assertTest(caskCmdCorrect, "40.4 Doctor generates '--cask libreoffice calibre' command for missing optional tools")
+
+    // Reset optional overrides
+    locator.setUnavailableOverride(tool: "soffice", isUnavailable: false)
+    locator.setUnavailableOverride(tool: "ebook-convert", isUnavailable: false)
+
+    // 40.5: JSON export conformance
+    let baselineReport = locator.doctorReportData(fetchVersions: false)
+    let jsonStr = baselineReport.jsonString(prettyPrinted: true)
+    let jsonData = jsonStr.data(using: .utf8)
+    let decoded = jsonData != nil ? (try? JSONDecoder().decode(PastaDoctorReport.self, from: jsonData!)) : nil
+    assertTest(decoded != nil && decoded?.tools.count == ToolLocator.toolDefinitions.count, "40.5 Doctor JSON parses into PastaDoctorReport with all tool definitions")
+
+    // 40.6: Status metadata fields (formula, isOptional, isCask, dependentActions)
+    let ffmpegStatus = baselineReport.tools.first(where: { $0.name == "ffmpeg" })
+    let hasMetadata = ffmpegStatus != nil && ffmpegStatus?.formula == "ffmpeg" && ffmpegStatus?.isOptional == false && ffmpegStatus?.dependentActions.contains("video.to.mp4") == true
+    assertTest(hasMetadata, "40.6 ToolStatus includes formula mapping, isOptional flag, and dependent actions list")
+
+    // 40.7: fetchToolVersion execution and safe fallback
+    let echoURL = URL(fileURLWithPath: "/bin/echo")
+    let echoVer = ToolLocator.fetchToolVersion(executableURL: echoURL, flag: "version_1.2.3")
+    assertTest(echoVer == "version_1.2.3", "40.7 fetchToolVersion safely captures output line from process")
+    let nonexistentURL = URL(fileURLWithPath: "/nonexistent/tool/path")
+    let noVer = ToolLocator.fetchToolVersion(executableURL: nonexistentURL, flag: "--version")
+    assertTest(noVer == nil, "40.7 fetchToolVersion safely returns nil for unlaunchable executable without hanging")
+
+    // 40.8: FormatRegistry allRegisteredActions coverage
+    let allActions = FormatRegistry.shared.allRegisteredActions()
+    let categories = Set(allActions.map(\.category))
+    assertTest(allActions.count >= 40 && categories.contains(.image) && categories.contains(.video) && categories.contains(.audio) && categories.contains(.pdf) && categories.contains(.archive), "40.8 FormatRegistry.allRegisteredActions covers all core categories with >= 40 actions (\(allActions.count) actions)")
+}
+
 print("\n==================================================")
 print("Test Suite Summary: \(passedTests)/\(totalTests) Passed, \(failedTests) Failed")
 print("==================================================")

@@ -70,11 +70,12 @@ public final class SettingsHeaderView: NSView {
 public final class SettingsWindowController: NSWindowController {
     public let headerView = SettingsHeaderView()
     public let customizeSheet = RadialWheelCustomizeSheet()
+    public let copyInstallButton = NSButton(title: "Copy Install Command", target: nil, action: nil)
     public let doctorLabel = NSTextField(wrappingLabelWithString: "")
 
     public convenience init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 400, height: 840),
+            contentRect: NSRect(x: 0, y: 0, width: 440, height: 880),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
@@ -95,6 +96,12 @@ public final class SettingsWindowController: NSWindowController {
 
         customizeSheet.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(customizeSheet)
+
+        copyInstallButton.translatesAutoresizingMaskIntoConstraints = false
+        copyInstallButton.bezelStyle = .rounded
+        copyInstallButton.target = self
+        copyInstallButton.action = #selector(copyInstallCommandClicked)
+        container.addSubview(copyInstallButton)
 
         doctorLabel.translatesAutoresizingMaskIntoConstraints = false
         doctorLabel.font = NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
@@ -117,12 +124,27 @@ public final class SettingsWindowController: NSWindowController {
             customizeSheet.topAnchor.constraint(equalTo: headerView.bottomAnchor, constant: 12),
             customizeSheet.heightAnchor.constraint(equalToConstant: 480),
 
-            doctorLabel.topAnchor.constraint(equalTo: customizeSheet.bottomAnchor, constant: 12),
+            copyInstallButton.topAnchor.constraint(equalTo: customizeSheet.bottomAnchor, constant: 12),
+            copyInstallButton.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 20),
+            copyInstallButton.heightAnchor.constraint(equalToConstant: 28),
+
+            doctorLabel.topAnchor.constraint(equalTo: copyInstallButton.bottomAnchor, constant: 10),
             doctorLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 20),
             doctorLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -20),
             doctorLabel.bottomAnchor.constraint(lessThanOrEqualTo: container.bottomAnchor, constant: -16)
         ])
 
         window.contentView = container
+    }
+
+    @objc public func copyInstallCommandClicked() {
+        let rep = ToolLocator.shared.doctorReportData(fetchVersions: false)
+        let cmd = rep.requiredInstallCommand ?? rep.optionalInstallCommand ?? "All tools are already installed!"
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(cmd, forType: .string)
+        copyInstallButton.title = "Copied to Clipboard!"
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+            self?.copyInstallButton.title = "Copy Install Command"
+        }
     }
 }
