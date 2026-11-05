@@ -46,6 +46,9 @@ jobs:
       - name: Verify Archive Fixture Coverage
         run: ./scripts/check_archive_fixture_coverage.sh
 
+      - name: Run Section 33.7 Real-Timer Smoke Test (50x Loop)
+        run: ./scripts/run_real_timer_smoke_test.sh
+
       - name: Verify App Icon & Corners (RED and GREEN proof)
         run: |
           python3 -c "
@@ -149,3 +152,6 @@ jobs:
 
       - name: Verify Archive Fixture Coverage
         run: ./scripts/check_archive_fixture_coverage.sh
+
+      - name: Run Section 33.7 Real-Timer Smoke Test (50x Loop)
+        run: ./scripts/run_real_timer_smoke_test.sh

@@ -24,6 +24,33 @@ func fileSHA256(url: URL) -> String? {
     return digest.map { String(format: "%02x", $0) }.joined()
 }
 
+if CommandLine.arguments.contains("--smoke-real-timer-50") {
+    print("==================================================")
+    print("Running 33.7 Real-Timer Smoke Test (50x Loop)")
+    print("==================================================")
+    let overlay = RadialWheelOverlayViewController()
+    overlay.loadView()
+    overlay.viewDidLoad()
+    var passCount = 0
+    for i in 1...50 {
+        var didFire = false
+        overlay.timerScheduler = nil
+        overlay.onCloseRequested = { didFire = true }
+        overlay.scheduleAutoDismiss(delay: 1.0)
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.10))
+        let early = didFire
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 1.15))
+        let late = didFire
+        if !early && late {
+            passCount += 1
+        }
+        print("Iteration \(i)/50: early=\(early), late=\(late), passes=\(passCount)")
+    }
+    let passRate = Double(passCount) / 50.0 * 100.0
+    print("33.7 Real-Timer Smoke Test 50x Loop: \(passCount)/50 passed (\(passRate)%)")
+    exit(passCount == 50 ? 0 : 1)
+}
+
 print("==================================================")
 print("Running PastaCore Unit & Integration Test Suite")
 print("==================================================")
@@ -4002,6 +4029,22 @@ do {
 
     print("33.7 Timer Loop Verification: \(loopPassCount)/50 passed (pass rate: \(Double(loopPassCount) / 50.0 * 100.0)%)")
     assertTest(loopPassCount == 50, "33.7 scheduleAutoDismiss passes 50/50 consecutive runs with 0 flakiness")
+
+    // 33.7-SMOKE: Real-timer smoke test for scheduleAutoDismiss (using actual DispatchQueue.main async timer)
+    // Uses real timer (timerScheduler = nil).
+    // Generous margin: 1.0s deadline, checked at 100ms (negative proof) and 1.25s (positive proof).
+    let smokeOverlay = RadialWheelOverlayViewController()
+    smokeOverlay.loadView()
+    smokeOverlay.viewDidLoad()
+    var smokeRealTimerAutoCloseCalled = false
+    smokeOverlay.timerScheduler = nil
+    smokeOverlay.onCloseRequested = { smokeRealTimerAutoCloseCalled = true }
+    smokeOverlay.scheduleAutoDismiss(delay: 1.0)
+    RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.10))
+    let smokeNotEarly = !smokeRealTimerAutoCloseCalled
+    RunLoop.main.run(until: Date(timeIntervalSinceNow: 1.15))
+    let smokeDidFire = smokeRealTimerAutoCloseCalled
+    assertTest(smokeNotEarly && smokeDidFire, "33.7 Smoke: Real-timer scheduleAutoDismiss auto-dismisses on real clock with generous margin")
 
     // Test cancelAutoDismiss prevents close
     autoCloseCalled = false
