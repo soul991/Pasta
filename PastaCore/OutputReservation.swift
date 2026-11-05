@@ -55,11 +55,11 @@ public final class OutputReservation {
                         _ = unlink(stagingURL.path)
                     }
                     let stageMsg = String(cString: strerror(stageErr))
-                    throw PastaError.executionFailed(tool: "filesystem", exitCode: Int(stageErr), output: "Failed to publish cross-device output: \(stageMsg)")
+                    throw PastaError.executionFailed(tool: "filesystem", exitCode: stageErr, output: "Failed to publish cross-device output: \(stageMsg)")
                 }
             } else {
                 let errMsg = String(cString: strerror(err))
-                throw PastaError.executionFailed(tool: "filesystem", exitCode: Int(err), output: "Failed to atomically publish output via rename(2): \(errMsg)")
+                throw PastaError.executionFailed(tool: "filesystem", exitCode: err, output: "Failed to atomically publish output via rename(2): \(errMsg)")
             }
         }
 

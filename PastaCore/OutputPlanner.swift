@@ -64,7 +64,7 @@ public struct OutputPlanner {
                     continue
                 } else {
                     let errMsg = String(cString: strerror(err))
-                    throw PastaError.executionFailed(tool: "filesystem", exitCode: Int(err), output: "Failed to atomically reserve output file '\(candidatePath)': \(errMsg)")
+                    throw PastaError.executionFailed(tool: "filesystem", exitCode: err, output: "Failed to atomically reserve output file '\(candidatePath)': \(errMsg)")
                 }
             }
         }
@@ -115,7 +115,7 @@ public struct OutputPlanner {
                     continue
                 } else {
                     let errMsg = String(cString: strerror(err))
-                    throw PastaError.executionFailed(tool: "filesystem", exitCode: Int(err), output: "Failed to atomically reserve output directory '\(candidatePath)': \(errMsg)")
+                    throw PastaError.executionFailed(tool: "filesystem", exitCode: err, output: "Failed to atomically reserve output directory '\(candidatePath)': \(errMsg)")
                 }
             }
         }
