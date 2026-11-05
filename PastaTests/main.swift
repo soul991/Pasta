@@ -4552,19 +4552,16 @@ do {
     let failingAction = ConversionAction(
         id: "test.fail.action",
         displayName: "Failing Action",
-        inputExtensions: ["png"],
         outputExtension: "jpg",
-        buildInvocations: { _, _ in
-            [Invocation(executable: URL(fileURLWithPath: "/usr/bin/false"), arguments: [])]
+        category: .image,
+        customRunner: { _, _, _, _, _ in
+            throw PastaError.executionFailed(tool: "engine", exitCode: 1, output: "Injected failure")
         }
     )
-    let failDestURL: URL
     do {
         _ = try JobRunner.shared.run(action: failingAction, input: inputs[0], destinationDirectory: destDir)
-        failDestURL = URL(fileURLWithPath: "/dev/null")
     } catch {
         // Expected failure
-        failDestURL = destDir.appendingPathComponent("photo 21.jpg")
     }
     // Check that no orphaned zero-byte placeholder remains
     let remainingPlaceholders = destContents.filter { (try? Data(contentsOf: $0).count) == 0 }
@@ -4576,10 +4573,10 @@ do {
     let slowAction = ConversionAction(
         id: "test.slow.action",
         displayName: "Slow Action",
-        inputExtensions: ["png"],
         outputExtension: "jpg",
-        buildInvocations: { _, _ in
-            [Invocation(executable: URL(fileURLWithPath: "/bin/sleep"), arguments: ["10"])]
+        category: .image,
+        customRunner: { _, _, _, _, _ in
+            Thread.sleep(forTimeInterval: 5.0)
         }
     )
     let cancelJobId = UUID()
