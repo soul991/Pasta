@@ -150,12 +150,16 @@ public final class JobRunner {
             folderSuffix = ""
         }
 
-        let finalDestinationURL: URL
+        let reservation: OutputReservation
         if isFolder {
-            finalDestinationURL = OutputPlanner.planOutputDirectory(for: input, suffix: folderSuffix, destinationDirectory: effectiveDest)
+            reservation = try OutputPlanner.reserveOutputDirectory(for: input, suffix: folderSuffix, destinationDirectory: effectiveDest)
         } else {
-            finalDestinationURL = OutputPlanner.planOutput(for: input, targetExtension: action.outputExtension, destinationDirectory: effectiveDest)
+            reservation = try OutputPlanner.reserveOutput(for: input, targetExtension: action.outputExtension, destinationDirectory: effectiveDest)
         }
+        defer {
+            reservation.cleanup()
+        }
+        let finalDestinationURL = reservation.url
 
         PastaLogger.shared.info("Starting action \(action.id) on '\(input.lastPathComponent)' -> '\(finalDestinationURL.lastPathComponent)'")
 
@@ -217,7 +221,7 @@ public final class JobRunner {
                 }
             }
             try Self.validateFolderJail(at: tempWorkingOutputURL)
-            try Self.safelyMoveOrReplace(source: tempWorkingOutputURL, destination: finalDestinationURL)
+            try reservation.publish(from: tempWorkingOutputURL)
             return finalDestinationURL
         }
 
@@ -234,8 +238,8 @@ public final class JobRunner {
             throw PastaError.outputNotFound(finalDestinationURL.path)
         }
 
-        // Safe atomic move
-        try Self.safelyMoveOrReplace(source: tempWorkingOutputURL, destination: finalDestinationURL)
+        // Safe atomic publish over reserved placeholder
+        try reservation.publish(from: tempWorkingOutputURL)
 
         PastaLogger.shared.info("Successfully completed \(action.id) -> '\(finalDestinationURL.path)'")
         return finalDestinationURL
@@ -284,17 +288,21 @@ public final class JobRunner {
         let effectiveDest = destinationDirectory ?? PreferencesManager.shared.effectiveDestination(for: firstInput)
 
         let isCompressBatch = action.id.contains("compress") && inputs.count > 1
-        let finalDestinationURL: URL
+        let reservation: OutputReservation
         if isCompressBatch {
-            finalDestinationURL = OutputPlanner.planOutputDirectory(for: firstInput, suffix: "compressed", destinationDirectory: effectiveDest)
+            reservation = try OutputPlanner.reserveOutputDirectory(for: firstInput, suffix: "compressed", destinationDirectory: effectiveDest)
         } else {
             switch action.outputKind {
             case .folder(let suffix):
-                finalDestinationURL = OutputPlanner.planOutputDirectory(for: firstInput, suffix: suffix, destinationDirectory: effectiveDest)
+                reservation = try OutputPlanner.reserveOutputDirectory(for: firstInput, suffix: suffix, destinationDirectory: effectiveDest)
             case .file:
-                finalDestinationURL = OutputPlanner.planOutput(for: firstInput, targetExtension: action.outputExtension, destinationDirectory: effectiveDest)
+                reservation = try OutputPlanner.reserveOutput(for: firstInput, targetExtension: action.outputExtension, destinationDirectory: effectiveDest)
             }
         }
+        defer {
+            reservation.cleanup()
+        }
+        let finalDestinationURL = reservation.url
 
         PastaLogger.shared.info("Starting batch action \(action.id) on \(inputs.count) files -> '\(finalDestinationURL.lastPathComponent)'")
 
@@ -345,7 +353,7 @@ public final class JobRunner {
         }
 
         if isCompressBatch {
-            try Self.safelyMoveOrReplace(source: tempWorkingOutputURL, destination: finalDestinationURL)
+            try reservation.publish(from: tempWorkingOutputURL)
             PastaLogger.shared.info("Successfully completed batch \(action.id) -> '\(finalDestinationURL.path)'")
             return finalDestinationURL
         }
@@ -375,7 +383,7 @@ public final class JobRunner {
                 }
             }
             try Self.validateFolderJail(at: tempWorkingOutputURL)
-            try Self.safelyMoveOrReplace(source: tempWorkingOutputURL, destination: finalDestinationURL)
+            try reservation.publish(from: tempWorkingOutputURL)
             return finalDestinationURL
         case .file:
             if !fm.fileExists(atPath: tempWorkingOutputURL.path) {
@@ -389,7 +397,7 @@ public final class JobRunner {
             guard fm.fileExists(atPath: tempWorkingOutputURL.path) else {
                 throw PastaError.outputNotFound(finalDestinationURL.path)
             }
-            try Self.safelyMoveOrReplace(source: tempWorkingOutputURL, destination: finalDestinationURL)
+            try reservation.publish(from: tempWorkingOutputURL)
             PastaLogger.shared.info("Successfully completed batch \(action.id) -> '\(finalDestinationURL.path)'")
             return finalDestinationURL
         }
@@ -678,12 +686,16 @@ extension JobRunner {
                 folderSuffix = ""
             }
 
-            let finalDestinationURL: URL
+            let reservation: OutputReservation
             if isFolder {
-                finalDestinationURL = OutputPlanner.planOutputDirectory(for: input, suffix: folderSuffix, destinationDirectory: effectiveDest)
+                reservation = try OutputPlanner.reserveOutputDirectory(for: input, suffix: folderSuffix, destinationDirectory: effectiveDest)
             } else {
-                finalDestinationURL = OutputPlanner.planOutput(for: input, targetExtension: action.outputExtension, destinationDirectory: effectiveDest)
+                reservation = try OutputPlanner.reserveOutput(for: input, targetExtension: action.outputExtension, destinationDirectory: effectiveDest)
             }
+            defer {
+                reservation.cleanup()
+            }
+            let finalDestinationURL = reservation.url
 
             PastaLogger.shared.info("Starting async action \(action.id) on '\(input.lastPathComponent)' -> '\(finalDestinationURL.lastPathComponent)'")
 
@@ -747,7 +759,7 @@ extension JobRunner {
                     }
                 }
                 try Self.validateFolderJail(at: tempWorkingOutputURL)
-                try Self.safelyMoveOrReplace(source: tempWorkingOutputURL, destination: finalDestinationURL)
+                try reservation.publish(from: tempWorkingOutputURL)
                 return finalDestinationURL
             }
 
@@ -764,7 +776,7 @@ extension JobRunner {
                 throw PastaError.outputNotFound(finalDestinationURL.path)
             }
 
-            try Self.safelyMoveOrReplace(source: tempWorkingOutputURL, destination: finalDestinationURL)
+            try reservation.publish(from: tempWorkingOutputURL)
             PastaLogger.shared.info("Successfully completed async \(action.id) -> '\(finalDestinationURL.path)'")
             return finalDestinationURL
         } onCancel: {

@@ -208,6 +208,7 @@
 | Glass color bleed removal (neutral dark base), Sunset default hex (#F2611F), accent-tinted controls, 4.5:1 text contrast | Phase 10B Fix 6 (P2) | Color & Contrast | **DONE** | `32.1–32.4 Backplate base, theme accent tint, WCAG 4.5:1` |
 | Results row: indeterminate & determinate progress bar, live ETA, Cancel wiring to cancel(jobId:), middle truncation | Phase 10B Fix 7 (P2) | Results & Progress | **DONE** | `33.1–33.6 Progress bar, ETA, cancel, middle truncation` |
 | Hint pill: shortened text, dynamic placement above wheel when screen bottom is cramped | Phase 10B Fix 8 (P3) | Hint Pill Placement | **DONE** | `34.1–34.4 Shortened text and dynamic above-wheel placement` |
+| Atomic output reservation (`OutputReservation`, `open(O_CREAT\|O_EXCL)`, `rename(2)`, zero collisions) | Phase R0 Step 1 | Reliability | **DONE** | `38.1–38.7 Atomic Output Reservation & Collision Race Tests`, `Section 8 Tests 7.1–7.2` |
 
 
 

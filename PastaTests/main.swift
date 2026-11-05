@@ -4478,13 +4478,18 @@ do {
 }
 
 // MARK: - 38. Step 1 Atomic Output Reservation & Collision Race Tests
-print("\n--- 38. Output Collision Race Tests (Proving the Bug) ---")
+print("\n--- 38. Output Collision Race Tests (Atomic Reservation) ---")
 do {
     let fm = FileManager.default
     let tempRoot = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("Pasta_RaceTest_\(UUID().uuidString)")
     try fm.createDirectory(at: tempRoot, withIntermediateDirectories: true)
     let destDir = tempRoot.appendingPathComponent("destination")
     try fm.createDirectory(at: destDir, withIntermediateDirectories: true)
+
+    // Pre-create existing photo.jpg with sentinel to verify pre-existing files are NEVER modified
+    let sentinelURL = destDir.appendingPathComponent("photo.jpg")
+    let sentinelData = "ORIGINAL_SENTINEL_CONTENT".data(using: .utf8)!
+    try sentinelData.write(to: sentinelURL)
 
     var inputs: [URL] = []
     let sampleData = try Data(contentsOf: URL(fileURLWithPath: "Fixtures/sample.png"))
@@ -4500,6 +4505,7 @@ do {
         fatalError("image.to.jpeg action not found")
     }
 
+    // 38.1: 20 concurrent jobs with same-basename inputs
     let group = DispatchGroup()
     let queue = DispatchQueue(label: "test.race.queue", attributes: .concurrent)
     var results: [URL] = []
@@ -4524,8 +4530,114 @@ do {
     let destContents = (try? fm.contentsOfDirectory(at: destDir, includingPropertiesForKeys: nil)) ?? []
     print("Race test completed: \(results.count) results returned, \(destContents.count) files in destination")
 
-    // Proving the bug: Without atomic reservation, jobs plan the same name and overwrite each other!
-    assertTest(destContents.count == 20, "38.1 20 concurrent jobs with same-basename inputs produce 20 unique output files")
+    // Sentinel plus 20 unique outputs = 21 files
+    assertTest(destContents.count == 21, "38.1 20 concurrent jobs with same-basename inputs produce 20 unique output files")
+    let readSentinel = (try? String(contentsOf: sentinelURL, encoding: .utf8)) ?? ""
+    assertTest(readSentinel == "ORIGINAL_SENTINEL_CONTENT", "38.1 Pre-existing file content unchanged after concurrent collisions")
+    let uniqueResults = Set(results.map { $0.standardizedFileURL.path })
+    assertTest(uniqueResults.count == 20, "38.1 All 20 output paths returned are unique")
+    let allNonEmpty = results.allSatisfy { (try? Data(contentsOf: $0).count) ?? 0 > 100 }
+    assertTest(allNonEmpty, "38.1 All 20 output files are valid non-empty results")
+
+    // 38.2: Concurrent reservation claim between two processes/threads
+    let res1 = try OutputPlanner.reserveOutput(for: inputs[0], targetExtension: "jpg", destinationDirectory: destDir)
+    let res2 = try OutputPlanner.reserveOutput(for: inputs[0], targetExtension: "jpg", destinationDirectory: destDir)
+    assertTest(res1.url.path != res2.url.path, "38.2 Two immediate reservations receive distinct paths")
+    assertTest(fm.fileExists(atPath: res1.url.path) && fm.fileExists(atPath: res2.url.path), "38.2 Both reserved placeholders exist on disk atomically")
+    res1.cleanup()
+    res2.cleanup()
+    assertTest(!fm.fileExists(atPath: res1.url.path) && !fm.fileExists(atPath: res2.url.path), "38.2 Unclaimed empty reservations are cleaned up safely")
+
+    // 38.3: Failure injected after reservation (fake tool exits 1)
+    let failingAction = ConversionAction(
+        id: "test.fail.action",
+        displayName: "Failing Action",
+        inputExtensions: ["png"],
+        outputExtension: "jpg",
+        buildInvocations: { _, _ in
+            [Invocation(executable: URL(fileURLWithPath: "/usr/bin/false"), arguments: [])]
+        }
+    )
+    let failDestURL: URL
+    do {
+        _ = try JobRunner.shared.run(action: failingAction, input: inputs[0], destinationDirectory: destDir)
+        failDestURL = URL(fileURLWithPath: "/dev/null")
+    } catch {
+        // Expected failure
+        failDestURL = destDir.appendingPathComponent("photo 21.jpg")
+    }
+    // Check that no orphaned zero-byte placeholder remains
+    let remainingPlaceholders = destContents.filter { (try? Data(contentsOf: $0).count) == 0 }
+    assertTest(remainingPlaceholders.isEmpty, "38.3 Injected failure cleanly removes placeholder without leaving 0-byte orphan")
+    let readSentinelAfterFail = (try? String(contentsOf: sentinelURL, encoding: .utf8)) ?? ""
+    assertTest(readSentinelAfterFail == "ORIGINAL_SENTINEL_CONTENT", "38.3 Injected failure does not modify pre-existing file")
+
+    // 38.4: Cancellation mid-run leaves placeholder cleaned up and zero leftovers
+    let slowAction = ConversionAction(
+        id: "test.slow.action",
+        displayName: "Slow Action",
+        inputExtensions: ["png"],
+        outputExtension: "jpg",
+        buildInvocations: { _, _ in
+            [Invocation(executable: URL(fileURLWithPath: "/bin/sleep"), arguments: ["10"])]
+        }
+    )
+    let cancelJobId = UUID()
+    let cancelGroup = DispatchGroup()
+    cancelGroup.enter()
+    var cancelErrorThrown = false
+    DispatchQueue.global().async {
+        do {
+            _ = try JobRunner.shared.run(action: slowAction, input: inputs[0], destinationDirectory: destDir, jobId: cancelJobId)
+        } catch PastaError.cancelled {
+            cancelErrorThrown = true
+        } catch {}
+        cancelGroup.leave()
+    }
+    // Give it 100ms to start and create reservation, then cancel
+    Thread.sleep(forTimeInterval: 0.15)
+    JobRunner.shared.cancel(jobId: cancelJobId)
+    cancelGroup.wait()
+    assertTest(cancelErrorThrown, "38.4 Cancellation throws PastaError.cancelled")
+    let zeroBytePostCancel = ((try? fm.contentsOfDirectory(at: destDir, includingPropertiesForKeys: nil)) ?? []).filter { (try? Data(contentsOf: $0).count) == 0 }
+    assertTest(zeroBytePostCancel.isEmpty, "38.4 Cancellation cleans up placeholder, leaving zero 0-byte files")
+
+    // 38.5: Pre-existing photo.jpg is never modified by a failing job with same name
+    assertTest((try? String(contentsOf: sentinelURL, encoding: .utf8)) == "ORIGINAL_SENTINEL_CONTENT", "38.5 Pre-existing photo.jpg intact after cancel and fail")
+
+    // 38.6: Folder outputs race under same destination
+    var folderReservations: [OutputReservation] = []
+    for _ in 0..<10 {
+        let r = try OutputPlanner.reserveOutputDirectory(for: inputs[0], suffix: "pages", destinationDirectory: destDir)
+        folderReservations.append(r)
+    }
+    let folderURLs = Set(folderReservations.map { $0.url.path })
+    assertTest(folderURLs.count == 10, "38.6 10 concurrent folder reservations obtain 10 unique paths")
+    let allDirsExist = folderReservations.allSatisfy { fm.fileExists(atPath: $0.url.path) }
+    assertTest(allDirsExist, "38.6 All reserved directory placeholders exist on disk")
+    for r in folderReservations {
+        r.cleanup()
+    }
+    let allDirsGone = folderReservations.allSatisfy { !fm.fileExists(atPath: $0.url.path) }
+    assertTest(allDirsGone, "38.6 Cleaned up directory placeholders are removed")
+
+    // 38.7: Hostile names reserve and publish safely
+    let hostileNames = [
+        "-leadingdash.png",
+        "user's \"photo\"!.png",
+        "photo_🎉_cool.png",
+        "very_long_file_name_that_exceeds_normal_lengths_for_boundary_testing_in_pasta_converter_1234567890_abcdefghijklmnopqrstuvwxyz.png"
+    ]
+    for hName in hostileNames {
+        let hInput = tempRoot.appendingPathComponent(hName)
+        try sampleData.write(to: hInput)
+        let hRes = try OutputPlanner.reserveOutput(for: hInput, targetExtension: "jpg", destinationDirectory: destDir)
+        assertTest(fm.fileExists(atPath: hRes.url.path), "38.7 Hostile name '\(hName)' reserved placeholder successfully")
+        let dummyTemp = tempRoot.appendingPathComponent("dummy_\(UUID().uuidString).jpg")
+        try "DUMMY_IMAGE_DATA".data(using: .utf8)!.write(to: dummyTemp)
+        try hRes.publish(from: dummyTemp)
+        assertTest(fm.fileExists(atPath: hRes.url.path), "38.7 Hostile name '\(hName)' published successfully")
+    }
 
     try? fm.removeItem(at: tempRoot)
 }

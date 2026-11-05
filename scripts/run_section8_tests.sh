@@ -316,8 +316,53 @@ else
     fail "pdf.reorganize reverse" "Failed to reorganize pages"
 fi
 
-# 7. Network verification
-echo -e "\n--- 6. 100% Offline Network Verification ---"
+# 7. Atomic Output Reservation Tests
+echo -e "\n--- 7. Atomic Output Reservation Tests ---"
+RACE_DIR="/tmp/Pasta_Sec8_Race_$$"
+mkdir -p "$RACE_DIR"
+DEST_DIR="$RACE_DIR/dest"
+mkdir -p "$DEST_DIR"
+
+# Pre-create photo.jpg as a collision target
+echo "ORIGINAL_SENTINEL" > "$DEST_DIR/photo.jpg"
+
+mkdir -p "$RACE_DIR/a" "$RACE_DIR/b"
+cp "Fixtures/sample.png" "$RACE_DIR/a/photo.png"
+cp "Fixtures/sample.png" "$RACE_DIR/b/photo.png"
+
+# Run two concurrent Pasta convert commands targeting the same basename into DEST_DIR
+"$PASTA_BIN" convert "$RACE_DIR/a/photo.png" --action image.to.jpeg --dest "$DEST_DIR" > /dev/null 2>&1 &
+PID1=$!
+"$PASTA_BIN" convert "$RACE_DIR/b/photo.png" --action image.to.jpeg --dest "$DEST_DIR" > /dev/null 2>&1 &
+PID2=$!
+wait $PID1
+wait $PID2
+
+SENTINEL_CONTENT=$(cat "$DEST_DIR/photo.jpg" || true)
+DEST_COUNT=$(find "$DEST_DIR" -type f | wc -l | tr -d ' ')
+if [ "$DEST_COUNT" -eq 3 ] && [ "$SENTINEL_CONTENT" = "ORIGINAL_SENTINEL" ]; then
+    pass "Concurrent same-name CLI conversions produced unique outputs without modifying existing file"
+else
+    fail "Concurrent CLI conversions collision" "Expected 3 files and intact sentinel, got $DEST_COUNT files (sentinel: $SENTINEL_CONTENT)"
+fi
+
+# Failed conversion leaves no placeholder
+FAIL_DEST="$RACE_DIR/fail_dest"
+mkdir -p "$FAIL_DEST"
+CORRUPT="$RACE_DIR/corrupt.png"
+echo "NOT_A_REAL_PNG" > "$CORRUPT"
+"$PASTA_BIN" convert "$CORRUPT" --action image.to.jpeg --dest "$FAIL_DEST" > /dev/null 2>&1 || true
+LEFT_OVER=$(find "$FAIL_DEST" -type f -size 0c | wc -l | tr -d ' ')
+if [ "$LEFT_OVER" -eq 0 ]; then
+    pass "Failed conversion leaves zero leftover 0-byte placeholders in destination"
+else
+    fail "Placeholder leak" "Found $LEFT_OVER zero-byte placeholder files in destination"
+fi
+
+rm -rf "$RACE_DIR"
+
+# 8. Network verification
+echo -e "\n--- 8. 100% Offline Network Verification ---"
 NETWORK_STRINGS=$(strings "$PASTA_BIN" | grep -Ei "https?://|URLSession|Socket|connect\(" | grep -v "http://www.apple.com" | grep -v "http://www.w3.org" | head -n 5 || true)
 if [ -z "$NETWORK_STRINGS" ]; then
     pass "Binary contains zero network requests, tracking, or telemetry"
