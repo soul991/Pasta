@@ -57,13 +57,14 @@ public struct OutputPlanner {
                 reservationLock.unlock()
                 return OutputReservation(url: candidateURL, isDirectory: false, deviceId: statBuf.st_dev, inode: statBuf.st_ino)
             } else {
-                let err = errno
+                let err: Int32 = errno
                 reservationLock.unlock()
                 if err == EEXIST {
                     counter += 1
                     continue
                 } else {
-                    throw PastaError.executionFailed(tool: "filesystem", exitCode: Int(err), output: "Failed to atomically reserve output file '\(candidatePath)': \(String(cString: strerror(err)))")
+                    let errMsg = String(cString: strerror(err))
+                    throw PastaError.executionFailed(tool: "filesystem", exitCode: Int(err), output: "Failed to atomically reserve output file '\(candidatePath)': \(errMsg)")
                 }
             }
         }
@@ -107,13 +108,14 @@ public struct OutputPlanner {
                 reservationLock.unlock()
                 return OutputReservation(url: candidateURL, isDirectory: true, deviceId: statBuf.st_dev, inode: statBuf.st_ino)
             } else {
-                let err = errno
+                let err: Int32 = errno
                 reservationLock.unlock()
                 if err == EEXIST {
                     counter += 1
                     continue
                 } else {
-                    throw PastaError.executionFailed(tool: "filesystem", exitCode: Int(err), output: "Failed to atomically reserve output directory '\(candidatePath)': \(String(cString: strerror(err)))")
+                    let errMsg = String(cString: strerror(err))
+                    throw PastaError.executionFailed(tool: "filesystem", exitCode: Int(err), output: "Failed to atomically reserve output directory '\(candidatePath)': \(errMsg)")
                 }
             }
         }

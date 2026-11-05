@@ -41,23 +41,25 @@ public final class OutputReservation {
         // On macOS / POSIX, rename(2) atomically replaces the target placeholder.
         // For directories, rename(2) over an empty directory is permitted.
         if rename(srcPath, dstPath) != 0 {
-            let err = errno
+            let err: Int32 = errno
             if err == EXDEV {
                 // Cross-device link fallback: stage inside target destination directory, then rename
                 let stagingURL = url.deletingLastPathComponent().appendingPathComponent(".pasta_stage_\(UUID().uuidString)")
                 let fm = FileManager.default
                 try fm.copyItem(at: tempWorkingURL, to: stagingURL)
                 if rename(stagingURL.path, dstPath) != 0 {
-                    let stageErr = errno
+                    let stageErr: Int32 = errno
                     if isDirectory {
                         _ = rmdir(stagingURL.path)
                     } else {
                         _ = unlink(stagingURL.path)
                     }
-                    throw PastaError.executionFailed(tool: "filesystem", exitCode: Int(stageErr), output: "Failed to publish cross-device output: \(String(cString: strerror(stageErr)))")
+                    let stageMsg = String(cString: strerror(stageErr))
+                    throw PastaError.executionFailed(tool: "filesystem", exitCode: Int(stageErr), output: "Failed to publish cross-device output: \(stageMsg)")
                 }
             } else {
-                throw PastaError.executionFailed(tool: "filesystem", exitCode: Int(err), output: "Failed to atomically publish output via rename(2): \(String(cString: strerror(err)))")
+                let errMsg = String(cString: strerror(err))
+                throw PastaError.executionFailed(tool: "filesystem", exitCode: Int(err), output: "Failed to atomically publish output via rename(2): \(errMsg)")
             }
         }
 
