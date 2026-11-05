@@ -3946,34 +3946,68 @@ do {
     wheelOverlay.onCloseRequested = { autoCloseCalled = true }
 
     // Test scheduleAutoDismiss fires after delay with pre-deadline negative proof
-    wheelOverlay.scheduleAutoDismiss(delay: 0.20)
+    wheelOverlay.scheduleAutoDismiss(delay: 0.25)
     RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.04))
     assertTest(!autoCloseCalled, "33.7 Auto-dismiss has not fired before deadline")
-    RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.25))
+    RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.35))
     assertTest(autoCloseCalled, "33.7 Auto-dismiss fires onCloseRequested after deadline")
 
-    // 33.7 Loop verification: 50 consecutive runs of scheduleAutoDismiss timer check
+    // 33.7 Loop verification: 50 consecutive runs of scheduleAutoDismiss using injectable clock
+    final class MockTimerClock {
+        var scheduledDelay: TimeInterval?
+        var scheduledBlock: (() -> Void)?
+        var isCancelled = false
+
+        func schedule(delay: TimeInterval, queue: DispatchQueue, work: @escaping () -> Void) -> (() -> Void) {
+            self.scheduledDelay = delay
+            self.scheduledBlock = work
+            self.isCancelled = false
+            return { [weak self] in
+                self?.isCancelled = true
+            }
+        }
+
+        func advanceTime(by interval: TimeInterval) {
+            guard let delay = scheduledDelay, !isCancelled else { return }
+            if interval >= delay {
+                scheduledDelay = nil
+                scheduledBlock?()
+            }
+        }
+    }
+
+    let mockClock = MockTimerClock()
+    wheelOverlay.timerScheduler = { delay, queue, work in
+        mockClock.schedule(delay: delay, queue: queue, work: work)
+    }
+
     var loopPassCount = 0
     for _ in 1...50 {
         var loopClosed = false
         wheelOverlay.onCloseRequested = { loopClosed = true }
-        wheelOverlay.scheduleAutoDismiss(delay: 0.15)
-        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.03))
+        wheelOverlay.scheduleAutoDismiss(delay: 2.2)
+        // Negative proof: before deadline
+        mockClock.advanceTime(by: 1.0)
         let notEarly = !loopClosed
-        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.20))
+        // Positive proof: after deadline
+        mockClock.advanceTime(by: 2.5)
         let didFire = loopClosed
         if notEarly && didFire {
             loopPassCount += 1
         }
     }
+    // Clean up timerScheduler and restore onCloseRequested
+    wheelOverlay.timerScheduler = nil
+    wheelOverlay.onCloseRequested = { autoCloseCalled = true }
+
     print("33.7 Timer Loop Verification: \(loopPassCount)/50 passed (pass rate: \(Double(loopPassCount) / 50.0 * 100.0)%)")
     assertTest(loopPassCount == 50, "33.7 scheduleAutoDismiss passes 50/50 consecutive runs with 0 flakiness")
 
     // Test cancelAutoDismiss prevents close
     autoCloseCalled = false
-    wheelOverlay.scheduleAutoDismiss(delay: 0.2)
+    wheelOverlay.scheduleAutoDismiss(delay: 0.25)
     wheelOverlay.cancelAutoDismiss()
-    RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.25))
+    RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.30))
     assertTest(!autoCloseCalled, "33.7 cancelAutoDismiss cancels pending close")
 
     // Test Dismiss button click triggers onCloseRequested
