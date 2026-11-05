@@ -157,10 +157,12 @@ public enum ArchiveGuard {
                 throw PastaError.invalidInput("Archive contains prohibited special device or FIFO node: '\(fileURL.lastPathComponent)'")
             }
 
-            // Reject setuid and setgid permission bits
+            // Reject or clear setuid and setgid permission bits
             if (mode & mode_t(S_ISUID)) != 0 || (mode & mode_t(S_ISGID)) != 0 {
                 if limits.rejectSetuidSetgid {
                     throw PastaError.invalidInput("Archive contains prohibited elevated privilege binary (setuid/setgid bits set): '\(fileURL.lastPathComponent)'")
+                } else {
+                    chmod(pathStr, mode & ~mode_t(S_ISUID | S_ISGID))
                 }
             }
 

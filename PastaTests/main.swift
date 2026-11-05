@@ -4794,16 +4794,42 @@ do {
         assertTest(didReject, "39.6 Symlink directory hop rejected by ArchiveGuard")
     }
 
-    // 39.7: Setuid and setgid bits rejection (setuid_setgid.tar)
+    // 39.7: Setuid and setgid bits defense (ArchiveGuard)
+    let setuidTestDir = fixtureTempRoot.appendingPathComponent("setuid_direct_test")
+    try fm.createDirectory(at: setuidTestDir, withIntermediateDirectories: true)
+    let suidFile = setuidTestDir.appendingPathComponent("suid_binary")
+    try "suid_test".write(to: suidFile, atomically: true, encoding: .utf8)
+    chmod(suidFile.path, 0o4755)
+
+    var suidDirectRejected = false
+    do {
+        try ArchiveGuard.validate(root: setuidTestDir, limits: .standard)
+    } catch {
+        suidDirectRejected = true
+    }
+    assertTest(suidDirectRejected, "39.7 Setuid elevated privileges rejected by ArchiveGuard.validate")
+
     let setuidURL = fixtureTempRoot.appendingPathComponent("setuid_setgid.tar")
     if fm.fileExists(atPath: setuidURL.path), let action = FormatRegistry.shared.action(for: setuidURL, actionID: "archive.extract") {
-        var didReject = false
+        var suidClearedOrRejected = false
         do {
-            _ = try JobRunner.shared.run(action: action, input: setuidURL, destinationDirectory: extractDest)
+            let outDir = try JobRunner.shared.run(action: action, input: setuidURL, destinationDirectory: extractDest)
+            var anyElevatedLeft = false
+            if let items = try? fm.subpathsOfDirectory(atPath: outDir.path) {
+                for item in items {
+                    var st = stat()
+                    if lstat(outDir.appendingPathComponent(item).path, &st) == 0 {
+                        if (st.st_mode & mode_t(S_ISUID)) != 0 || (st.st_mode & mode_t(S_ISGID)) != 0 {
+                            anyElevatedLeft = true
+                        }
+                    }
+                }
+            }
+            suidClearedOrRejected = !anyElevatedLeft
         } catch {
-            didReject = true
+            suidClearedOrRejected = true
         }
-        assertTest(didReject, "39.7 Setuid/setgid elevated privileges rejected by ArchiveGuard")
+        assertTest(suidClearedOrRejected, "39.7 Setuid/setgid elevated bits cleared by extractor or rejected")
     }
 
     // 39.8: Deep nesting limit (deep_nesting.tar)
