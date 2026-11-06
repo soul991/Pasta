@@ -54,13 +54,28 @@ public final class RadialWheelOverlayViewController: NSViewController {
     public var lastOutputURL: URL?
     public var lastErrorMessage: String?
     private var autoDismissWorkItem: DispatchWorkItem?
+    public typealias TimerScheduler = (_ delay: TimeInterval, _ queue: DispatchQueue, _ work: @escaping () -> Void) -> (() -> Void)
+    public var timerScheduler: TimerScheduler?
+    private var customTimerCanceller: (() -> Void)?
+    private var isCustomTimerScheduled: Bool = false
 
-    public var isAutoDismissScheduled: Bool { autoDismissWorkItem != nil }
+    public var isAutoDismissScheduled: Bool { autoDismissWorkItem != nil || isCustomTimerScheduled }
 
     private var contentHost: NSView { glassContentView ?? view }
 
     public func scheduleAutoDismiss(delay: TimeInterval = 2.2) {
         cancelAutoDismiss()
+        if let customScheduler = timerScheduler {
+            let cancelBlock = customScheduler(delay, DispatchQueue.main) { [weak self] in
+                guard let self = self else { return }
+                self.isCustomTimerScheduled = false
+                self.customTimerCanceller = nil
+                self.onCloseRequested?()
+            }
+            customTimerCanceller = cancelBlock
+            isCustomTimerScheduled = true
+            return
+        }
         let item = DispatchWorkItem { [weak self] in
             guard let self = self else { return }
             self.onCloseRequested?()
@@ -70,6 +85,11 @@ public final class RadialWheelOverlayViewController: NSViewController {
     }
 
     public func cancelAutoDismiss() {
+        if let cancelBlock = customTimerCanceller {
+            cancelBlock()
+            customTimerCanceller = nil
+            isCustomTimerScheduled = false
+        }
         autoDismissWorkItem?.cancel()
         autoDismissWorkItem = nil
     }

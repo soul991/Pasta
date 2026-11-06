@@ -1,0 +1,333 @@
+==================================================
+Pasta Local Mac Verification Report
+Generated at: 2026-11-06T00:39:35Z
+==================================================
+
+--- 1. Environment Diagnostics ---
+[sw_vers]
+ProductName:		macOS
+ProductVersion:		27.2
+BuildVersion:		26B123
+
+[xcodebuild -version]
+Xcode 27.2
+Build version 27B52
+
+[swift --version]
+swift-driver version: 1.168.6 Apple Swift version 6.4.2 (swiftlang-6.4.2.1.9 clang-2100.4.1.1)
+Target: arm64-apple-macosx27.2.0
+
+--- 2. PastaTests (Debug) ---
+Test Suite Summary: 841/841 Passed, 0 Failed
+
+--- 3. PastaTests (Release) ---
+Test Suite Summary: 841/841 Passed, 0 Failed
+
+--- 4. Section 8 Hardening Tests (Debug Binary) ---
+Section 8 Test Results: 41/41 Passed, 0 Failed
+
+--- 5. Build Application Bundle (./scripts/build_app.sh) ---
+Building Pasta in release configuration...
+Building for production...
+[2 / 6]
+[4 / 7] Pasta-product
+[5 / 8] Pasta-product
+[7 / 8] Pasta-product
+[8 / 8] Pasta-product
+Build complete! (1.64 sec)
+Creating application bundle structure at Pasta.app...
+Copying AppIcon.icns to Resources...
+Copying MenuBarIcon to Resources...
+Copying theme_tokens.json to Resources...
+Generating Info.plist...
+Signing application bundle with stable designated requirement...
+Pasta.app: replacing existing signature
+Verifying code signature...
+Pasta.app built and signed successfully at: /Users/istakahamed06/Desktop/Pasta/Pasta.app
+
+--- 6. Section 8 Hardening Tests (against Pasta.app) ---
+Section 8 Test Results: 41/41 Passed, 0 Failed
+
+--- 7. Codesign Verification ---
+Codesign: VALID
+
+--- 8. Pasta Doctor JSON Report (from Pasta.app) ---
+{
+  "allRequiredAvailable" : true,
+  "missingOptional" : [
+    "soffice",
+    "ebook-convert",
+    "avifenc"
+  ],
+  "missingRequired" : [
+
+  ],
+  "optionalInstallCommand" : "brew install libavif && brew install --cask calibre libreoffice",
+  "tools" : [
+    {
+      "dependentActions" : [
+        "video.to.mp4",
+        "video.to.mov",
+        "video.to.mkv",
+        "video.to.webm",
+        "video.to.avi",
+        "video.to.gif",
+        "video.extract.audio",
+        "video.speed",
+        "video.crop",
+        "video.mute",
+        "video.reverse",
+        "video.split",
+        "video.compress",
+        "audio.to.mp3",
+        "audio.to.wav",
+        "audio.to.m4a",
+        "audio.to.flac",
+        "audio.to.aac",
+        "audio.speed",
+        "audio.volume",
+        "audio.reverse",
+        "audio.compress"
+      ],
+      "formula" : "ffmpeg",
+      "isCask" : false,
+      "isOptional" : false,
+      "name" : "ffmpeg",
+      "path" : "\/opt\/homebrew\/bin\/ffmpeg",
+      "version" : "ffmpeg version 9.0.2 Copyright (c) 2000-2026 the FFmpeg developers"
+    },
+    {
+      "dependentActions" : [
+        "video.probe",
+        "audio.probe",
+        "video.split",
+        "video.crop"
+      ],
+      "formula" : "ffmpeg",
+      "isCask" : false,
+      "isOptional" : false,
+      "name" : "ffprobe",
+      "path" : "\/opt\/homebrew\/bin\/ffprobe",
+      "version" : "ffprobe version 9.0.2 Copyright (c) 2007-2026 the FFmpeg developers"
+    },
+    {
+      "dependentActions" : [
+        "image.to.webp"
+      ],
+      "formula" : "webp",
+      "isCask" : false,
+      "isOptional" : false,
+      "name" : "cwebp",
+      "path" : "\/opt\/homebrew\/bin\/cwebp",
+      "version" : "1.6.0"
+    },
+    {
+      "dependentActions" : [
+        "image.to.png",
+        "image.to.jpg",
+        "image.to.bmp",
+        "image.to.tiff",
+        "image.resize",
+        "image.rotate",
+        "image.flip",
+        "image.compress"
+      ],
+      "formula" : "imagemagick",
+      "isCask" : false,
+      "isOptional" : false,
+      "name" : "magick",
+      "path" : "\/opt\/homebrew\/bin\/magick",
+      "version" : "Version: ImageMagick 7.1.2-35 Q16-HDRI aarch64 acaf7e418:20261031 https:\/\/imagem"
+    },
+    {
+      "dependentActions" : [
+        "pdf.to.docx",
+        "pdf.compress"
+      ],
+      "formula" : "ghostscript",
+      "isCask" : false,
+      "isOptional" : false,
+      "name" : "gs",
+      "path" : "\/opt\/homebrew\/bin\/gs",
+      "version" : "10.08.0"
+    },
+    {
+      "dependentActions" : [
+        "pdf.decrypt",
+        "pdf.encrypt",
+        "pdf.rotate",
+        "pdf.extract.pages"
+      ],
+      "formula" : "qpdf",
+      "isCask" : false,
+      "isOptional" : false,
+      "name" : "qpdf",
+      "path" : "\/opt\/homebrew\/bin\/qpdf",
+      "version" : "qpdf version 12.4.2"
+    },
+    {
+      "dependentActions" : [
+        "pdf.to.png",
+        "pdf.to.jpg",
+        "pdf.to.images"
+      ],
+      "formula" : "poppler",
+      "isCask" : false,
+      "isOptional" : false,
+      "name" : "pdftoppm",
+      "path" : "\/opt\/homebrew\/bin\/pdftoppm",
+      "version" : "pdftoppm version 26.10.0"
+    },
+    {
+      "dependentActions" : [
+        "pdf.to.txt"
+      ],
+      "formula" : "poppler",
+      "isCask" : false,
+      "isOptional" : false,
+      "name" : "pdftotext",
+      "path" : "\/opt\/homebrew\/bin\/pdftotext",
+      "version" : "pdftotext version 26.10.0"
+    },
+    {
+      "dependentActions" : [
+        "image.view.metadata",
+        "image.remove.exif"
+      ],
+      "formula" : "exiftool",
+      "isCask" : false,
+      "isOptional" : false,
+      "name" : "exiftool",
+      "path" : "\/opt\/homebrew\/bin\/exiftool",
+      "version" : "13.55"
+    },
+    {
+      "dependentActions" : [
+        "doc.to.md",
+        "doc.to.html",
+        "doc.to.pdf",
+        "md.to.html",
+        "md.to.pdf"
+      ],
+      "formula" : "pandoc",
+      "isCask" : false,
+      "isOptional" : false,
+      "name" : "pandoc",
+      "path" : "\/opt\/homebrew\/bin\/pandoc",
+      "version" : "pandoc 3.13"
+    },
+    {
+      "dependentActions" : [
+        "svg.to.png",
+        "svg.to.pdf"
+      ],
+      "formula" : "librsvg",
+      "isCask" : false,
+      "isOptional" : false,
+      "name" : "rsvg-convert",
+      "path" : "\/opt\/homebrew\/bin\/rsvg-convert",
+      "version" : "rsvg-convert version 2.63.4"
+    },
+    {
+      "dependentActions" : [
+        "archive.extract"
+      ],
+      "formula" : "unar",
+      "isCask" : false,
+      "isOptional" : false,
+      "name" : "unar",
+      "path" : "\/opt\/homebrew\/bin\/unar",
+      "version" : "v1.10.7"
+    },
+    {
+      "dependentActions" : [
+        "archive.extract",
+        "archive.create.7z"
+      ],
+      "formula" : "sevenzip",
+      "isCask" : false,
+      "isOptional" : false,
+      "name" : "7zz",
+      "path" : "\/opt\/homebrew\/bin\/7zz",
+      "version" : "7-Zip (z) 26.05 (arm64) : Copyright (c) 1999-2026 Igor Pavlov : 2026-10-21"
+    },
+    {
+      "dependentActions" : [
+        "image.to.png",
+        "image.to.jpg"
+      ],
+      "isCask" : false,
+      "isOptional" : false,
+      "name" : "sips",
+      "path" : "\/usr\/bin\/sips",
+      "version" : "sips-316"
+    },
+    {
+      "dependentActions" : [
+        "archive.extract",
+        "archive.create.zip"
+      ],
+      "isCask" : false,
+      "isOptional" : false,
+      "name" : "ditto",
+      "path" : "\/usr\/bin\/ditto",
+      "version" : "Usage: ditto [ <options> ] src [ ... src ] dst"
+    },
+    {
+      "dependentActions" : [
+        "archive.extract",
+        "archive.create.tar"
+      ],
+      "isCask" : false,
+      "isOptional" : false,
+      "name" : "tar",
+      "path" : "\/usr\/bin\/tar",
+      "version" : "bsdtar 3.5.3 - libarchive 3.7.4 zlib\/1.2.12 liblzma\/5.4.3 bz2lib\/1.0.8"
+    },
+    {
+      "dependentActions" : [
+        "office.doc.to.pdf",
+        "office.sheet.to.pdf",
+        "office.slides.to.pdf"
+      ],
+      "formula" : "libreoffice",
+      "isCask" : true,
+      "isOptional" : true,
+      "name" : "soffice"
+    },
+    {
+      "dependentActions" : [
+        "ebook.epub.to.pdf",
+        "ebook.mobi.to.epub"
+      ],
+      "formula" : "calibre",
+      "isCask" : true,
+      "isOptional" : true,
+      "name" : "ebook-convert"
+    },
+    {
+      "dependentActions" : [
+        "image.to.avif"
+      ],
+      "formula" : "libavif",
+      "isCask" : false,
+      "isOptional" : true,
+      "name" : "avifenc"
+    }
+  ],
+  "unifiedInstallCommand" : "brew install libavif && brew install --cask calibre libreoffice"
+}
+
+--- 9. Icon Corner Alpha Verification ---
+[PASS] sips confirmed 1024x1024 with alpha channel for assets/AppIcon-1024.png
+Corner Pixel Values for assets/AppIcon-1024.png:
+  Top-Left (0, 0): RGBA(0, 0, 0, 0)
+  Top-Right (1023, 0): RGBA(0, 0, 0, 0)
+  Bottom-Left (0, 1023): RGBA(0, 0, 0, 0)
+  Bottom-Right (1023, 1023): RGBA(0, 0, 0, 0)
+[PASS] All 4 corner pixels are 100% transparent (alpha == 0).
+[SUCCESS] App icon verification PASSED for assets/AppIcon-1024.png
+
+==================================================
+Local Verification Completed Successfully
+==================================================

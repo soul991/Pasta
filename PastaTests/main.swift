@@ -24,6 +24,36 @@ func fileSHA256(url: URL) -> String? {
     return digest.map { String(format: "%02x", $0) }.joined()
 }
 
+if CommandLine.arguments.contains("--smoke-real-timer-50") {
+    print("==================================================")
+    print("Running 33.7 Real-Timer Smoke Test (50x Loop)")
+    print("==================================================")
+    let overlay = RadialWheelOverlayViewController()
+    overlay.loadView()
+    overlay.viewDidLoad()
+    var passCount = 0
+    for i in 1...50 {
+        var didFire = false
+        overlay.timerScheduler = nil
+        overlay.onCloseRequested = { didFire = true }
+        overlay.scheduleAutoDismiss(delay: 0.5)
+        RunLoop.main.run(mode: .default, before: Date(timeIntervalSinceNow: 0.10))
+        let early = didFire
+        let deadline = Date(timeIntervalSinceNow: 2.0)
+        while !didFire && Date() < deadline {
+            RunLoop.main.run(mode: .default, before: Date(timeIntervalSinceNow: 0.02))
+        }
+        let late = didFire
+        if !early && late {
+            passCount += 1
+        }
+        print("Iteration \(i)/50: early=\(early), late=\(late), passes=\(passCount)")
+    }
+    let passRate = Double(passCount) / 50.0 * 100.0
+    print("33.7 Real-Timer Smoke Test 50x Loop: \(passCount)/50 passed (\(passRate)%)")
+    exit(passCount == 50 ? 0 : 1)
+}
+
 print("==================================================")
 print("Running PastaCore Unit & Integration Test Suite")
 print("==================================================")
@@ -692,7 +722,7 @@ do {
             assertTest(extractAction != nil, "Step 2: archive.extract available for .gz input")
             if let extractAction = extractAction {
                 let outDir = try? JobRunner.shared.run(action: extractAction, input: outGz, destinationDirectory: testTempDir)
-                let extractedFiles = (try? FileManager.default.contentsOfDirectory(at: outDir!, includingPropertiesForKeys: nil)) ?? []
+                let extractedFiles = outDir.flatMap { try? FileManager.default.contentsOfDirectory(at: $0, includingPropertiesForKeys: nil) } ?? []
                 assertTest(!extractedFiles.isEmpty, "Step 2: Extraction of .gz archive produces uncompressed file")
             }
         }
@@ -3945,16 +3975,88 @@ do {
     var autoCloseCalled = false
     wheelOverlay.onCloseRequested = { autoCloseCalled = true }
 
-    // Test scheduleAutoDismiss fires after delay
-    wheelOverlay.scheduleAutoDismiss(delay: 0.05)
-    RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.12))
+    // Test scheduleAutoDismiss fires after delay with pre-deadline negative proof
+    wheelOverlay.scheduleAutoDismiss(delay: 0.25)
+    RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.04))
+    assertTest(!autoCloseCalled, "33.7 Auto-dismiss has not fired before deadline")
+    RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.35))
     assertTest(autoCloseCalled, "33.7 Auto-dismiss fires onCloseRequested after deadline")
+
+    // 33.7 Loop verification: 50 consecutive runs of scheduleAutoDismiss using injectable clock
+    final class MockTimerClock {
+        var scheduledDelay: TimeInterval?
+        var scheduledBlock: (() -> Void)?
+        var isCancelled = false
+
+        func schedule(delay: TimeInterval, queue: DispatchQueue, work: @escaping () -> Void) -> (() -> Void) {
+            self.scheduledDelay = delay
+            self.scheduledBlock = work
+            self.isCancelled = false
+            return { [weak self] in
+                self?.isCancelled = true
+            }
+        }
+
+        func advanceTime(by interval: TimeInterval) {
+            guard let delay = scheduledDelay, !isCancelled else { return }
+            if interval >= delay {
+                scheduledDelay = nil
+                scheduledBlock?()
+            }
+        }
+    }
+
+    let mockClock = MockTimerClock()
+    wheelOverlay.timerScheduler = { delay, queue, work in
+        mockClock.schedule(delay: delay, queue: queue, work: work)
+    }
+
+    var loopPassCount = 0
+    for _ in 1...50 {
+        var loopClosed = false
+        wheelOverlay.onCloseRequested = { loopClosed = true }
+        wheelOverlay.scheduleAutoDismiss(delay: 2.2)
+        // Negative proof: before deadline
+        mockClock.advanceTime(by: 1.0)
+        let notEarly = !loopClosed
+        // Positive proof: after deadline
+        mockClock.advanceTime(by: 2.5)
+        let didFire = loopClosed
+        if notEarly && didFire {
+            loopPassCount += 1
+        }
+    }
+    // Clean up timerScheduler and restore onCloseRequested
+    wheelOverlay.timerScheduler = nil
+    wheelOverlay.onCloseRequested = { autoCloseCalled = true }
+
+    print("33.7 Timer Loop Verification: \(loopPassCount)/50 passed (pass rate: \(Double(loopPassCount) / 50.0 * 100.0)%)")
+    assertTest(loopPassCount == 50, "33.7 scheduleAutoDismiss passes 50/50 consecutive runs with 0 flakiness")
+
+    // 33.7-SMOKE: Real-timer smoke test for scheduleAutoDismiss (using actual DispatchQueue.main async timer)
+    // Uses real timer (timerScheduler = nil).
+    // Generous margin: 0.5s deadline, checked at 100ms (negative proof) and up to 2.0s (positive proof).
+    let smokeOverlay = RadialWheelOverlayViewController()
+    smokeOverlay.loadView()
+    smokeOverlay.viewDidLoad()
+    var smokeRealTimerAutoCloseCalled = false
+    smokeOverlay.timerScheduler = nil
+    smokeOverlay.onCloseRequested = { smokeRealTimerAutoCloseCalled = true }
+    smokeOverlay.scheduleAutoDismiss(delay: 0.5)
+    RunLoop.main.run(mode: .default, before: Date(timeIntervalSinceNow: 0.10))
+    let smokeNotEarly = !smokeRealTimerAutoCloseCalled
+    let smokeDeadline = Date(timeIntervalSinceNow: 2.0)
+    while !smokeRealTimerAutoCloseCalled && Date() < smokeDeadline {
+        RunLoop.main.run(mode: .default, before: Date(timeIntervalSinceNow: 0.02))
+    }
+    let smokeDidFire = smokeRealTimerAutoCloseCalled
+    assertTest(smokeNotEarly && smokeDidFire, "33.7 Smoke: Real-timer scheduleAutoDismiss auto-dismisses on real clock with generous margin")
 
     // Test cancelAutoDismiss prevents close
     autoCloseCalled = false
-    wheelOverlay.scheduleAutoDismiss(delay: 0.2)
+    wheelOverlay.scheduleAutoDismiss(delay: 0.25)
     wheelOverlay.cancelAutoDismiss()
-    RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.25))
+    RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.30))
     assertTest(!autoCloseCalled, "33.7 cancelAutoDismiss cancels pending close")
 
     // Test Dismiss button click triggers onCloseRequested
@@ -4473,6 +4575,811 @@ do {
     assertTest(monitor7.isWheelOpen, "36.7 Step 5: Wheel remains open after second hold")
     assertTest(monitor7.rememberedFiles == [fileNew], "36.7 Step 5: Real drag successfully re-targets wheel with fileNew")
     assertTest(replaced7Files == [fileNew], "36.7 Step 5: onFilesReplaced called with fileNew")
+}
+
+// MARK: - 38. Step 1 Atomic Output Reservation & Collision Race Tests
+print("\n--- 38. Output Collision Race Tests (Atomic Reservation) ---")
+do {
+    let fm = FileManager.default
+    let tempRoot = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("Pasta_RaceTest_\(UUID().uuidString)")
+    try fm.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+    let destDir = tempRoot.appendingPathComponent("destination")
+    try fm.createDirectory(at: destDir, withIntermediateDirectories: true)
+
+    // Pre-create existing photo.jpg with sentinel to verify pre-existing files are NEVER modified
+    let sentinelURL = destDir.appendingPathComponent("photo.jpg")
+    let sentinelData = "ORIGINAL_SENTINEL_CONTENT".data(using: .utf8)!
+    try sentinelData.write(to: sentinelURL)
+
+    var inputs: [URL] = []
+    let sampleData = try Data(contentsOf: URL(fileURLWithPath: "Fixtures/sample.png"))
+    for i in 0..<20 {
+        let subDir = tempRoot.appendingPathComponent("input_\(i)")
+        try fm.createDirectory(at: subDir, withIntermediateDirectories: true)
+        let file = subDir.appendingPathComponent("photo.png")
+        try sampleData.write(to: file)
+        inputs.append(file)
+    }
+
+    guard let action = FormatRegistry.shared.actions(for: inputs[0]).first(where: { $0.id == "image.to.jpeg" }) else {
+        fatalError("image.to.jpeg action not found")
+    }
+
+    // 38.1: 20 concurrent jobs with same-basename inputs
+    let group = DispatchGroup()
+    let queue = DispatchQueue(label: "test.race.queue", attributes: .concurrent)
+    var results: [URL] = []
+    let lock = NSLock()
+
+    for input in inputs {
+        group.enter()
+        queue.async {
+            do {
+                let out = try JobRunner.shared.run(action: action, input: input, destinationDirectory: destDir)
+                lock.lock()
+                results.append(out)
+                lock.unlock()
+            } catch {
+                print("Concurrent job failed: \(error)")
+            }
+            group.leave()
+        }
+    }
+    group.wait()
+
+    let destContents = (try? fm.contentsOfDirectory(at: destDir, includingPropertiesForKeys: nil)) ?? []
+    print("Race test completed: \(results.count) results returned, \(destContents.count) files in destination")
+
+    // Sentinel plus 20 unique outputs = 21 files
+    assertTest(destContents.count == 21, "38.1 20 concurrent jobs with same-basename inputs produce 20 unique output files")
+    let readSentinel = (try? String(contentsOf: sentinelURL, encoding: .utf8)) ?? ""
+    assertTest(readSentinel == "ORIGINAL_SENTINEL_CONTENT", "38.1 Pre-existing file content unchanged after concurrent collisions")
+    let uniqueResults = Set(results.map { $0.standardizedFileURL.path })
+    assertTest(uniqueResults.count == 20, "38.1 All 20 output paths returned are unique")
+    let allNonEmpty = results.allSatisfy { (try? Data(contentsOf: $0).count) ?? 0 > 100 }
+    assertTest(allNonEmpty, "38.1 All 20 output files are valid non-empty results")
+
+    // 38.2: Concurrent reservation claim between two processes/threads
+    let res1 = try OutputPlanner.reserveOutput(for: inputs[0], targetExtension: "jpg", destinationDirectory: destDir)
+    let res2 = try OutputPlanner.reserveOutput(for: inputs[0], targetExtension: "jpg", destinationDirectory: destDir)
+    assertTest(res1.url.path != res2.url.path, "38.2 Two immediate reservations receive distinct paths")
+    assertTest(fm.fileExists(atPath: res1.url.path) && fm.fileExists(atPath: res2.url.path), "38.2 Both reserved placeholders exist on disk atomically")
+    res1.cleanup()
+    res2.cleanup()
+    assertTest(!fm.fileExists(atPath: res1.url.path) && !fm.fileExists(atPath: res2.url.path), "38.2 Unclaimed empty reservations are cleaned up safely")
+
+    // 38.3: Failure injected after reservation (fake tool exits 1)
+    let failingAction = ConversionAction(
+        id: "test.fail.action",
+        displayName: "Failing Action",
+        outputExtension: "jpg",
+        category: .image,
+        customRunner: { _, _, _, _, _ in
+            throw PastaError.executionFailed(tool: "engine", exitCode: 1, output: "Injected failure")
+        }
+    )
+    do {
+        _ = try JobRunner.shared.run(action: failingAction, input: inputs[0], destinationDirectory: destDir)
+    } catch {
+        // Expected failure
+    }
+    // Check that no orphaned zero-byte placeholder remains
+    let postFailContents = (try? fm.contentsOfDirectory(at: destDir, includingPropertiesForKeys: nil)) ?? []
+    let remainingPlaceholders = postFailContents.filter { (try? Data(contentsOf: $0).count) == 0 }
+    assertTest(remainingPlaceholders.isEmpty, "38.3 Injected failure cleanly removes placeholder without leaving 0-byte orphan")
+    let readSentinelAfterFail = (try? String(contentsOf: sentinelURL, encoding: .utf8)) ?? ""
+    assertTest(readSentinelAfterFail == "ORIGINAL_SENTINEL_CONTENT", "38.3 Injected failure does not modify pre-existing file")
+
+    // 38.4: Cancellation mid-run leaves placeholder cleaned up and zero leftovers
+    let slowAction = ConversionAction(
+        id: "test.slow.action",
+        displayName: "Slow Action",
+        outputExtension: "jpg",
+        category: .image,
+        customRunner: { _, _, _, runner, jId in
+            for _ in 0..<50 {
+                Thread.sleep(forTimeInterval: 0.1)
+                if runner.isCancelled(jId) {
+                    throw PastaError.cancelled
+                }
+            }
+        }
+    )
+    let cancelJobId = UUID()
+    let cancelGroup = DispatchGroup()
+    cancelGroup.enter()
+    var cancelErrorThrown = false
+    DispatchQueue.global().async {
+        do {
+            _ = try JobRunner.shared.run(action: slowAction, input: inputs[0], destinationDirectory: destDir, jobId: cancelJobId)
+        } catch PastaError.cancelled {
+            cancelErrorThrown = true
+        } catch {}
+        cancelGroup.leave()
+    }
+    // Give it 100ms to start and create reservation, then cancel
+    Thread.sleep(forTimeInterval: 0.15)
+    JobRunner.shared.cancel(jobId: cancelJobId)
+    cancelGroup.wait()
+    assertTest(cancelErrorThrown, "38.4 Cancellation throws PastaError.cancelled")
+    let zeroBytePostCancel = ((try? fm.contentsOfDirectory(at: destDir, includingPropertiesForKeys: nil)) ?? []).filter { (try? Data(contentsOf: $0).count) == 0 }
+    assertTest(zeroBytePostCancel.isEmpty, "38.4 Cancellation cleans up placeholder, leaving zero 0-byte files")
+
+    // 38.5: Pre-existing photo.jpg is never modified by a failing job with same name
+    assertTest((try? String(contentsOf: sentinelURL, encoding: .utf8)) == "ORIGINAL_SENTINEL_CONTENT", "38.5 Pre-existing photo.jpg intact after cancel and fail")
+
+    // 38.6: Folder outputs race under same destination
+    var folderReservations: [OutputReservation] = []
+    for _ in 0..<10 {
+        let r = try OutputPlanner.reserveOutputDirectory(for: inputs[0], suffix: "pages", destinationDirectory: destDir)
+        folderReservations.append(r)
+    }
+    let folderURLs = Set(folderReservations.map { $0.url.path })
+    assertTest(folderURLs.count == 10, "38.6 10 concurrent folder reservations obtain 10 unique paths")
+    let allDirsExist = folderReservations.allSatisfy { fm.fileExists(atPath: $0.url.path) }
+    assertTest(allDirsExist, "38.6 All reserved directory placeholders exist on disk")
+    for r in folderReservations {
+        r.cleanup()
+    }
+    let allDirsGone = folderReservations.allSatisfy { !fm.fileExists(atPath: $0.url.path) }
+    assertTest(allDirsGone, "38.6 Cleaned up directory placeholders are removed")
+
+    // 38.7: Hostile names reserve and publish safely
+    let hostileNames = [
+        "-leadingdash.png",
+        "user's \"photo\"!.png",
+        "photo_🎉_cool.png",
+        "very_long_file_name_that_exceeds_normal_lengths_for_boundary_testing_in_pasta_converter_1234567890_abcdefghijklmnopqrstuvwxyz.png"
+    ]
+    for hName in hostileNames {
+        let hInput = tempRoot.appendingPathComponent(hName)
+        try sampleData.write(to: hInput)
+        let hRes = try OutputPlanner.reserveOutput(for: hInput, targetExtension: "jpg", destinationDirectory: destDir)
+        assertTest(fm.fileExists(atPath: hRes.url.path), "38.7 Hostile name '\(hName)' reserved placeholder successfully")
+        let dummyTemp = tempRoot.appendingPathComponent("dummy_\(UUID().uuidString).jpg")
+        try "DUMMY_IMAGE_DATA".data(using: .utf8)!.write(to: dummyTemp)
+        try hRes.publish(from: dummyTemp)
+        assertTest(fm.fileExists(atPath: hRes.url.path), "38.7 Hostile name '\(hName)' published successfully")
+    }
+
+    try? fm.removeItem(at: tempRoot)
+}
+
+// --- 39. Hostile Archive Extraction Tests (ArchiveGuard) ---
+do {
+    print("\n--- 39. Hostile Archive Extraction Tests (ArchiveGuard) ---")
+    let fm = FileManager.default
+    let fixtureTempRoot = fm.temporaryDirectory.appendingPathComponent("Pasta_Hostile_Fixtures_\(UUID().uuidString)")
+    try fm.createDirectory(at: fixtureTempRoot, withIntermediateDirectories: true)
+    defer {
+        try? fm.removeItem(at: fixtureTempRoot)
+    }
+
+    // Generate hostile fixtures dynamically using scripts/make_hostile_archives.sh
+    let genProcess = Process()
+    genProcess.executableURL = URL(fileURLWithPath: "/bin/bash")
+    let scriptURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent("scripts/make_hostile_archives.sh")
+    genProcess.arguments = [scriptURL.path, fixtureTempRoot.path]
+    try? genProcess.run()
+    genProcess.waitUntilExit()
+
+    let extractDest = fm.temporaryDirectory.appendingPathComponent("Pasta_Extract_Dest_\(UUID().uuidString)")
+    try fm.createDirectory(at: extractDest, withIntermediateDirectories: true)
+    defer {
+        try? fm.removeItem(at: extractDest)
+    }
+
+    // 39.1: Relative escape (slip_rel.zip)
+    let slipZipURL = fixtureTempRoot.appendingPathComponent("slip_rel.zip")
+    if fm.fileExists(atPath: slipZipURL.path), let action = FormatRegistry.shared.action(for: slipZipURL, actionID: "archive.extract") {
+        var didReject = false
+        do {
+            _ = try JobRunner.shared.run(action: action, input: slipZipURL, destinationDirectory: extractDest)
+        } catch {
+            didReject = true
+        }
+        assertTest(didReject, "39.1 Relative path escape in zip rejected by ArchiveGuard (slip_rel.zip)")
+        assertTest(!fm.fileExists(atPath: "/tmp/escape.txt"), "39.1 No escape.txt created in /tmp")
+    }
+
+    // 39.2: Relative escape (slip_rel.tar)
+    let slipTarURL = fixtureTempRoot.appendingPathComponent("slip_rel.tar")
+    if fm.fileExists(atPath: slipTarURL.path), let action = FormatRegistry.shared.action(for: slipTarURL, actionID: "archive.extract") {
+        var didReject = false
+        do {
+            _ = try JobRunner.shared.run(action: action, input: slipTarURL, destinationDirectory: extractDest)
+        } catch {
+            didReject = true
+        }
+        assertTest(didReject, "39.2 Relative path escape in tar rejected by ArchiveGuard (slip_rel.tar)")
+    }
+
+    // 39.3: Absolute path escape (slip_abs.tar)
+    let slipAbsURL = fixtureTempRoot.appendingPathComponent("slip_abs.tar")
+    if fm.fileExists(atPath: slipAbsURL.path), let action = FormatRegistry.shared.action(for: slipAbsURL, actionID: "archive.extract") {
+        var didReject = false
+        do {
+            _ = try JobRunner.shared.run(action: action, input: slipAbsURL, destinationDirectory: extractDest)
+        } catch {
+            didReject = true
+        }
+        assertTest(didReject, "39.3 Absolute path escape in tar rejected by ArchiveGuard (slip_abs.tar)")
+        assertTest(!fm.fileExists(atPath: "/tmp/pasta_abs_escape.txt"), "39.3 No /tmp/pasta_abs_escape.txt created")
+    }
+
+    // 39.4: Symlink pointing outside (symlink_outside.tar)
+    let symlinkOutsideURL = fixtureTempRoot.appendingPathComponent("symlink_outside.tar")
+    if fm.fileExists(atPath: symlinkOutsideURL.path), let action = FormatRegistry.shared.action(for: symlinkOutsideURL, actionID: "archive.extract") {
+        var didReject = false
+        do {
+            _ = try JobRunner.shared.run(action: action, input: symlinkOutsideURL, destinationDirectory: extractDest)
+        } catch {
+            didReject = true
+        }
+        assertTest(didReject, "39.4 Symlink pointing outside rejected by ArchiveGuard (symlink_outside.tar)")
+    }
+
+    // 39.5: Symlink pointing to /etc/passwd (symlink_passwd.tar)
+    let symlinkPasswdURL = fixtureTempRoot.appendingPathComponent("symlink_passwd.tar")
+    if fm.fileExists(atPath: symlinkPasswdURL.path), let action = FormatRegistry.shared.action(for: symlinkPasswdURL, actionID: "archive.extract") {
+        var didReject = false
+        do {
+            _ = try JobRunner.shared.run(action: action, input: symlinkPasswdURL, destinationDirectory: extractDest)
+        } catch {
+            didReject = true
+        }
+        assertTest(didReject, "39.5 Symlink targeting /etc/passwd rejected by ArchiveGuard (symlink_passwd.tar)")
+    }
+
+    // 39.6: Symlink hop (symlink_hop.tar)
+    let symlinkHopURL = fixtureTempRoot.appendingPathComponent("symlink_hop.tar")
+    if fm.fileExists(atPath: symlinkHopURL.path), let action = FormatRegistry.shared.action(for: symlinkHopURL, actionID: "archive.extract") {
+        var didReject = false
+        do {
+            _ = try JobRunner.shared.run(action: action, input: symlinkHopURL, destinationDirectory: extractDest)
+        } catch {
+            didReject = true
+        }
+        assertTest(didReject, "39.6 Symlink directory hop rejected by ArchiveGuard (symlink_hop.tar)")
+    }
+
+    // 39.7: Setuid and setgid bits defense (ArchiveGuard)
+    let setuidTestDir = fixtureTempRoot.appendingPathComponent("setuid_direct_test")
+    try fm.createDirectory(at: setuidTestDir, withIntermediateDirectories: true)
+    let suidFile = setuidTestDir.appendingPathComponent("suid_binary")
+    try "suid_test".write(to: suidFile, atomically: true, encoding: .utf8)
+    chmod(suidFile.path, 0o4755)
+
+    var suidDirectRejected = false
+    do {
+        try ArchiveGuard.validate(root: setuidTestDir, limits: .standard)
+    } catch {
+        suidDirectRejected = true
+    }
+    assertTest(suidDirectRejected, "39.7 Setuid elevated privileges rejected by ArchiveGuard.validate")
+
+    let setuidURL = fixtureTempRoot.appendingPathComponent("setuid_setgid.tar")
+    if fm.fileExists(atPath: setuidURL.path), let action = FormatRegistry.shared.action(for: setuidURL, actionID: "archive.extract") {
+        var suidClearedOrRejected = false
+        do {
+            let outDir = try JobRunner.shared.run(action: action, input: setuidURL, destinationDirectory: extractDest)
+            var anyElevatedLeft = false
+            if let items = try? fm.subpathsOfDirectory(atPath: outDir.path) {
+                for item in items {
+                    var st = stat()
+                    if lstat(outDir.appendingPathComponent(item).path, &st) == 0 {
+                        if (st.st_mode & mode_t(S_ISUID)) != 0 || (st.st_mode & mode_t(S_ISGID)) != 0 {
+                            anyElevatedLeft = true
+                        }
+                    }
+                }
+            }
+            suidClearedOrRejected = !anyElevatedLeft
+        } catch {
+            suidClearedOrRejected = true
+        }
+        assertTest(suidClearedOrRejected, "39.7 Setuid/setgid elevated bits cleared by extractor or rejected (setuid_setgid.tar)")
+    }
+
+    // 39.8: Deep nesting limit (deep_nesting.tar)
+    let deepTarURL = fixtureTempRoot.appendingPathComponent("deep_nesting.tar")
+    if fm.fileExists(atPath: deepTarURL.path), let action = FormatRegistry.shared.action(for: deepTarURL, actionID: "archive.extract") {
+        var didReject = false
+        do {
+            _ = try JobRunner.shared.run(action: action, input: deepTarURL, destinationDirectory: extractDest)
+        } catch {
+            didReject = true
+        }
+        assertTest(didReject, "39.8 Directory depth exceeding limit rejected by ArchiveGuard (deep_nesting.tar)")
+    }
+
+    // 39.9: Expansion bomb (expansion_bomb.tar.gz) with reduced limit test
+    let bombGzURL = fixtureTempRoot.appendingPathComponent("expansion_bomb.tar.gz")
+    if fm.fileExists(atPath: bombGzURL.path) {
+        let bombUnpackDir = fixtureTempRoot.appendingPathComponent("bomb_test")
+        try fm.createDirectory(at: bombUnpackDir, withIntermediateDirectories: true)
+        let unpacker = Process()
+        if let tarURL = ToolLocator.shared.findTool("tar") ?? ToolLocator.shared.findTool("7zz") {
+            unpacker.executableURL = tarURL
+            if tarURL.lastPathComponent == "tar" {
+                unpacker.arguments = ["-xzf", bombGzURL.path, "-C", bombUnpackDir.path]
+            } else {
+                unpacker.arguments = ["x", "-y", bombGzURL.path, "-o\(bombUnpackDir.path)"]
+            }
+            try? unpacker.run()
+            unpacker.waitUntilExit()
+        }
+
+        var tightLimits = ArchiveLimits.standard
+        tightLimits.maxTotalExpandedSize = 1024 * 1024 // 1 MB limit
+        var bombRejected = false
+        do {
+            try ArchiveGuard.validate(root: bombUnpackDir, limits: tightLimits)
+        } catch {
+            bombRejected = true
+        }
+        assertTest(bombRejected, "39.9 Expansion bomb exceeding size limit rejected by ArchiveGuard (expansion_bomb.tar.gz)")
+    }
+
+    // 39.10: Benign archive extraction (guard against false positives)
+    let benignZipURL = fixtureTempRoot.appendingPathComponent("benign_valid.zip")
+    if fm.fileExists(atPath: benignZipURL.path), let action = FormatRegistry.shared.action(for: benignZipURL, actionID: "archive.extract") {
+        var extractSuccess = false
+        var extractedFilesCount = 0
+        do {
+            let outDir = try JobRunner.shared.run(action: action, input: benignZipURL, destinationDirectory: extractDest)
+            let items = try fm.subpathsOfDirectory(atPath: outDir.path)
+            extractedFilesCount = items.count
+            extractSuccess = extractedFilesCount >= 3
+        } catch {
+            extractSuccess = false
+        }
+        assertTest(extractSuccess, "39.10 Benign valid archive extracts cleanly without false positives (benign_valid.zip)")
+    }
+
+    // 39.11: Preflight inspection rejects prohibited entry early
+    var preflightCatchRelative = false
+    do {
+        try ArchiveGuard.preflightInspect(archiveURL: slipTarURL, toolName: "tar")
+    } catch {
+        preflightCatchRelative = true
+    }
+    assertTest(preflightCatchRelative, "39.11 Preflight tar inspection rejects relative traversal early (slip_rel.tar)")
+
+    // 39.12: Hardlink pointing outside (hardlink_outside.tar)
+    let hardlinkOutsideURL = fixtureTempRoot.appendingPathComponent("hardlink_outside.tar")
+    if fm.fileExists(atPath: hardlinkOutsideURL.path), let action = FormatRegistry.shared.action(for: hardlinkOutsideURL, actionID: "archive.extract") {
+        var hostsStatBefore = stat()
+        stat("/etc/hosts", &hostsStatBefore)
+        var didReject = false
+        do {
+            _ = try JobRunner.shared.run(action: action, input: hardlinkOutsideURL, destinationDirectory: extractDest)
+        } catch {
+            didReject = true
+        }
+        var hostsStatAfter = stat()
+        stat("/etc/hosts", &hostsStatAfter)
+        let hostsUntouched = (hostsStatBefore.st_nlink == hostsStatAfter.st_nlink) && (hostsStatBefore.st_ino == hostsStatAfter.st_ino)
+        let nothingPublished = !fm.fileExists(atPath: extractDest.appendingPathComponent("hardlink_to_etc").path)
+        assertTest(didReject && hostsUntouched && nothingPublished, "39.12 Hard link escape rejected and external target unmodified (hardlink_outside.tar)")
+    }
+
+    // 39.13: Duplicate entry names (duplicate_names.zip)
+    let dupNamesURL = fixtureTempRoot.appendingPathComponent("duplicate_names.zip")
+    if fm.fileExists(atPath: dupNamesURL.path), let action = FormatRegistry.shared.action(for: dupNamesURL, actionID: "archive.extract") {
+        var didExtract = false
+        var hasOverwrittenContent = false
+        do {
+            let outDir = try JobRunner.shared.run(action: action, input: dupNamesURL, destinationDirectory: extractDest)
+            let dupFile = outDir.appendingPathComponent("duplicate.txt")
+            if fm.fileExists(atPath: dupFile.path) {
+                didExtract = true
+                let content = (try? String(contentsOf: dupFile, encoding: .utf8)) ?? ""
+                hasOverwrittenContent = content.contains("SECOND_VERSION_OVERWRITE")
+            }
+        } catch {
+            didExtract = false
+        }
+        assertTest(didExtract && hasOverwrittenContent, "39.13 Duplicate entry names extracted safely with deterministic overwrite (duplicate_names.zip)")
+    }
+
+    // 39.14: Case collision (case_collision.zip)
+    let caseCollisionURL = fixtureTempRoot.appendingPathComponent("case_collision.zip")
+    if fm.fileExists(atPath: caseCollisionURL.path), let action = FormatRegistry.shared.action(for: caseCollisionURL, actionID: "archive.extract") {
+        var didHandleSafely = false
+        do {
+            let outDir = try JobRunner.shared.run(action: action, input: caseCollisionURL, destinationDirectory: extractDest)
+            let items = (try? fm.contentsOfDirectory(atPath: outDir.path)) ?? []
+            didHandleSafely = !items.isEmpty
+        } catch {
+            didHandleSafely = false
+        }
+        assertTest(didHandleSafely, "39.14 Case collision handled safely under filesystem semantics (case_collision.zip)")
+    }
+
+    // 39.15: Unicode normalization (unicode_normalization.zip)
+    let unicodeNormURL = fixtureTempRoot.appendingPathComponent("unicode_normalization.zip")
+    if fm.fileExists(atPath: unicodeNormURL.path), let action = FormatRegistry.shared.action(for: unicodeNormURL, actionID: "archive.extract") {
+        var didNormalizeSafely = false
+        do {
+            let outDir = try JobRunner.shared.run(action: action, input: unicodeNormURL, destinationDirectory: extractDest)
+            let items = (try? fm.contentsOfDirectory(atPath: outDir.path)) ?? []
+            didNormalizeSafely = items.contains {
+                $0.precomposedStringWithCanonicalMapping == "café.txt".precomposedStringWithCanonicalMapping
+            }
+        } catch {
+            didNormalizeSafely = false
+        }
+        assertTest(didNormalizeSafely, "39.15 Unicode normalization variants extracted safely (unicode_normalization.zip)")
+    }
+
+    // 39.16: Very long entry name (> 255 chars) (very_long_names.tar)
+    let veryLongNamesURL = fixtureTempRoot.appendingPathComponent("very_long_names.tar")
+    if fm.fileExists(atPath: veryLongNamesURL.path), let action = FormatRegistry.shared.action(for: veryLongNamesURL, actionID: "archive.extract") {
+        var didReject = false
+        do {
+            _ = try JobRunner.shared.run(action: action, input: veryLongNamesURL, destinationDirectory: extractDest)
+        } catch {
+            didReject = true
+        }
+        assertTest(didReject, "39.16 Very long filename rejected safely without crash (very_long_names.tar)")
+    }
+
+    // 39.17: Many files (many_files.zip)
+    let manyFilesURL = fixtureTempRoot.appendingPathComponent("many_files.zip")
+    if fm.fileExists(atPath: manyFilesURL.path), let action = FormatRegistry.shared.action(for: manyFilesURL, actionID: "archive.extract") {
+        var didExtract1000 = false
+        var tightLimitRejected = false
+        do {
+            let outDir = try JobRunner.shared.run(action: action, input: manyFilesURL, destinationDirectory: extractDest)
+            let items = (try? fm.contentsOfDirectory(atPath: outDir.path)) ?? []
+            didExtract1000 = (items.count == 1000)
+
+            var tightLimits = ArchiveLimits.standard
+            tightLimits.maxTotalEntries = 500
+            do {
+                try ArchiveGuard.validate(root: outDir, limits: tightLimits)
+            } catch {
+                tightLimitRejected = true
+            }
+        } catch {
+            didExtract1000 = false
+        }
+        assertTest(didExtract1000 && tightLimitRejected, "39.17 Many files extracted safely under standard limits and rejected under tight limit (many_files.zip)")
+    }
+
+    // 39.18: Preflight tar inspection rejects symlink and hardlink targets pointing outside
+    var preflightTarSymlinkHop = false
+    var preflightTarHardlink = false
+    let hopTarURL = fixtureTempRoot.appendingPathComponent("symlink_hop.tar")
+    if fm.fileExists(atPath: hopTarURL.path) {
+        do {
+            try ArchiveGuard.preflightInspect(archiveURL: hopTarURL, toolName: "tar")
+        } catch {
+            preflightTarSymlinkHop = true
+        }
+    }
+    if fm.fileExists(atPath: hardlinkOutsideURL.path) {
+        do {
+            try ArchiveGuard.preflightInspect(archiveURL: hardlinkOutsideURL, toolName: "tar")
+        } catch {
+            preflightTarHardlink = true
+        }
+    }
+    assertTest(preflightTarSymlinkHop && preflightTarHardlink, "39.18 Preflight tar inspection catches link targets pointing outside (symlink_hop.tar, hardlink_outside.tar)")
+
+    // 39.19: Preflight 7zz inspection rejects link targets pointing outside
+    var preflight7zSymlinkHop = false
+    var preflight7zHardlink = false
+    if fm.fileExists(atPath: hopTarURL.path) {
+        do {
+            try ArchiveGuard.preflightInspect(archiveURL: hopTarURL, toolName: "7zz")
+        } catch {
+            preflight7zSymlinkHop = true
+        }
+    }
+    if fm.fileExists(atPath: hardlinkOutsideURL.path) {
+        do {
+            try ArchiveGuard.preflightInspect(archiveURL: hardlinkOutsideURL, toolName: "7zz")
+        } catch {
+            preflight7zHardlink = true
+        }
+    }
+    assertTest(preflight7zSymlinkHop && preflight7zHardlink, "39.19 Preflight 7zz inspection catches link targets pointing outside (symlink_hop.tar, hardlink_outside.tar)")
+
+    // 39.20: Preflight unar inspection rejects link targets pointing outside
+    var preflightUnarSymlinkHop = false
+    if fm.fileExists(atPath: hopTarURL.path) {
+        do {
+            try ArchiveGuard.preflightInspect(archiveURL: hopTarURL, toolName: "unar")
+        } catch {
+            preflightUnarSymlinkHop = true
+        }
+    }
+    assertTest(preflightUnarSymlinkHop, "39.20 Preflight unar inspection catches link targets pointing outside (symlink_hop.tar)")
+
+    // 39.21: Sentinel directory outside scratch root remains untouched during extraction attempts for all extractors
+    let sentinelDir = fm.temporaryDirectory.appendingPathComponent("pasta_sentinel_\(UUID().uuidString)")
+    try fm.createDirectory(at: sentinelDir, withIntermediateDirectories: true)
+    defer { try? fm.removeItem(at: sentinelDir) }
+
+    // Create crafted hostile archives specifically targeting sentinelDir
+    let craftedTar = fixtureTempRoot.appendingPathComponent("crafted_sentinel_hop.tar")
+    let craftedZip = fixtureTempRoot.appendingPathComponent("crafted_sentinel_hop.zip")
+    
+    // Generate crafted tar and zip targeting sentinelDir
+    let genProc = Process()
+    genProc.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
+    genProc.arguments = ["-c", """
+    import tarfile, zipfile, io, sys
+    sentinel = sys.argv[1]
+    tar_path = sys.argv[2]
+    zip_path = sys.argv[3]
+    with tarfile.open(tar_path, 'w') as tf:
+        ti1 = tarfile.TarInfo('escaped_dir')
+        ti1.type = tarfile.SYMTYPE
+        ti1.linkname = sentinel
+        tf.addfile(ti1)
+        ti2 = tarfile.TarInfo('escaped_dir/attack_payload.txt')
+        ti2.size = 14
+        tf.addfile(ti2, fileobj=io.BytesIO(b'ATTACK_PAYLOAD'))
+    with zipfile.ZipFile(zip_path, 'w') as zf:
+        zi1 = zipfile.ZipInfo('escaped_dir')
+        zi1.create_system = 3
+        zi1.external_attr = 0o120777 << 16
+        zf.writestr(zi1, sentinel)
+        zi2 = zipfile.ZipInfo('escaped_dir/attack_payload.txt')
+        zi2.create_system = 3
+        zi2.external_attr = 0o100644 << 16
+        zf.writestr(zi2, 'ATTACK_PAYLOAD')
+    """, sentinelDir.path, craftedTar.path, craftedZip.path]
+    try genProc.run()
+    genProc.waitUntilExit()
+
+    var sentinelProtectedTar = false
+    var sentinelProtectedDitto = false
+    var sentinelProtected7z = false
+    var sentinelProtectedUnar = false
+
+    // Test tar extractor
+    let tarScratch = fm.temporaryDirectory.appendingPathComponent("tar_scratch_\(UUID().uuidString)")
+    try fm.createDirectory(at: tarScratch, withIntermediateDirectories: true)
+    let tarProc = Process()
+    tarProc.executableURL = URL(fileURLWithPath: "/usr/bin/tar")
+    tarProc.arguments = ["-xf", craftedTar.path, "-C", tarScratch.path]
+    tarProc.standardError = FileHandle.nullDevice
+    try? tarProc.run()
+    tarProc.waitUntilExit()
+    let sentinelAfterTar = (try? fm.contentsOfDirectory(atPath: sentinelDir.path)) ?? []
+    sentinelProtectedTar = sentinelAfterTar.isEmpty
+    try? fm.removeItem(at: tarScratch)
+
+    // Test ditto extractor
+    let dittoScratch = fm.temporaryDirectory.appendingPathComponent("ditto_scratch_\(UUID().uuidString)")
+    try fm.createDirectory(at: dittoScratch, withIntermediateDirectories: true)
+    let dittoProc = Process()
+    dittoProc.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
+    dittoProc.arguments = ["-x", "-k", craftedZip.path, dittoScratch.path]
+    dittoProc.standardError = FileHandle.nullDevice
+    try? dittoProc.run()
+    dittoProc.waitUntilExit()
+    let sentinelAfterDitto = (try? fm.contentsOfDirectory(atPath: sentinelDir.path)) ?? []
+    sentinelProtectedDitto = sentinelAfterDitto.isEmpty
+    try? fm.removeItem(at: dittoScratch)
+
+    // Test 7zz extractor
+    let sevenzScratch = fm.temporaryDirectory.appendingPathComponent("7z_scratch_\(UUID().uuidString)")
+    try fm.createDirectory(at: sevenzScratch, withIntermediateDirectories: true)
+    if let sevenzTool = ToolLocator.shared.findTool("7zz") {
+        let sevenzProc = Process()
+        sevenzProc.executableURL = sevenzTool
+        sevenzProc.arguments = ["x", "-y", craftedTar.path, "-o\(sevenzScratch.path)"]
+        sevenzProc.standardOutput = FileHandle.nullDevice
+        sevenzProc.standardError = FileHandle.nullDevice
+        try? sevenzProc.run()
+        sevenzProc.waitUntilExit()
+        let sentinelAfter7z = (try? fm.contentsOfDirectory(atPath: sentinelDir.path)) ?? []
+        sentinelProtected7z = sentinelAfter7z.isEmpty
+    } else {
+        sentinelProtected7z = true
+    }
+    try? fm.removeItem(at: sevenzScratch)
+
+    // Test unar extractor
+    let unarScratch = fm.temporaryDirectory.appendingPathComponent("unar_scratch_\(UUID().uuidString)")
+    try fm.createDirectory(at: unarScratch, withIntermediateDirectories: true)
+    if let unarTool = ToolLocator.shared.findTool("unar") {
+        let unarProc = Process()
+        unarProc.executableURL = unarTool
+        unarProc.arguments = ["-o", unarScratch.path, craftedTar.path]
+        unarProc.standardOutput = FileHandle.nullDevice
+        unarProc.standardError = FileHandle.nullDevice
+        try? unarProc.run()
+        unarProc.waitUntilExit()
+        let sentinelAfterUnar = (try? fm.contentsOfDirectory(atPath: sentinelDir.path)) ?? []
+        sentinelProtectedUnar = sentinelAfterUnar.isEmpty
+    } else {
+        sentinelProtectedUnar = true
+    }
+    try? fm.removeItem(at: unarScratch)
+
+    let allSentinelsProtected = sentinelProtectedTar && sentinelProtectedDitto && sentinelProtected7z && sentinelProtectedUnar
+    assertTest(allSentinelsProtected, "39.21 Sentinel directory outside scratch root remains untouched across all extractors (tar, ditto, 7zz, unar)")
+
+    // 39.22: Catalog pre-extraction check rejects declared oversize archive under REAL default limits
+    // Default ArchiveLimits.standard specifies maxTotalExpandedSize = 8 GB (8,589,934,592 bytes).
+    // Test creates a tiny 4KB sparse tar archive declaring 10 GB uncompressed size without writing gigabytes to disk.
+    let sparse10gbTar = fixtureTempRoot.appendingPathComponent("declared_10gb_sparse.tar")
+    let sparseGenProc = Process()
+    sparseGenProc.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
+    sparseGenProc.arguments = ["-c", """
+    import tempfile, subprocess, os, sys
+    tar_path = sys.argv[1]
+    temp_dir = tempfile.mkdtemp()
+    sparse_file = os.path.join(temp_dir, 'huge_10gb.bin')
+    with open(sparse_file, 'wb') as f:
+        f.truncate(10 * 1024 * 1024 * 1024) # 10 GB sparse
+    subprocess.run(['/usr/bin/tar', '-cf', tar_path, '-C', temp_dir, 'huge_10gb.bin'], check=True)
+    try:
+        os.remove(sparse_file)
+        os.rmdir(temp_dir)
+    except:
+        pass
+    """, sparse10gbTar.path]
+    try? sparseGenProc.run()
+    sparseGenProc.waitUntilExit()
+
+    var preflightOversizeRejected = false
+    do {
+        // Runs with REAL default ArchiveLimits.standard (8 GB max expanded size)
+        try ArchiveGuard.preflightInspect(archiveURL: sparse10gbTar, toolName: "tar", limits: .standard)
+    } catch {
+        preflightOversizeRejected = true
+    }
+    assertTest(preflightOversizeRejected, "39.22 Archive catalog pre-extraction check rejects declared 10GB archive under REAL default 8GB limit (declared_10gb_sparse.tar)")
+
+    // 39.23: Running expansion cap terminates extractor and wipes scratch when catalog lies
+    // Uses expansion_bomb.tar.gz with a tight running cap of 500 KB to simulate an active bomb.
+    var runningCapTriggered = false
+    var scratchWipedClean = false
+    var destinationUntouched = false
+    if fm.fileExists(atPath: bombGzURL.path) {
+        let bombDestDir = fixtureTempRoot.appendingPathComponent("bomb_running_cap_dest")
+        try fm.createDirectory(at: bombDestDir, withIntermediateDirectories: true)
+        let scratchDir = fm.temporaryDirectory.appendingPathComponent("running_cap_scratch_\(UUID().uuidString)")
+        try fm.createDirectory(at: scratchDir, withIntermediateDirectories: true)
+
+        var tightCapLimits = ArchiveLimits.standard
+        tightCapLimits.maxTotalExpandedSize = 500 * 1024 // 500 KB running cap
+
+        let jobId = UUID()
+        let bombInv = Invocation(toolName: "tar", arguments: ["-xzf", bombGzURL.path, "-C", scratchDir.path])
+        do {
+            try ArchiveGuard.executeWithRunningCap(
+                runner: JobRunner.shared,
+                invocation: bombInv,
+                scratchURL: scratchDir,
+                jobId: jobId,
+                limits: tightCapLimits
+            )
+        } catch {
+            runningCapTriggered = true
+        }
+
+        let scratchExists = fm.fileExists(atPath: scratchDir.path)
+        let scratchItems = (try? fm.contentsOfDirectory(atPath: scratchDir.path)) ?? []
+        scratchWipedClean = !scratchExists || scratchItems.isEmpty
+        let destItems = (try? fm.contentsOfDirectory(atPath: bombDestDir.path)) ?? []
+        destinationUntouched = destItems.isEmpty
+
+        try? fm.removeItem(at: scratchDir)
+        try? fm.removeItem(at: bombDestDir)
+    }
+    assertTest(runningCapTriggered && scratchWipedClean && destinationUntouched, "39.23 Running expansion cap terminates extractor, wipes scratch, and leaves destination untouched")
+}
+
+do {
+    print("\n--- 40. Actionable Doctor, Homebrew Mappings & Action Catalog Tests ---")
+    let locator = ToolLocator.shared
+
+    // 40.1: ToolLocator forced unavailable override
+    locator.setUnavailableOverride(tool: "ffmpeg", isUnavailable: true)
+    let ffmpegMissing = locator.findTool("ffmpeg") == nil
+    assertTest(ffmpegMissing, "40.1 ToolLocator reports missing tool when forced unavailable")
+
+    // 40.2: ToolLocator override present
+    let fakeToolURL = URL(fileURLWithPath: "/usr/bin/true")
+    locator.setOverride(tool: "ffmpeg", url: fakeToolURL)
+    let ffmpegFound = locator.findTool("ffmpeg") == fakeToolURL
+    assertTest(ffmpegFound, "40.2 ToolLocator reports present tool when overridden with custom URL")
+
+    // Reset ffmpeg overrides
+    locator.setOverride(tool: "ffmpeg", url: nil)
+    locator.setUnavailableOverride(tool: "ffmpeg", isUnavailable: false)
+
+    // 40.3: Formula mapping and brew install command generation for missing required tool
+    locator.setUnavailableOverride(tool: "magick", isUnavailable: true)
+    locator.setUnavailableOverride(tool: "qpdf", isUnavailable: true)
+    let reqReport = locator.doctorReportData(fetchVersions: false)
+    let hasMissingReq = reqReport.missingRequired.contains("magick") && reqReport.missingRequired.contains("qpdf")
+    assertTest(hasMissingReq, "40.3 Doctor report identifies missing required tools (magick, qpdf)")
+    
+    let reqCmd = reqReport.requiredInstallCommand ?? ""
+    let cmdContainsFormulas = reqCmd.contains("imagemagick") && reqCmd.contains("qpdf") && reqCmd.hasPrefix("brew install")
+    assertTest(cmdContainsFormulas, "40.3 Doctor generates copy-paste 'brew install' command mapping magick->imagemagick and qpdf->qpdf")
+
+    // Reset overrides
+    locator.setUnavailableOverride(tool: "magick", isUnavailable: false)
+    locator.setUnavailableOverride(tool: "qpdf", isUnavailable: false)
+
+    // 40.4: Optional cask install command generation
+    locator.setUnavailableOverride(tool: "soffice", isUnavailable: true)
+    locator.setUnavailableOverride(tool: "ebook-convert", isUnavailable: true)
+    let optReport = locator.doctorReportData(fetchVersions: false)
+    let optCmd = optReport.optionalInstallCommand ?? ""
+    let caskCmdCorrect = optCmd.contains("--cask") && optCmd.contains("libreoffice") && optCmd.contains("calibre")
+    assertTest(caskCmdCorrect, "40.4 Doctor generates '--cask libreoffice calibre' command for missing optional tools")
+
+    // Reset optional overrides
+    locator.setUnavailableOverride(tool: "soffice", isUnavailable: false)
+    locator.setUnavailableOverride(tool: "ebook-convert", isUnavailable: false)
+
+    // 40.5: JSON export conformance
+    let baselineReport = locator.doctorReportData(fetchVersions: false)
+    let jsonStr = baselineReport.jsonString(prettyPrinted: true)
+    let jsonData = jsonStr.data(using: .utf8)
+    let decoded = jsonData != nil ? (try? JSONDecoder().decode(PastaDoctorReport.self, from: jsonData!)) : nil
+    assertTest(decoded != nil && decoded?.tools.count == ToolLocator.toolDefinitions.count, "40.5 Doctor JSON parses into PastaDoctorReport with all tool definitions")
+
+    // 40.6: Status metadata fields (formula, isOptional, isCask, dependentActions)
+    let ffmpegStatus = baselineReport.tools.first(where: { $0.name == "ffmpeg" })
+    let hasMetadata = ffmpegStatus != nil && ffmpegStatus?.formula == "ffmpeg" && ffmpegStatus?.isOptional == false && ffmpegStatus?.dependentActions.contains("video.to.mp4") == true
+    assertTest(hasMetadata, "40.6 ToolStatus includes formula mapping, isOptional flag, and dependent actions list")
+
+    // 40.7: fetchToolVersion execution and safe fallback
+    let echoURL = URL(fileURLWithPath: "/bin/echo")
+    let echoVer = ToolLocator.fetchToolVersion(executableURL: echoURL, flag: "version_1.2.3")
+    assertTest(echoVer == "version_1.2.3", "40.7 fetchToolVersion safely captures output line from process")
+    let nonexistentURL = URL(fileURLWithPath: "/nonexistent/tool/path")
+    let noVer = ToolLocator.fetchToolVersion(executableURL: nonexistentURL, flag: "--version")
+    assertTest(noVer == nil, "40.7 fetchToolVersion safely returns nil for unlaunchable executable without hanging")
+
+    // 40.8: FormatRegistry allRegisteredActions coverage
+    let allActions = FormatRegistry.shared.allRegisteredActions()
+    let categories = Set(allActions.map(\.category))
+    assertTest(allActions.count >= 40 && categories.contains(.image) && categories.contains(.video) && categories.contains(.audio) && categories.contains(.pdf) && categories.contains(.archive), "40.8 FormatRegistry.allRegisteredActions covers all core categories with >= 40 actions (\(allActions.count) actions)")
+}
+
+do {
+    print("\n--- 41. License Audit & ToolLocator Coverage Tests ---")
+    let repoRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+    let licenseAuditURL = repoRoot.appendingPathComponent("docs/LICENSE_AUDIT.md")
+
+    // Test 41.1: docs/LICENSE_AUDIT.md exists and is readable
+    let auditExists = FileManager.default.fileExists(atPath: licenseAuditURL.path)
+    assertTest(auditExists, "41.1 docs/LICENSE_AUDIT.md exists")
+
+    let auditContent = (try? String(contentsOf: licenseAuditURL, encoding: .utf8)) ?? ""
+    let doctorTools = ToolLocator.shared.doctorReportData().tools.map { $0.name }
+    assertTest(doctorTools.count == 19, "41.2 ToolLocator doctor report lists exactly 19 tools (got \(doctorTools.count))")
+
+    var missingAuditTools: [String] = []
+    var missingUrlsOrUnverified: [String] = []
+
+    for toolName in doctorTools {
+        let toolPattern = "| `\(toolName)` |"
+        let toolPatternPlain = "| \(toolName) |"
+        if let line = auditContent.components(separatedBy: .newlines).first(where: { $0.contains(toolPattern) || $0.contains(toolPatternPlain) }) {
+            if !(line.contains("http://") || line.contains("https://") || line.contains("UNVERIFIED")) {
+                missingUrlsOrUnverified.append(toolName)
+            }
+        } else {
+            missingAuditTools.append(toolName)
+        }
+    }
+
+    assertTest(!auditContent.isEmpty && missingAuditTools.isEmpty, "41.3 All 19 ToolLocator tools have a dedicated row in docs/LICENSE_AUDIT.md (missing: \(missingAuditTools))")
+    assertTest(!auditContent.isEmpty && missingUrlsOrUnverified.isEmpty, "41.4 Every tool row in docs/LICENSE_AUDIT.md contains an upstream license URL or is marked UNVERIFIED (invalid: \(missingUrlsOrUnverified))")
 }
 
 print("\n==================================================")

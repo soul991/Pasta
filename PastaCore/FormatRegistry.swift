@@ -1757,20 +1757,52 @@ public final class FormatRegistry {
                 isAdvanced: false,
                 category: .archive,
                 iconName: "archivebox",
-                outputKind: .folder(suffix: "extracted")
-            ) { input, output in
-                if inputExt == "zip" {
-                    return [Invocation(toolName: "ditto", arguments: ["-x", "-k", input.path, output.path])]
-                } else if inputExt == "gz" {
-                    return [Invocation(toolName: "7zz", arguments: ["x", "-y", input.path, "-o\(output.path)"])]
-                } else if ["tar", "tgz"].contains(inputExt) {
-                    return [Invocation(toolName: "tar", arguments: ["-xf", input.path, "-C", output.path])]
-                } else if inputExt == "rar" {
-                    return [Invocation(toolName: "unar", arguments: ["-o", output.path, input.path])]
-                } else {
-                    return [Invocation(toolName: "7zz", arguments: ["x", "-y", input.path, "-o\(output.path)"])]
+                outputKind: .folder(suffix: "extracted"),
+                customRunner: { input, output, params, runner, jobId in
+                    let toolName: String
+                    if inputExt == "zip" {
+                        toolName = "ditto"
+                    } else if inputExt == "gz" {
+                        toolName = "7zz"
+                    } else if ["tar", "tgz"].contains(inputExt) {
+                        toolName = "tar"
+                    } else if inputExt == "rar" {
+                        toolName = "unar"
+                    } else {
+                        toolName = "7zz"
+                    }
+
+                    // 1. Preflight inspection where tool supports safe catalog listing
+                    try ArchiveGuard.preflightInspect(archiveURL: input, toolName: toolName, limits: .standard)
+
+                    // 2. Extract into scratch output directory with running cap
+                    let invocations: [Invocation]
+                    if inputExt == "zip" {
+                        invocations = [Invocation(toolName: "ditto", arguments: ["-x", "-k", input.path, output.path])]
+                    } else if inputExt == "gz" {
+                        invocations = [Invocation(toolName: "7zz", arguments: ["x", "-y", input.path, "-o\(output.path)"])]
+                    } else if ["tar", "tgz"].contains(inputExt) {
+                        invocations = [Invocation(toolName: "tar", arguments: ["-xf", input.path, "-C", output.path])]
+                    } else if inputExt == "rar" {
+                        invocations = [Invocation(toolName: "unar", arguments: ["-o", output.path, input.path])]
+                    } else {
+                        invocations = [Invocation(toolName: "7zz", arguments: ["x", "-y", input.path, "-o\(output.path)"])]
+                    }
+
+                    for inv in invocations {
+                        try ArchiveGuard.executeWithRunningCap(
+                            runner: runner,
+                            invocation: inv,
+                            scratchURL: output,
+                            jobId: jobId,
+                            limits: .standard
+                        )
+                    }
+
+                    // 3. Post-extraction validation
+                    try ArchiveGuard.validate(root: output, limits: .standard)
                 }
-            }
+            )
         ]
     }
 

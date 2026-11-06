@@ -1,0 +1,102 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (build, sign, package, and upload artifacts without publishing release)'
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  release:
+    name: Build & Package Release
+    runs-on: macos-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Environment Diagnostics
+        run: |
+          sw_vers
+          xcodebuild -version
+          swift --version
+
+      - name: Install dependencies via Homebrew
+        uses: ./.github/actions/install-dependencies
+
+      - name: Build Pasta.app
+        run: |
+          ./scripts/build_app.sh
+          codesign --verify --deep --strict Pasta.app
+
+      - name: Package Release Archive & Checksum
+        run: |
+          ditto -c -k --keepParent Pasta.app Pasta-macOS.zip
+          shasum -a 256 Pasta-macOS.zip > Pasta-macOS.zip.sha256
+          echo "SHA-256 Checksum:"
+          cat Pasta-macOS.zip.sha256
+
+      - name: Verify Packaged Release Archive (Download & Unpack Test)
+        run: |
+          echo "Verifying SHA-256 checksum..."
+          shasum -a 256 -c Pasta-macOS.zip.sha256
+          echo "Unpacking Pasta-macOS.zip into isolated directory..."
+          mkdir -p /tmp/pasta_release_verify
+          unzip -q Pasta-macOS.zip -d /tmp/pasta_release_verify
+          echo "Verifying unpacked application code signature..."
+          codesign --verify --deep --strict /tmp/pasta_release_verify/Pasta.app
+          echo "Executing headless pasta doctor --json from unpacked bundle..."
+          /tmp/pasta_release_verify/Pasta.app/Contents/MacOS/Pasta doctor --json
+          echo "Verifying pasta version..."
+          /tmp/pasta_release_verify/Pasta.app/Contents/MacOS/Pasta --version || true
+          rm -rf /tmp/pasta_release_verify
+          echo "Release archive verified successfully."
+
+      - name: Upload Artifacts (Action Run)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Pasta-macOS-Release
+          path: |
+            Pasta-macOS.zip
+            Pasta-macOS.zip.sha256
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v') && (github.event_name != 'workflow_dispatch' || !inputs.dry_run)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG_NAME="${GITHUB_REF#refs/tags/}"
+          cat << 'EOF' > release_body.md
+          ## Pasta 🍝 Release
+
+          A fast, native macOS file converter and utility with verified local processing, zero telemetry, and an interactive Shift-hold radial wheel.
+
+          ### ⚠️ Security & Signing Notice
+          - **Ad-Hoc Signed (Not Notarized)**: This build is ad-hoc signed and **not notarized** by an Apple Developer account.
+          - **First Launch ("Open Anyway")**: On macOS Gatekeeper warning:
+            1. Right-click (or Control-click) `Pasta.app` in `/Applications` and select **Open**.
+            2. In the Gatekeeper dialog, click **Open Anyway**.
+            3. Alternatively, navigate to **System Settings > Privacy & Security** and click **Open Anyway**.
+          - **Accessibility Permission**: For the Shift-hold radial wheel to intercept drag gestures outside the window, grant Pasta Accessibility permissions in **System Settings > Privacy & Security > Accessibility**.
+
+          ### 📦 Homebrew Prerequisites
+          Pasta processes files strictly on your local machine with zero telemetry and does not bundle third-party binary engines. Install dependencies via:
+          ```bash
+          brew install ffmpeg imagemagick webp ghostscript qpdf poppler exiftool pandoc librsvg unar sevenzip
+          ```
+
+          ### Checksums
+          Refer to `Pasta-macOS.zip.sha256` for SHA-256 verification.
+          EOF
+
+          gh release create "$TAG_NAME" Pasta-macOS.zip Pasta-macOS.zip.sha256 \
+            --title "Pasta $TAG_NAME" \
+            --notes-file release_body.md

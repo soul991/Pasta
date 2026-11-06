@@ -9,10 +9,14 @@ public final class JobRunner {
 
     public init() {}
 
-    private func isJobCancelled(_ jobId: UUID) -> Bool {
+    public func isCancelled(_ jobId: UUID) -> Bool {
         processLock.lock()
         defer { processLock.unlock() }
         return cancelledJobIds.contains(jobId)
+    }
+
+    private func isJobCancelled(_ jobId: UUID) -> Bool {
+        return isCancelled(jobId)
     }
 
     private func trackProcess(_ process: Process, for jobId: UUID) -> Bool {
@@ -93,18 +97,7 @@ public final class JobRunner {
     }
 
     public static func validateFolderJail(at rootURL: URL) throws {
-        let fm = FileManager.default
-        let rootCanon = rootURL.resolvingSymlinksInPath().standardizedFileURL.path
-        let rootWithSlash = rootCanon.hasSuffix("/") ? rootCanon : rootCanon + "/"
-        if let enumerator = fm.enumerator(at: rootURL, includingPropertiesForKeys: nil) {
-            for case let fileURL as URL in enumerator {
-                let resolved = fileURL.resolvingSymlinksInPath().standardizedFileURL.path
-                if resolved != rootCanon && !resolved.hasPrefix(rootWithSlash) {
-                    try? fm.removeItem(at: fileURL)
-                    throw PastaError.executionFailed(tool: "engine", exitCode: 1, output: "Path traversal detected in extracted archive")
-                }
-            }
-        }
+        try ArchiveGuard.validate(root: rootURL)
     }
 
     @discardableResult
@@ -150,12 +143,16 @@ public final class JobRunner {
             folderSuffix = ""
         }
 
-        let finalDestinationURL: URL
+        let reservation: OutputReservation
         if isFolder {
-            finalDestinationURL = OutputPlanner.planOutputDirectory(for: input, suffix: folderSuffix, destinationDirectory: effectiveDest)
+            reservation = try OutputPlanner.reserveOutputDirectory(for: input, suffix: folderSuffix, destinationDirectory: effectiveDest)
         } else {
-            finalDestinationURL = OutputPlanner.planOutput(for: input, targetExtension: action.outputExtension, destinationDirectory: effectiveDest)
+            reservation = try OutputPlanner.reserveOutput(for: input, targetExtension: action.outputExtension, destinationDirectory: effectiveDest)
         }
+        defer {
+            reservation.cleanup()
+        }
+        let finalDestinationURL = reservation.url
 
         PastaLogger.shared.info("Starting action \(action.id) on '\(input.lastPathComponent)' -> '\(finalDestinationURL.lastPathComponent)'")
 
@@ -180,6 +177,9 @@ public final class JobRunner {
 
         if let custom = action.customRunner {
             try custom(input, tempWorkingOutputURL, effectiveParams, self, jobId)
+            if isJobCancelled(jobId) {
+                throw PastaError.cancelled
+            }
         } else {
             let invocations = action.buildInvocationsWithParams(input, tempWorkingOutputURL, effectiveParams)
             guard !invocations.isEmpty else {
@@ -217,7 +217,7 @@ public final class JobRunner {
                 }
             }
             try Self.validateFolderJail(at: tempWorkingOutputURL)
-            try Self.safelyMoveOrReplace(source: tempWorkingOutputURL, destination: finalDestinationURL)
+            try reservation.publish(from: tempWorkingOutputURL)
             return finalDestinationURL
         }
 
@@ -234,8 +234,8 @@ public final class JobRunner {
             throw PastaError.outputNotFound(finalDestinationURL.path)
         }
 
-        // Safe atomic move
-        try Self.safelyMoveOrReplace(source: tempWorkingOutputURL, destination: finalDestinationURL)
+        // Safe atomic publish over reserved placeholder
+        try reservation.publish(from: tempWorkingOutputURL)
 
         PastaLogger.shared.info("Successfully completed \(action.id) -> '\(finalDestinationURL.path)'")
         return finalDestinationURL
@@ -284,17 +284,21 @@ public final class JobRunner {
         let effectiveDest = destinationDirectory ?? PreferencesManager.shared.effectiveDestination(for: firstInput)
 
         let isCompressBatch = action.id.contains("compress") && inputs.count > 1
-        let finalDestinationURL: URL
+        let reservation: OutputReservation
         if isCompressBatch {
-            finalDestinationURL = OutputPlanner.planOutputDirectory(for: firstInput, suffix: "compressed", destinationDirectory: effectiveDest)
+            reservation = try OutputPlanner.reserveOutputDirectory(for: firstInput, suffix: "compressed", destinationDirectory: effectiveDest)
         } else {
             switch action.outputKind {
             case .folder(let suffix):
-                finalDestinationURL = OutputPlanner.planOutputDirectory(for: firstInput, suffix: suffix, destinationDirectory: effectiveDest)
+                reservation = try OutputPlanner.reserveOutputDirectory(for: firstInput, suffix: suffix, destinationDirectory: effectiveDest)
             case .file:
-                finalDestinationURL = OutputPlanner.planOutput(for: firstInput, targetExtension: action.outputExtension, destinationDirectory: effectiveDest)
+                reservation = try OutputPlanner.reserveOutput(for: firstInput, targetExtension: action.outputExtension, destinationDirectory: effectiveDest)
             }
         }
+        defer {
+            reservation.cleanup()
+        }
+        let finalDestinationURL = reservation.url
 
         PastaLogger.shared.info("Starting batch action \(action.id) on \(inputs.count) files -> '\(finalDestinationURL.lastPathComponent)'")
 
@@ -324,10 +328,19 @@ public final class JobRunner {
 
         if let customBatch = action.customBatchRunner {
             try customBatch(inputs, tempWorkingOutputURL, effectiveParams, self, jobId)
+            if isJobCancelled(jobId) {
+                throw PastaError.cancelled
+            }
         } else if let custom = action.customRunner, isCompressBatch {
             for inp in inputs {
+                if isJobCancelled(jobId) {
+                    throw PastaError.cancelled
+                }
                 let dest = tempWorkingOutputURL.appendingPathComponent(inp.lastPathComponent)
                 try custom(inp, dest, effectiveParams, self, jobId)
+            }
+            if isJobCancelled(jobId) {
+                throw PastaError.cancelled
             }
         } else {
             let invocations = (action.buildBatchInvocationsWithParams ?? { ins, out, params in
@@ -345,7 +358,7 @@ public final class JobRunner {
         }
 
         if isCompressBatch {
-            try Self.safelyMoveOrReplace(source: tempWorkingOutputURL, destination: finalDestinationURL)
+            try reservation.publish(from: tempWorkingOutputURL)
             PastaLogger.shared.info("Successfully completed batch \(action.id) -> '\(finalDestinationURL.path)'")
             return finalDestinationURL
         }
@@ -375,7 +388,7 @@ public final class JobRunner {
                 }
             }
             try Self.validateFolderJail(at: tempWorkingOutputURL)
-            try Self.safelyMoveOrReplace(source: tempWorkingOutputURL, destination: finalDestinationURL)
+            try reservation.publish(from: tempWorkingOutputURL)
             return finalDestinationURL
         case .file:
             if !fm.fileExists(atPath: tempWorkingOutputURL.path) {
@@ -389,7 +402,7 @@ public final class JobRunner {
             guard fm.fileExists(atPath: tempWorkingOutputURL.path) else {
                 throw PastaError.outputNotFound(finalDestinationURL.path)
             }
-            try Self.safelyMoveOrReplace(source: tempWorkingOutputURL, destination: finalDestinationURL)
+            try reservation.publish(from: tempWorkingOutputURL)
             PastaLogger.shared.info("Successfully completed batch \(action.id) -> '\(finalDestinationURL.path)'")
             return finalDestinationURL
         }
@@ -472,10 +485,22 @@ extension JobRunner {
         let activityLock = NSLock()
         var lastActivityTime = Date().timeIntervalSinceReferenceDate
 
+        let outGroup = DispatchGroup()
+        var outDrained = false
+        let outDrainLock = NSLock()
         if redirectHandle == nil {
+            outGroup.enter()
             outPipe.fileHandleForReading.readabilityHandler = { handle in
                 let chunk = handle.availableData
-                if !chunk.isEmpty {
+                if chunk.isEmpty {
+                    handle.readabilityHandler = nil
+                    outDrainLock.lock()
+                    if !outDrained {
+                        outDrained = true
+                        outGroup.leave()
+                    }
+                    outDrainLock.unlock()
+                } else {
                     collector.appendOut(chunk)
                     activityLock.lock()
                     lastActivityTime = Date().timeIntervalSinceReferenceDate
@@ -484,9 +509,21 @@ extension JobRunner {
             }
         }
 
+        let errGroup = DispatchGroup()
+        var errDrained = false
+        let errDrainLock = NSLock()
+        errGroup.enter()
         errPipe.fileHandleForReading.readabilityHandler = { handle in
             let chunk = handle.availableData
-            if !chunk.isEmpty {
+            if chunk.isEmpty {
+                handle.readabilityHandler = nil
+                errDrainLock.lock()
+                if !errDrained {
+                    errDrained = true
+                    errGroup.leave()
+                }
+                errDrainLock.unlock()
+            } else {
                 collector.appendErr(chunk)
                 activityLock.lock()
                 lastActivityTime = Date().timeIntervalSinceReferenceDate
@@ -572,6 +609,8 @@ extension JobRunner {
         } catch {
             timer?.cancel()
             watchdogTimer?.cancel()
+            outPipe.fileHandleForReading.readabilityHandler = nil
+            errPipe.fileHandleForReading.readabilityHandler = nil
             throw PastaError.executionFailed(tool: invocation.toolName, exitCode: 1, output: error.localizedDescription)
         }
 
@@ -579,12 +618,14 @@ extension JobRunner {
         timer?.cancel()
         watchdogTimer?.cancel()
 
-        outPipe.fileHandleForReading.readabilityHandler = nil
-        errPipe.fileHandleForReading.readabilityHandler = nil
         if redirectHandle == nil {
+            _ = outGroup.wait(timeout: .now() + 2.0)
+            outPipe.fileHandleForReading.readabilityHandler = nil
             let remOut = outPipe.fileHandleForReading.readDataToEndOfFile()
             if !remOut.isEmpty { collector.appendOut(remOut) }
         }
+        _ = errGroup.wait(timeout: .now() + 2.0)
+        errPipe.fileHandleForReading.readabilityHandler = nil
         let remErr = errPipe.fileHandleForReading.readDataToEndOfFile()
         if !remErr.isEmpty { collector.appendErr(remErr) }
         // Safe to swallow: best-effort closing of redirected output handle
@@ -678,12 +719,16 @@ extension JobRunner {
                 folderSuffix = ""
             }
 
-            let finalDestinationURL: URL
+            let reservation: OutputReservation
             if isFolder {
-                finalDestinationURL = OutputPlanner.planOutputDirectory(for: input, suffix: folderSuffix, destinationDirectory: effectiveDest)
+                reservation = try OutputPlanner.reserveOutputDirectory(for: input, suffix: folderSuffix, destinationDirectory: effectiveDest)
             } else {
-                finalDestinationURL = OutputPlanner.planOutput(for: input, targetExtension: action.outputExtension, destinationDirectory: effectiveDest)
+                reservation = try OutputPlanner.reserveOutput(for: input, targetExtension: action.outputExtension, destinationDirectory: effectiveDest)
             }
+            defer {
+                reservation.cleanup()
+            }
+            let finalDestinationURL = reservation.url
 
             PastaLogger.shared.info("Starting async action \(action.id) on '\(input.lastPathComponent)' -> '\(finalDestinationURL.lastPathComponent)'")
 
@@ -707,6 +752,9 @@ extension JobRunner {
 
             if let custom = action.customRunner {
                 try custom(input, tempWorkingOutputURL, effectiveParams, self, jobId)
+                if self.isJobCancelled(jobId) {
+                    throw PastaError.cancelled
+                }
             } else {
                 let invocations = action.buildInvocationsWithParams(input, tempWorkingOutputURL, effectiveParams)
                 guard !invocations.isEmpty else {
@@ -747,7 +795,7 @@ extension JobRunner {
                     }
                 }
                 try Self.validateFolderJail(at: tempWorkingOutputURL)
-                try Self.safelyMoveOrReplace(source: tempWorkingOutputURL, destination: finalDestinationURL)
+                try reservation.publish(from: tempWorkingOutputURL)
                 return finalDestinationURL
             }
 
@@ -764,7 +812,7 @@ extension JobRunner {
                 throw PastaError.outputNotFound(finalDestinationURL.path)
             }
 
-            try Self.safelyMoveOrReplace(source: tempWorkingOutputURL, destination: finalDestinationURL)
+            try reservation.publish(from: tempWorkingOutputURL)
             PastaLogger.shared.info("Successfully completed async \(action.id) -> '\(finalDestinationURL.path)'")
             return finalDestinationURL
         } onCancel: {

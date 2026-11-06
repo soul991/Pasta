@@ -11,13 +11,9 @@ public struct PastaCLI {
 
         switch command {
         case "doctor":
-            runDoctor()
+            runDoctor(args: Array(args.dropFirst()))
         case "list-actions":
-            guard args.count >= 2 else {
-                fputs("Error: Missing file path for list-actions.\nUsage: pasta list-actions <file>\n", stderr)
-                exit(1)
-            }
-            runListActions(filePath: args[1])
+            runListActions(args: Array(args.dropFirst()))
         case "convert":
             runConvert(args: Array(args.dropFirst()))
         case "quick-action":
@@ -72,29 +68,56 @@ public struct PastaCLI {
         print("""
         Pasta - Offline macOS File Converter
         Usage:
-          pasta convert --action <action_id> [--param key=value] <file>...
-          pasta convert <file> --to <format>
-          pasta list-actions <file>
-          pasta doctor
+          pasta convert --action <action_id> [--dest <dir>] [--param key=value] <file>...
+          pasta convert <file> --to <format> [--dest <dir>]
+          pasta list-actions <file> | --all [--markdown]
+          pasta doctor [--json]
           pasta help
         """)
     }
 
-    private static func runDoctor() {
-        print("Pasta Environment & Engine Doctor:")
-        print("--------------------------------------------------")
-        for status in ToolLocator.shared.doctorStatuses() {
-            print("  \(status.displayLine)")
-        }
-        print("--------------------------------------------------")
-        if ToolLocator.shared.doctorStatuses().filter({ !$0.isOptional }).allSatisfy(\.isAvailable) {
-            print("All required engine binaries are available.")
+    private static func runDoctor(args: [String]) {
+        let isJson = args.contains("--json")
+        let report = ToolLocator.shared.doctorReportData(fetchVersions: true)
+        if isJson {
+            print(report.jsonString(prettyPrinted: true))
         } else {
-            print("Warning: Some tools are missing. Install missing tools via Homebrew.")
+            print(ToolLocator.shared.doctorReport(fetchVersions: true))
         }
     }
 
-    private static func runListActions(filePath: String) {
+    private static func runListActions(args: [String]) {
+        if args.contains("--all") {
+            if args.contains("--markdown") {
+                let actions = FormatRegistry.shared.allRegisteredActions()
+                print("| Category | Action ID | Display Name | Target Extension | Advanced |")
+                print("| :--- | :--- | :--- | :--- | :---: |")
+                for a in actions {
+                    let cat = a.category.displayName
+                    let id = "`\(a.id)`"
+                    let name = a.displayName
+                    let ext = a.outputExtension.isEmpty ? "(folder)" : ".\(a.outputExtension)"
+                    let adv = a.isAdvanced ? "Yes" : "No"
+                    print("| \(cat) | \(id) | \(name) | `\(ext)` | \(adv) |")
+                }
+            } else {
+                let actions = FormatRegistry.shared.allRegisteredActions()
+                print("All Registered Pasta Actions (\(actions.count) total):")
+                print("--------------------------------------------------")
+                for a in actions {
+                    let adv = a.isAdvanced ? " [Advanced]" : ""
+                    let ext = a.outputExtension.isEmpty ? "(folder)" : ".\(a.outputExtension)"
+                    print("  - \(a.id.padding(toLength: 30, withPad: " ", startingAt: 0)) (\(a.displayName) -> \(ext))\(adv)")
+                }
+            }
+            return
+        }
+
+        guard let filePath = args.first(where: { !$0.hasPrefix("-") }) else {
+            fputs("Error: Missing file path or flags for list-actions.\nUsage: pasta list-actions <file> | --all [--markdown]\n", stderr)
+            exit(1)
+        }
+
         let url = URL(fileURLWithPath: filePath)
         guard FileManager.default.fileExists(atPath: url.path) else {
             fputs("Error: File not found at '\(filePath)'\n", stderr)
@@ -128,6 +151,7 @@ public struct PastaCLI {
     private static func runConvert(args: [String]) {
         var actionId: String?
         var targetFormat: String?
+        var destinationDir: URL?
         var rawParams: [String: String] = [:]
         var files: [String] = []
 
@@ -143,6 +167,9 @@ public struct PastaCLI {
                 i += 1
             } else if arg == "--action" && i + 1 < args.count {
                 actionId = args[i + 1]
+                i += 2
+            } else if (arg == "--dest" || arg == "--destination") && i + 1 < args.count {
+                destinationDir = URL(fileURLWithPath: args[i + 1])
                 i += 2
             } else if arg == "--to" && i + 1 < args.count {
                 targetFormat = args[i + 1]
@@ -196,7 +223,7 @@ public struct PastaCLI {
                 }
             }
             do {
-                let output = try JobRunner.shared.runBatch(action: act, inputs: fileURLs, parameters: effectiveParams)
+                let output = try JobRunner.shared.runBatch(action: act, inputs: fileURLs, destinationDirectory: destinationDir, parameters: effectiveParams)
                 print("OK: \(output.path)")
                 return
             } catch {
@@ -242,7 +269,7 @@ public struct PastaCLI {
             }
 
             do {
-                let output = try JobRunner.shared.run(action: selectedAction, input: url, parameters: effectiveParams)
+                let output = try JobRunner.shared.run(action: selectedAction, input: url, destinationDirectory: destinationDir, parameters: effectiveParams)
                 print("OK: \(output.path)")
             } catch {
                 fputs("Failed to convert '\(url.lastPathComponent)': \(error.localizedDescription)\n", stderr)

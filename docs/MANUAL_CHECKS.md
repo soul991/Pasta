@@ -13,6 +13,27 @@
 
 ---
 
+## 0. Automated Local Mac Verification Script (`scripts/local_verify.sh`)
+
+To execute the complete end-to-end local hardware and binary verification on a real Mac:
+
+```bash
+./scripts/local_verify.sh
+```
+
+This single command executes and writes an unedited log to `local_verify_report.txt`, covering:
+1. **Host Environment**: Exact `sw_vers`, `xcodebuild -version`, `swift --version`.
+2. **Unit & Integration Suite (Debug)**: Full 840+ test assertions via `swift run PastaTests`.
+3. **Unit & Integration Suite (Release)**: Full 840+ test assertions via `swift run -c release PastaTests`.
+4. **Hardening Tests (Debug Binary)**: Section 8 security/path-traversal hardening suite via `PASTA_BIN=.build/debug/Pasta ./scripts/run_section8_tests.sh`.
+5. **App Bundle Build**: Clean `./scripts/build_app.sh` generation of `Pasta.app`.
+6. **Hardening Tests (Packaged App Bundle)**: Section 8 security hardening suite run directly against `Pasta.app/Contents/MacOS/Pasta`.
+7. **Codesign Integrity**: Strict deep bundle verification via `codesign --verify --deep --strict Pasta.app`.
+8. **Doctor Engine Catalog**: Full `pasta doctor --json` report from `Pasta.app`.
+9. **Retina App Icon Corner Alpha**: Mathematical verification that `assets/AppIcon-1024.png` is 1024x1024 RGBA with 4 fully transparent corner pixels (`alpha == 0`).
+
+---
+
 ## 1. Accessibility Permission Flow (`AXIsProcessTrusted`)
 
 CI runners operate in headless non-interactive environments where Accessibility API trust prompts cannot be displayed or confirmed.
@@ -290,3 +311,25 @@ Inspect `Pasta.app` on the macOS Dock, Launchpad, and Finder at standard resolut
 - [ ] **Active Slice Contrast**:
   - Hover over a sunset-filled active slice.
   - **Expected:** Active text label uses dark ink `#1A0F05`, ensuring > 8:1 contrast ratio against bright orange/amber fills.
+
+---
+
+## 9. Phase R0: Reliability, Hostile Archive & First Release Manual Checks
+
+- [ ] **Concurrent Conversion Collision Check**:
+  - Convert the same file twice quickly via Finder Quick Action or drop two same-named files from different folders onto the wheel into the same target directory.
+  - **Expected:** Both conversions succeed with unique numbered suffixes (e.g. `photo.jpg` and `photo 1.jpg`), both output files are completely intact, and neither file overwrites or truncates the other.
+- [ ] **Hostile Archive Wheel & Finder Rejection**:
+  - Open a hostile fixture archive (e.g. `slip_rel.zip` or `symlink_outside.tar`) via Finder Quick Action or drop onto the radial wheel.
+  - **Expected:** The job fails with a clear, readable error ("Path traversal detected" or "elevated privilege binary"). The destination directory is left untouched, and no files escape outside the scratch extraction jail into `/tmp` or the user directory.
+- [ ] **Fresh Mac / Restricted PATH Doctor & Settings**:
+  - Launch `Pasta.app` directly from Finder (where `PATH` is restricted to `/usr/bin:/bin:/usr/sbin:/sbin`).
+  - Open **Pasta Settings**.
+  - **Expected:** Settings shows the full `pasta doctor` status, detecting engines in `/opt/homebrew/bin` and `/usr/local/bin`. If any tools are missing, the "Copy Install Command" button copies the exact `brew install ...` command to the clipboard. Pasting and executing it in Terminal installs the tools, and reopening Settings updates the status to Available.
+- [ ] **First Release Clean Account Verification**:
+  - Download `Pasta-macOS.zip` from the GitHub Release (or workflow artifact) on a clean macOS test user account.
+  - Unzip and launch `Pasta.app`.
+  - Perform the Gatekeeper "Open Anyway" flow (Right click -> Open).
+  - Grant Accessibility permissions when prompted.
+  - Perform the Shift-hold drag test and verify the wheel opens, latches, and executes conversions cleanly.
+  - Capture clean screenshots and a screen recording / GIF of the wheel in action for the README.
