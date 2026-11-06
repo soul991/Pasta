@@ -54,8 +54,8 @@ As the read-only supervisor sub-agent, the supervisor adheres strictly to the fo
 | **A8** | Release Workflow Proof (Throwaway tag `v0.0.0-test`, download & verify) | **PASS** | `5e74179` | `42146162734` | Yes (845 u, 41 s8) | Yes (Release workflow) | **PASS** |
 | **A9** | Merge to `main` and Tag Beta (`v0.1.0-beta`, release assets) | **PASS** | `85ba9e4` | `42172435611` | Yes (845 u, 41 s8) | Yes (847 u, 41 s8) | **PASS** |
 | **B1** | Fix Phase 11 Block A 9 Failing Assertions (`soffice` stubs + root causes) | **PASS** | `6b0aee2` | `42187288812` | Yes (899 u, 41 s8) | Yes (901 u, 41 s8) | **PASS** |
-| **B2** | Complete Phase 11 Block A Scope (Office, OCR, PDF security, atomic reservation) | **READY TO SUPERVISE** | - | - | - | - | - |
-| **C1** | Per-Engine Concurrency Cap (Ghostscript 1, FFmpeg 2) | PENDING | - | - | - | - | - |
+| **B2** | Complete Phase 11 Block A Scope (Office, OCR, PDF security, atomic reservation) | **PASS** | `1df099d` | `42207897934` | Yes (903 u, 47 s8) | Yes (909 u, 47 s8) | **PASS** |
+| **C1** | Per-Engine Concurrency Cap (Ghostscript 1, FFmpeg 2) | **READY TO SUPERVISE** | - | - | - | - | - |
 | **C2** | Recent Conversions List (App Support store, privacy toggle, Reveal in Finder) | PENDING | - | - | - | - | - |
 | **C3** | Per-File-Type Wheel Profiles & Tab Flip Side | PENDING | - | - | - | - | - |
 
@@ -485,25 +485,62 @@ As the read-only supervisor sub-agent, the supervisor adheres strictly to the fo
 ---
 
 ### Step B2 — Finish Phase 11 Block A Scope
+- **Status**: **PASS**
+- **Verified Commits & PR**:
+  - Pull Request #9: `https://github.com/soul991/Pasta/pull/9` merged cleanly into `main` without force.
+  - Merge Commit on `main`: `1df099d4dc5fcb9c3f915fa016b8d966953767cb`.
+  - Head Commit on `wip/phase11-local-before-codex`: `cccc03a`.
+- **GitHub Actions Post-Merge CI on `main`**: `42207897934` (Status: completed, conclusion: success)
+  - Job 1: `Build & Verify (Xcode 27 arm64)` (ID `127859002541`) in 8m51s — **Success**
+    - Unit Tests (Debug): 909/909 Passed, 0 Failed
+    - Unit Tests (Release): 909/909 Passed, 0 Failed
+    - Section 8 Tests (Debug): 47/47 Passed, 0 Failed
+    - Section 8 Tests (Pasta.app): 47/47 Passed, 0 Failed
+    - Real-Timer Smoke Test (50x Loop): 50/50 Passed (100.0%)
+  - Job 2: `Compatibility fallback (macos-latest)` (ID `127862824273`) in 5m16s — **Success**
+    - Unit Tests: 909/909 Passed, 0 Failed
+    - Real-Timer Smoke Test (50x Loop): 50/50 Passed (100.0%)
+- **Independent Verification of Gate Items**:
+  1. **Block A Action Implementation & Behavioral Conversion Proof**: **PASS**
+     - Office conversions (Block A1): DOCX, PPTX, XLSX to PDF and page PNGs; multi-sheet XLSX extraction to separate CSVs (`Employees.csv`, `Salaries.csv`); CSV to XLSX; Markdown & HTML to PDF. All invocations isolate user profiles via `-env:UserInstallation=file:///tmp/Pasta_lo_<jobid>` and clean up in defer. Missing-tool handling, requirement notes, and wheel hiding verified.
+     - Vision OCR (Block A2): `image.ocr.text`, `pdf.ocr.text`, `image.ocr.searchable`, `pdf.ocr.searchable`. Headless-safe image loading via `ImageIO` (`CGImageSourceCreateWithURL`) and `CoreGraphics`/`CoreText` with fallback.
+     - PDF Security & Stamping (Block A3): AES-256 password encryption with strict 0600 temp files and password redaction from arguments/logs; PDF unlock; security edge cases (incorrect password, empty password `PastaError.invalidInput`, malformed PDF rejection); watermark stamping with dynamic font scaling and invisible text anchor; multi-page numbering ("Page X of Y").
+     - Extended Formats (Block A4): `image.to.bmp`, `image.to.avif`, `pdf.to.epub`, `pdf.to.pdfa` (archival PDF verified via exiftool).
+     - Every action is registered in `FormatRegistry`, listed by `pasta list-actions`, and proven with behavioral conversions (producing non-empty valid files, not structure-only registrations).
+  2. **Atomic Output Reservation & Hardening**: **PASS**
+     - Every action uses atomic `OutputReservation` (`open(O_CREAT | O_EXCL)` placeholder / folder reservation) to prevent file overwrites.
+     - Section 8 test suite expanded from 41 to 47 tests with hostile filename tests for all new Block A actions.
+     - Zero leftover `/tmp/Pasta_*` directories, zero orphan background processes, and 100% offline network verification confirmed.
+  3. **Documentation**: **PASS**
+     - `docs/PROGRESS.md` updated with honest Block A status and 20-item audit table.
+  4. **PR Merge & Dual CI**: **PASS**
+     - PR #9 merged cleanly without force. Both CI jobs green on PR run `42205353218` and post-merge run `42207897934`.
+  5. **Local Re-Check on macOS 27.2**: **PASS**
+     - `swift run PastaTests`: 903/903 Passed, 0 Failed (CI runs 909/909 due to LibreOffice presence; gracefully skipped locally).
+     - `./scripts/run_section8_tests.sh`: 47/47 Passed, 0 Failed.
+  6. **Assertion Integrity**: **PASS**
+     - Zero assertions weakened or deleted.
+- **Supervisor Verdict**: **PASS**
+
+---
+
+## 6. PART C — Small Features
+
+### Step C1 — Per-Engine Concurrency Cap
 - **Status**: **READY TO SUPERVISE**
+- **Pre-requisite Status**: All preceding steps in Part A (A1 to A9) and Part B (B1, B2) are verified and marked **PASS**. Proceeding to Step C1 is fully authorized.
 - **Scope**:
-  1. Complete full Block A scope per `docs/PROGRESS.md` and Phase 11 specifications:
-     - Office conversions (DOCX, XLSX, PPTX to PDF, HTML, TXT, CSV).
-     - OCR text extraction (Vision OCR to TXT, searchable PDF).
-     - PDF security (password encryption, decryption, watermarking, permissions).
-     - Extended format support and metadata handling.
-  2. Action registration and atomic reservation invariants:
-     - Each new action registered in `FormatRegistry`.
-     - Each new action listed in `pasta list-actions`.
-     - Each new action uses atomic `OutputReservation` (`O_CREAT | O_EXCL` placeholder / folder reservation) to prevent overwrites.
-     - Each new action has behavioral conversion proof (verifying real non-empty output, not structure-only registration).
-     - Each new action has missing-tool tests (human-readable error + `pasta doctor` install hint).
-  3. PDF security tested against encrypted and malformed fixtures generated at test time.
-  4. Update `docs/PROGRESS.md` to reflect honest status.
-  5. Merge `wip/phase11-local-before-codex` into `main` via PR with both CI jobs green.
+  1. Add a per-engine concurrency limit in the job queue:
+     - Default cap: `1` for `ghostscript` (`gs`).
+     - Default cap: `2` for `ffmpeg`.
+     - Other engines remain unchanged / unconstrained.
+     - Configured and stored in a single centralized table/structure and documented.
+  2. Implement concurrency enforcement test:
+     - When queuing 6 concurrent ffmpeg jobs, assert that no more than the cap (2) execute concurrently at any given instant (using a stub or concurrency-tracking harness).
+     - Ensure existing atomic-output tests and concurrent job tests continue to pass without regression.
+  3. Zero assertions weakened or deleted.
 - **Gate Criteria**:
-  - All Block A actions implemented, registered, and verified behaviorally.
-  - Unit tests pass with RED then GREEN proof.
-  - Zero structure-only tests claiming conversion proof.
-  - PR merged cleanly into `main` without force.
-  - Both CI jobs green on PR and post-merge.
+  - Per-engine concurrency cap correctly limits active processes to configured limits (gs: 1, ffmpeg: 2).
+  - Concurrency test passes locally and in CI.
+  - All existing unit tests and Section 8 hardening tests pass.
+  - Both CI jobs (`macos-27` and `macos-latest`) green on the step's branch.
