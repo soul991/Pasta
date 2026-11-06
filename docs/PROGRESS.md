@@ -255,7 +255,12 @@
 | History clearing (in-memory wipe & disk removal) | Step C2 | Storage | **DONE** | `43.8 Clear wipes in-memory items and removes or empties disk file` |
 | Malformed / corrupt store JSON resilience | Step C2 | Resilience | **DONE** | `43.9 Corrupt JSON store file recovers gracefully without crashing` |
 | Reveal in Finder integration with missing file handling | Step C2 | Finder | **DONE** | `43.10 Reveal in Finder on nonexistent file safely returns false without crashing`, `43.11 Reveal in Finder on item without fullPath safely returns false`, `43.12 Reveal in Finder on existing file returns true` |
-| Per-file-type wheel profiles & Tab flip side | Step C3 | UI / Wheel | Pending | Scheduled for Step C3 |
+| Per-file-type wheel profiles with ordered primary tools | Step C3 | Wheel Profiles | **DONE** | `44.1 Default file-type wheel profiles define primary actions for core formats`, `44.3 PDF profile primary actions contain essential compression and extraction tools` |
+| Secondary wheel action profiles reachable via Tab flip side | Step C3 | Wheel Profiles | **DONE** | `44.2 Default file-type wheel profiles define secondary (flip-side) actions`, `44.4 PDF profile secondary actions contain watermark, archival, and security tools` |
+| Tab flip side state transitions & reset | Step C3 | Interaction | **DONE** | `44.5 Initial side is primary`, `44.6 flipSide toggles side to secondary`, `44.7 flipSide second toggle returns side to primary`, `44.8 resetSide returns side to primary` |
+| Distinct primary and secondary wheel slot generation | Step C3 | Wheel Layout | **DONE** | `44.9 Primary and secondary slots produce distinct action sets for target file` |
+| Shift-hold duration and latching invariance | Step C3 | Interaction | **DONE** | `44.10 Existing Shift-hold duration and latch behavior preferences remain intact` |
+| Custom per-file-type profile override persistence | Step C3 | Storage | **DONE** | `44.11 Custom per-file-type profile can be updated and retrieved` |
 
 
 

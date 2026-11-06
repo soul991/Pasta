@@ -333,3 +333,24 @@ Inspect `Pasta.app` on the macOS Dock, Launchpad, and Finder at standard resolut
   - Grant Accessibility permissions when prompted.
   - Perform the Shift-hold drag test and verify the wheel opens, latches, and executes conversions cleanly.
   - Capture clean screenshots and a screen recording / GIF of the wheel in action for the README.
+
+---
+
+## 10. Part C Step C3: Per-File-Type Wheel Profiles & Tab Flip Side Checks
+
+- [ ] **Per-File-Type Primary Wheel Profiles**:
+  - Drag an image file (e.g. `photo.png`), hold <kbd>Shift</kbd> past 450 ms until the wheel blooms.
+  - **Expected:** Slots 0–5 display primary image actions (`image.to.jpeg`, `image.to.png`, `image.to.webp`, `image.to.gif`, `image.to.pdf`, `image.compress`).
+  - Drag a PDF file (e.g. `report.pdf`), hold <kbd>Shift</kbd>.
+  - **Expected:** Slots 0–5 display primary PDF actions (`pdf.to.text`, `pdf.to.images`, `pdf.advanced.split`, `pdf.compress`, `pdf.reorganize`, `pdf.merge`).
+- [ ] **Tab Flip Side Transition**:
+  - With the radial wheel open over a file, tap <kbd>Tab</kbd>.
+  - **Expected:** The wheel performs a haptic pulse and updates slots 0–5 to the secondary profile actions for that file type (e.g., for PDF: `pdf.watermark`, `pdf.pagenumbers`, `pdf.to.pdfa`, `pdf.to.epub`, `pdf.security.lock`, `pdf.ocr.text`). Slots 6 (More) and 7 (Customize) remain anchored.
+  - Tap <kbd>Tab</kbd> again.
+  - **Expected:** Wheel flips back to the primary action set.
+- [ ] **Shift-Hold & Latch Behavior Invariance**:
+  - Verify that Shift-hold charging ring (120 ms delay, 450 ms fill), latching open on Shift release, and auto-dismiss settings function identically regardless of whether the wheel is on the primary or flip side.
+  - Dismiss the wheel with <kbd>Esc</kbd>.
+  - Initiate a new drag with Shift hold.
+  - **Expected:** The wheel always resets and opens on the primary profile side by default.
+

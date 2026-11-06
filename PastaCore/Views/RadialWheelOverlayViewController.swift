@@ -500,7 +500,7 @@ public final class RadialWheelOverlayViewController: NSViewController {
             )
             nodeView.layer?.masksToBounds = false
 
-            nodeView.onHoverChanged = { [weak self] isHovered in
+            nodeView.onHoverChanged = { [weak self] (isHovered: Bool) in
                 if isHovered {
                     self?.backplateView.hoveredSlotIndex = slot.slotIndex
                 } else if self?.backplateView.hoveredSlotIndex == slot.slotIndex {
@@ -508,7 +508,7 @@ public final class RadialWheelOverlayViewController: NSViewController {
                 }
             }
 
-            nodeView.onSelect = { [weak self] kind in
+            nodeView.onSelect = { [weak self] (kind: WheelSlotKind) in
                 switch kind {
                 case .action(let act):
                     if act.parameters.isEmpty {
@@ -523,7 +523,7 @@ public final class RadialWheelOverlayViewController: NSViewController {
                 }
             }
 
-            nodeView.onDrop = { [weak self] kind, droppedFiles in
+            nodeView.onDrop = { [weak self] (kind: WheelSlotKind, droppedFiles: [URL]) in
                 self?.targetFiles = droppedFiles
                 switch kind {
                 case .action(let act):
@@ -764,7 +764,17 @@ public final class RadialWheelOverlayViewController: NSViewController {
             }
             return false
 
-        case 48: // Tab -> cycle focus through nodes
+        case 48: // Tab -> Flip between primary and secondary wheel profiles (Step C3) & cycle focus
+            if customizeSheet != nil && customizeSheet?.superview != nil {
+                return false
+            }
+            if moreView != nil && moreView?.superview != nil {
+                return false
+            }
+            if parameterPanelView != nil {
+                return false
+            }
+            flipWheelSide()
             guard !nodeViews.isEmpty else { return false }
             if let current = focusedSlotIndex {
                 focusedSlotIndex = (current + 1) % nodeViews.count
@@ -789,6 +799,7 @@ public final class RadialWheelOverlayViewController: NSViewController {
     }
 
     public func handleEscKey() -> Bool {
+        WheelLayoutModel.shared.resetSide()
         if customizeSheet != nil && customizeSheet?.superview != nil {
             dismissCustomizeSheet()
             return true
@@ -802,6 +813,87 @@ public final class RadialWheelOverlayViewController: NSViewController {
             return true
         }
         return false
+    }
+
+    public func flipWheelSide() {
+        _ = WheelLayoutModel.shared.flipSide()
+        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+        rebuildWheelSlots()
+    }
+
+    public func rebuildWheelSlots() {
+        guard let firstFile = targetFiles.first else { return }
+
+        let prevFocus = focusedSlotIndex
+        for v in nodeViews {
+            v.removeFromSuperview()
+        }
+        nodeViews.removeAll()
+        focusedSlotIndex = nil
+        backplateView.hoveredSlotIndex = nil
+
+        let slots = WheelLayoutModel.shared.slots(for: firstFile, isAdvanced: isAdvanced)
+        let orbitRadius = WheelLayoutModel.shared.currentSize.orbitRadius
+
+        for slot in slots {
+            let angle = slot.angle
+            let nx = WheelGeometry.wheelCenterX + (orbitRadius * cos(angle))
+            let ny = WheelGeometry.wheelCenterY + (orbitRadius * sin(angle))
+
+            let nodeView = RadialOptionNodeView(slotKind: slot.kind)
+            let nodeWidth: CGFloat = 64.0
+            let nodeHeight: CGFloat = 64.0
+            nodeView.frame = NSRect(
+                x: nx - (nodeWidth / 2.0),
+                y: ny - (nodeHeight / 2.0),
+                width: nodeWidth,
+                height: nodeHeight
+            )
+            nodeView.layer?.masksToBounds = false
+
+            nodeView.onHoverChanged = { [weak self] (isHovered: Bool) in
+                if isHovered {
+                    self?.backplateView.hoveredSlotIndex = slot.slotIndex
+                } else if self?.backplateView.hoveredSlotIndex == slot.slotIndex {
+                    self?.backplateView.hoveredSlotIndex = nil
+                }
+            }
+
+            nodeView.onSelect = { [weak self] (kind: WheelSlotKind) in
+                switch kind {
+                case .action(let act):
+                    if act.parameters.isEmpty {
+                        self?.performConversion(action: act)
+                    } else {
+                        self?.showParameterPanel(for: act)
+                    }
+                case .more:
+                    self?.showMoreView()
+                case .customize:
+                    self?.showCustomizeSheet()
+                }
+            }
+
+            nodeView.onDrop = { [weak self] (kind: WheelSlotKind, droppedFiles: [URL]) in
+                self?.targetFiles = droppedFiles
+                switch kind {
+                case .action(let act):
+                    if act.parameters.isEmpty {
+                        self?.performConversion(action: act)
+                    } else {
+                        self?.showParameterPanel(for: act)
+                    }
+                case .more:
+                    self?.showMoreView()
+                case .customize:
+                    self?.showCustomizeSheet()
+                }
+            }
+
+            contentHost.addSubview(nodeView)
+            nodeViews.append(nodeView)
+        }
+        focusedSlotIndex = prevFocus
     }
 
     public override func cancelOperation(_ sender: Any?) {
