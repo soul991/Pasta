@@ -38,6 +38,10 @@ public final class RadialWheelCustomizeSheet: NSView {
     private let keepOpenCheckbox = NSButton(checkboxWithTitle: "Keep wheel open after running", target: nil, action: nil)
     private let autoDismissCheckbox = NSButton(checkboxWithTitle: "Auto-close wheel after conversion", target: nil, action: nil)
     private let showRingCheckbox = NSButton(checkboxWithTitle: "Show charging progress ring", target: nil, action: nil)
+    private let recentConversionsCheckbox = NSButton(checkboxWithTitle: "Record recent conversions (local only)", target: nil, action: nil)
+    private let storeFullPathCheckbox = NSButton(checkboxWithTitle: "Store full file paths in recent history", target: nil, action: nil)
+    private let privacyNoteLabel = NSTextField(wrappingLabelWithString: "Stored strictly on this Mac. Disable to store filenames only for privacy.")
+    private let clearHistoryButton = NSButton(title: "Clear Recent History", target: nil, action: nil)
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: NSRect(x: 0, y: 0, width: 360, height: 480))
@@ -480,6 +484,32 @@ public final class RadialWheelCustomizeSheet: NSView {
         showRingCheckbox.action = #selector(showRingToggled)
         behaviorContainer.addSubview(showRingCheckbox)
 
+        let historyLabel = makeSectionLabel("History & Privacy")
+        behaviorContainer.addSubview(historyLabel)
+
+        recentConversionsCheckbox.translatesAutoresizingMaskIntoConstraints = false
+        recentConversionsCheckbox.state = PreferencesManager.shared.recentConversionsEnabled ? .on : .off
+        recentConversionsCheckbox.target = self
+        recentConversionsCheckbox.action = #selector(recentConversionsToggled)
+        behaviorContainer.addSubview(recentConversionsCheckbox)
+
+        storeFullPathCheckbox.translatesAutoresizingMaskIntoConstraints = false
+        storeFullPathCheckbox.state = PreferencesManager.shared.recentConversionsStoreFullPath ? .on : .off
+        storeFullPathCheckbox.target = self
+        storeFullPathCheckbox.action = #selector(storeFullPathToggled)
+        behaviorContainer.addSubview(storeFullPathCheckbox)
+
+        privacyNoteLabel.translatesAutoresizingMaskIntoConstraints = false
+        privacyNoteLabel.font = NSFont.systemFont(ofSize: 10, weight: .regular)
+        privacyNoteLabel.textColor = ThemeManager.shared.textSecondaryColor
+        behaviorContainer.addSubview(privacyNoteLabel)
+
+        clearHistoryButton.translatesAutoresizingMaskIntoConstraints = false
+        clearHistoryButton.bezelStyle = .rounded
+        clearHistoryButton.target = self
+        clearHistoryButton.action = #selector(clearHistoryClicked)
+        behaviorContainer.addSubview(clearHistoryButton)
+
         NSLayoutConstraint.activate([
             holdLabel.topAnchor.constraint(equalTo: behaviorContainer.topAnchor),
             holdLabel.leadingAnchor.constraint(equalTo: behaviorContainer.leadingAnchor),
@@ -504,7 +534,26 @@ public final class RadialWheelCustomizeSheet: NSView {
 
             showRingCheckbox.topAnchor.constraint(equalTo: autoDismissCheckbox.bottomAnchor, constant: 8),
             showRingCheckbox.leadingAnchor.constraint(equalTo: behaviorContainer.leadingAnchor),
-            showRingCheckbox.trailingAnchor.constraint(equalTo: behaviorContainer.trailingAnchor)
+            showRingCheckbox.trailingAnchor.constraint(equalTo: behaviorContainer.trailingAnchor),
+
+            historyLabel.topAnchor.constraint(equalTo: showRingCheckbox.bottomAnchor, constant: 14),
+            historyLabel.leadingAnchor.constraint(equalTo: behaviorContainer.leadingAnchor),
+
+            recentConversionsCheckbox.topAnchor.constraint(equalTo: historyLabel.bottomAnchor, constant: 6),
+            recentConversionsCheckbox.leadingAnchor.constraint(equalTo: behaviorContainer.leadingAnchor),
+            recentConversionsCheckbox.trailingAnchor.constraint(equalTo: behaviorContainer.trailingAnchor),
+
+            storeFullPathCheckbox.topAnchor.constraint(equalTo: recentConversionsCheckbox.bottomAnchor, constant: 4),
+            storeFullPathCheckbox.leadingAnchor.constraint(equalTo: behaviorContainer.leadingAnchor),
+            storeFullPathCheckbox.trailingAnchor.constraint(equalTo: behaviorContainer.trailingAnchor),
+
+            privacyNoteLabel.topAnchor.constraint(equalTo: storeFullPathCheckbox.bottomAnchor, constant: 2),
+            privacyNoteLabel.leadingAnchor.constraint(equalTo: behaviorContainer.leadingAnchor),
+            privacyNoteLabel.trailingAnchor.constraint(equalTo: behaviorContainer.trailingAnchor),
+
+            clearHistoryButton.topAnchor.constraint(equalTo: privacyNoteLabel.bottomAnchor, constant: 8),
+            clearHistoryButton.leadingAnchor.constraint(equalTo: behaviorContainer.leadingAnchor),
+            clearHistoryButton.bottomAnchor.constraint(lessThanOrEqualTo: behaviorContainer.bottomAnchor)
         ])
     }
 
@@ -564,6 +613,8 @@ public final class RadialWheelCustomizeSheet: NSView {
         keepOpenCheckbox.contentTintColor = accent
         autoDismissCheckbox.contentTintColor = accent
         showRingCheckbox.contentTintColor = accent
+        recentConversionsCheckbox.contentTintColor = accent
+        storeFullPathCheckbox.contentTintColor = accent
     }
 
     @objc private func glassStyleChanged() {
@@ -698,6 +749,22 @@ public final class RadialWheelCustomizeSheet: NSView {
 
     @objc private func showRingToggled() {
         PreferencesManager.shared.showChargingRing = (showRingCheckbox.state == .on)
+    }
+
+    @objc private func recentConversionsToggled() {
+        PreferencesManager.shared.recentConversionsEnabled = (recentConversionsCheckbox.state == .on)
+    }
+
+    @objc private func storeFullPathToggled() {
+        PreferencesManager.shared.recentConversionsStoreFullPath = (storeFullPathCheckbox.state == .on)
+    }
+
+    @objc private func clearHistoryClicked() {
+        RecentConversionsStore.shared.clear()
+        clearHistoryButton.title = "History Cleared!"
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+            self?.clearHistoryButton.title = "Clear Recent History"
+        }
     }
 
     // MARK: - Testing Helpers

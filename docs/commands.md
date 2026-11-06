@@ -467,4 +467,23 @@ To protect system responsiveness and prevent memory exhaustion from resource-int
 
 The limits are centralized in `BatchJobQueue.perEngineLimits` and enforced dynamically via global slot tracking and queue wakeup callbacks.
 
+---
+
+## 8. Recent Conversions History & Privacy (Part C Step C2)
+
+Pasta maintains a local, privacy-respecting conversion history:
+
+- **Storage Location**: `~/Library/Application Support/Pasta/recent_conversions.json`
+- **Network Policy**: 100% offline. Zero telemetry, tracking, or network requests.
+- **Privacy Controls (`PreferencesManager`)**:
+  - `recentConversionsEnabled`: Master toggle (default: `true`). When disabled, no conversion records are saved.
+  - `recentConversionsStoreFullPath`: Path privacy toggle (default: `true`). When disabled, only the output filename and timestamp are stored, suppressing the absolute directory path.
+- **Finder Integration**:
+  - `RecentConversionsStore.shared.revealInFinder(item:)` activates macOS Finder selecting the target file via `NSWorkspace.shared.activateFileViewerSelecting`. If the file was moved or deleted, it returns `false` safely without crashing or throwing.
+- **Error Resilience**:
+  - Corrupt or malformed JSON stores are caught gracefully during deserialization, logging a warning and resetting without interrupting app launch or conversions.
+- **Clear Action**:
+  - Accessible via Settings or programmatic API (`RecentConversionsStore.shared.clear()`) to instantly wipe in-memory records and delete the on-disk JSON store.
+
+
 

@@ -5923,6 +5923,97 @@ sys.exit(0)
                details: "Recorded peak: \(gsPeak), expected <= 1")
 }
 
+do {
+    print("\n--- 43. Recent Conversions Store Tests (Step C2) ---")
+
+    // 43.1 Default preferences for recent conversions
+    let defaultEnabled = PreferencesManager.shared.recentConversionsEnabled
+    let defaultStoreFullPath = PreferencesManager.shared.recentConversionsStoreFullPath
+    assertTest(defaultEnabled == true && defaultStoreFullPath == true,
+               "43.1 Default preferences for recent conversions (enabled == true, storeFullPath == true)",
+               details: "enabled: \(defaultEnabled), storeFullPath: \(defaultStoreFullPath)")
+
+    // Setup isolated temporary store file
+    let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("Pasta_recents_test_\(UUID().uuidString)")
+    try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+    defer {
+        try? FileManager.default.removeItem(at: tempDir)
+    }
+    let storeFile = tempDir.appendingPathComponent("recent_conversions.json")
+    let dummyOutputFile = tempDir.appendingPathComponent("output_sample.png")
+    try? Data("dummy_png".utf8).write(to: dummyOutputFile)
+
+    let store = RecentConversionsStore(fileURL: storeFile)
+    assertTest(store.items.isEmpty, "43.2 Initial fresh store has empty items list")
+
+    // Record conversion
+    let recordedItem = store.record(actionId: "image.to.png", outputURL: dummyOutputFile)
+    assertTest(recordedItem != nil && store.items.count == 1,
+               "43.3 RecentConversionsStore records conversion item",
+               details: "items count: \(store.items.count)")
+    if let item = store.items.first {
+        assertTest(item.actionId == "image.to.png" && item.fileName == "output_sample.png" && item.fullPath == dummyOutputFile.path,
+                   "43.4 Recorded item contains actionId, fileName, and fullPath",
+                   details: "item: actionId=\(item.actionId), fileName=\(item.fileName), fullPath=\(String(describing: item.fullPath))")
+    }
+
+    // 43.5 Persistence across store instances
+    let reloadedStore = RecentConversionsStore(fileURL: storeFile)
+    assertTest(reloadedStore.items.count == 1 && reloadedStore.items.first?.fileName == "output_sample.png",
+               "43.5 Recent conversions persist across store instances reading from disk",
+               details: "reloaded count: \(reloadedStore.items.count)")
+
+    // 43.6 Privacy setting: disabled history tracking
+    PreferencesManager.shared.recentConversionsEnabled = false
+    let dummyPdf = tempDir.appendingPathComponent("output_test.pdf")
+    try? Data("dummy_pdf".utf8).write(to: dummyPdf)
+    let rejectedItem = store.record(actionId: "pdf.compress", outputURL: dummyPdf)
+    assertTest(rejectedItem == nil && store.items.count == 1,
+               "43.6 Privacy off switch prevents recording new conversion items",
+               details: "rejectedItem: \(String(describing: rejectedItem)), store count: \(store.items.count)")
+    PreferencesManager.shared.recentConversionsEnabled = true
+
+    // 43.7 Privacy setting: fullPath omitted when storeFullPath is false
+    PreferencesManager.shared.recentConversionsStoreFullPath = false
+    let noPathItem = store.record(actionId: "pdf.to.txt", outputURL: dummyPdf)
+    assertTest(noPathItem != nil && noPathItem?.fullPath == nil && noPathItem?.fileName == "output_test.pdf",
+               "43.7 Disabling storeFullPath records fileName but omits fullPath",
+               details: "noPathItem fullPath: \(String(describing: noPathItem?.fullPath))")
+    PreferencesManager.shared.recentConversionsStoreFullPath = true
+
+    // 43.8 Clear wipes memory and disk store
+    store.clear()
+    let postClearStore = RecentConversionsStore(fileURL: storeFile)
+    assertTest(store.items.isEmpty && postClearStore.items.isEmpty,
+               "43.8 Clear wipes in-memory items and removes or empties disk file",
+               details: "store items: \(store.items.count), disk items: \(postClearStore.items.count)")
+
+    // 43.9 Corrupt/malformed store file recovery
+    let corruptFile = tempDir.appendingPathComponent("corrupt_store.json")
+    try? "{\n  \"invalid\": true,\n  corrupted json bytes...".write(to: corruptFile, atomically: true, encoding: .utf8)
+    let corruptStore = RecentConversionsStore(fileURL: corruptFile)
+    assertTest(corruptStore.items.isEmpty,
+               "43.9 Corrupt JSON store file recovers gracefully without crashing",
+               details: "items count on corrupt file: \(corruptStore.items.count)")
+
+    // 43.10 Reveal in Finder handles missing files and existing files gracefully
+    let missingItem = RecentConversionItem(actionId: "test", fileName: "ghost.txt", fullPath: "/tmp/nonexistent_pasta_ghost_\(UUID().uuidString).txt")
+    let missingRevealed = store.revealInFinder(item: missingItem)
+    assertTest(missingRevealed == false,
+               "43.10 Reveal in Finder on nonexistent file safely returns false without crashing")
+
+    let noPathRecent = RecentConversionItem(actionId: "test", fileName: "nopath.txt", fullPath: nil)
+    let noPathRevealed = store.revealInFinder(item: noPathRecent)
+    assertTest(noPathRevealed == false,
+               "43.11 Reveal in Finder on item without fullPath safely returns false")
+
+    let existingItem = RecentConversionItem(actionId: "test", fileName: dummyOutputFile.lastPathComponent, fullPath: dummyOutputFile.path)
+    let existingRevealed = store.revealInFinder(item: existingItem)
+    assertTest(existingRevealed == true,
+               "43.12 Reveal in Finder on existing file returns true",
+               details: "existingRevealed: \(existingRevealed)")
+}
+
 print("\n==================================================")
 print("Test Suite Summary: \(passedTests)/\(totalTests) Passed, \(failedTests) Failed")
 print("==================================================")
