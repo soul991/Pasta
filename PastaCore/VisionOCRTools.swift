@@ -4,6 +4,7 @@ import Vision
 import CoreGraphics
 import CoreText
 import PDFKit
+import ImageIO
 
 public final class VisionOCRTools {
     public static let shared = VisionOCRTools()
@@ -14,14 +15,22 @@ public final class VisionOCRTools {
 
     public init() {}
 
+    private func loadCGImage(from url: URL) -> CGImage? {
+        if let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+           let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil) {
+            return cgImage
+        }
+        if let nsImage = NSImage(contentsOf: url),
+           let cgImage = nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil) {
+            return cgImage
+        }
+        return nil
+    }
+
     /// Extracts recognized text from an image file URL
     public func recognizeText(from imageURL: URL, language: String? = nil) throws -> String {
-        guard let image = NSImage(contentsOf: imageURL) else {
+        guard let cgImage = loadCGImage(from: imageURL) else {
             throw PastaError.invalidInput("Cannot read or decode image file at \(imageURL.lastPathComponent)")
-        }
-
-        guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
-            throw PastaError.invalidInput("Unable to extract CGImage representation from \(imageURL.lastPathComponent)")
         }
 
         let observations = try performRecognition(on: cgImage, language: language)
@@ -85,12 +94,8 @@ public final class VisionOCRTools {
 
     /// Creates a searchable PDF from an image file
     public func createSearchablePDF(from imageURL: URL, outputURL: URL, language: String? = nil) throws {
-        guard let image = NSImage(contentsOf: imageURL) else {
+        guard let cgImage = loadCGImage(from: imageURL) else {
             throw PastaError.invalidInput("Cannot read or decode image file at \(imageURL.lastPathComponent)")
-        }
-
-        guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
-            throw PastaError.invalidInput("Unable to extract CGImage representation from \(imageURL.lastPathComponent)")
         }
 
         let observations = try performRecognition(on: cgImage, language: language)
@@ -205,7 +210,14 @@ public final class VisionOCRTools {
         do {
             try handler.perform([request])
         } catch {
-            throw PastaError.executionFailed(tool: "VisionOCR", exitCode: 1, output: error.localizedDescription)
+            // Fallback for headless environments or runners where accurate level / language correction is unsupported
+            request.recognitionLevel = .fast
+            request.usesLanguageCorrection = false
+            do {
+                try handler.perform([request])
+            } catch let fallbackError {
+                throw PastaError.executionFailed(tool: "VisionOCR", exitCode: 1, output: fallbackError.localizedDescription)
+            }
         }
 
         if let err = recognitionError {

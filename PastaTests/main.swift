@@ -4681,17 +4681,23 @@ do {
 
     // Generate test image with known text
     let testImgURL = ocrDir.appendingPathComponent("test_ocr.png")
-    let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 800, pixelsHigh: 120, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .calibratedRGB, bytesPerRow: 0, bitsPerPixel: 0)!
-    NSGraphicsContext.saveGraphicsState()
-    let ctx = NSGraphicsContext(bitmapImageRep: rep)!
-    NSGraphicsContext.current = ctx
-    NSColor.white.setFill()
-    NSRect(x: 0, y: 0, width: 800, height: 120).fill()
-    let font = NSFont.boldSystemFont(ofSize: 32)
-    let str = NSAttributedString(string: "PASTA OCR ACCURATE TEST 2026", attributes: [.font: font, .foregroundColor: NSColor.black])
-    str.draw(at: NSPoint(x: 20, y: 40))
-    NSGraphicsContext.restoreGraphicsState()
-    let pngData = rep.representation(using: .png, properties: [:])!
+    let ocrW = 800
+    let ocrH = 120
+    let ocrColorSpace = CGColorSpaceCreateDeviceRGB()
+    let ocrCtx = CGContext(data: nil, width: ocrW, height: ocrH, bitsPerComponent: 8, bytesPerRow: 0, space: ocrColorSpace, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+    ocrCtx.setFillColor(NSColor.white.cgColor)
+    ocrCtx.fill(CGRect(x: 0, y: 0, width: ocrW, height: ocrH))
+    let ocrFont = CTFontCreateWithName("Helvetica-Bold" as CFString, 32, nil)
+    let ocrAttrStr = CFAttributedStringCreate(nil, "PASTA OCR ACCURATE TEST 2026" as CFString, [
+        kCTFontAttributeName: ocrFont,
+        kCTForegroundColorAttributeName: NSColor.black.cgColor
+    ] as CFDictionary)!
+    let ocrLine = CTLineCreateWithAttributedString(ocrAttrStr)
+    ocrCtx.textPosition = CGPoint(x: 20, y: 40)
+    CTLineDraw(ocrLine, ocrCtx)
+    let ocrCgImg = ocrCtx.makeImage()!
+    let ocrRep = NSBitmapImageRep(cgImage: ocrCgImg)
+    let pngData = ocrRep.representation(using: .png, properties: [:])!
     try pngData.write(to: testImgURL)
 
     // Recognize text from image
