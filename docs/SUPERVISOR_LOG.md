@@ -55,8 +55,8 @@ As the read-only supervisor sub-agent, the supervisor adheres strictly to the fo
 | **A9** | Merge to `main` and Tag Beta (`v0.1.0-beta`, release assets) | **PASS** | `85ba9e4` | `42172435611` | Yes (845 u, 41 s8) | Yes (847 u, 41 s8) | **PASS** |
 | **B1** | Fix Phase 11 Block A 9 Failing Assertions (`soffice` stubs + root causes) | **PASS** | `6b0aee2` | `42187288812` | Yes (899 u, 41 s8) | Yes (901 u, 41 s8) | **PASS** |
 | **B2** | Complete Phase 11 Block A Scope (Office, OCR, PDF security, atomic reservation) | **PASS** | `1df099d` | `42207897934` | Yes (903 u, 47 s8) | Yes (909 u, 47 s8) | **PASS** |
-| **C1** | Per-Engine Concurrency Cap (Ghostscript 1, FFmpeg 2) | **READY TO SUPERVISE** | - | - | - | - | - |
-| **C2** | Recent Conversions List (App Support store, privacy toggle, Reveal in Finder) | PENDING | - | - | - | - | - |
+| **C1** | Per-Engine Concurrency Cap (Ghostscript 1, FFmpeg 2) | **PASS** | `8cf019c` | `42220883417` | Yes (908 u, 47 s8) | Yes (914 u, 47 s8) | **PASS** |
+| **C2** | Recent Conversions List (App Support store, privacy toggle, Reveal in Finder) | **READY TO SUPERVISE** | - | - | - | - | - |
 | **C3** | Per-File-Type Wheel Profiles & Tab Flip Side | PENDING | - | - | - | - | - |
 
 ---
@@ -527,20 +527,68 @@ As the read-only supervisor sub-agent, the supervisor adheres strictly to the fo
 ## 6. PART C — Small Features
 
 ### Step C1 — Per-Engine Concurrency Cap
+- **Status**: **PASS**
+- **Verified Commits & PR**:
+  - Pull Request #10: `https://github.com/soul991/Pasta/pull/10` merged cleanly into `main` without force.
+  - Merge Commit on `main`: `8cf019c5a39843840c336f90ccc279a086be0a62`.
+  - Head Commit: `c6270d0`.
+  - RED Baseline Commit: `dbe6c31`.
+- **GitHub Actions CI Runs**:
+  - RED Baseline Run: `42215819405` (failed as expected; Job `127885439990` exited 1, logging failures on missing limit table and uncontrolled concurrency).
+  - PR #10 Run: `42218821164` (Status: completed, conclusion: success).
+  - Post-Merge Run on `main`: `42220883417` (Status: completed, conclusion: success).
+    - Job 1: `Build & Verify (Xcode 27 arm64)` (ID `127902322605`) in 12m31s — **Success**
+      - Unit Tests (Debug): 914/914 Passed, 0 Failed
+      - Unit Tests (Release): 914/914 Passed, 0 Failed
+      - Section 8 Tests (Debug): 47/47 Passed, 0 Failed
+      - Section 8 Tests (Pasta.app): 47/47 Passed, 0 Failed
+      - Real-Timer Smoke Test (50x Loop): 50/50 Passed (100.0%)
+    - Job 2: `Compatibility fallback (macos-latest)` (ID `127907735214`) in 6m49s — **Success**
+      - Unit Tests: 914/914 Passed, 0 Failed
+      - Real-Timer Smoke Test (50x Loop): 50/50 Passed (100.0%)
+- **Independent Verification of Gate Items**:
+  1. **Per-Engine Concurrency Architecture**: **PASS**
+     - Centralized dictionary `BatchJobQueue.perEngineLimits` defines exact per-engine caps: `ghostscript` / `gs`: 1, `ffmpeg`: 2, all other engines unconstrained.
+     - `ConversionAction.engineFamily` maps tools to their engine families (`.ffmpeg`, `.ghostscript`, `.unconstrained`).
+     - Engine slot tracking and thread-safe wakeups prevent process contention under load.
+  2. **Automated Concurrency Enforcement Verification (RED & GREEN)**: **PASS**
+     - Section 42 test suite (`PastaTests/main.swift`):
+       - 42.1: Default per-engine limits table specifies cap 2 for ffmpeg and 1 for ghostscript.
+       - 42.2: All 6 queued ffmpeg jobs complete successfully.
+       - 42.3: Peak concurrency for 6 queued ffmpeg jobs never exceeds cap 2 (measured via concurrency tracking harness).
+       - 42.4: All 4 queued ghostscript jobs complete successfully.
+       - 42.5: Peak concurrency for 4 queued ghostscript jobs never exceeds cap 1 (measured via concurrency tracking harness).
+     - RED evidence confirmed in CI run `42215819405` (failed with nil limits and peak concurrency 4 on ghostscript).
+     - GREEN evidence confirmed locally (908/908) and in CI (914/914).
+  3. **Documentation**: **PASS**
+     - Documented in `docs/commands.md` Section 7 ("Per-Engine Concurrency Limits") and `docs/PROGRESS.md`.
+  4. **Local Re-Check on macOS 27.2**: **PASS**
+     - `swift run PastaTests`: 908/908 Passed, 0 Failed.
+     - `./scripts/run_section8_tests.sh`: 47/47 Passed, 0 Failed.
+     - App bundle Section 8 test: 47/47 Passed, 0 Failed.
+  5. **Assertion Integrity**: **PASS**
+     - Zero assertions weakened or deleted. All existing unit tests and Section 8 hardening tests pass without regression.
+- **Supervisor Verdict**: **PASS**
+
+---
+
+### Step C2 — Recent Conversions List
 - **Status**: **READY TO SUPERVISE**
-- **Pre-requisite Status**: All preceding steps in Part A (A1 to A9) and Part B (B1, B2) are verified and marked **PASS**. Proceeding to Step C1 is fully authorized.
 - **Scope**:
-  1. Add a per-engine concurrency limit in the job queue:
-     - Default cap: `1` for `ghostscript` (`gs`).
-     - Default cap: `2` for `ffmpeg`.
-     - Other engines remain unchanged / unconstrained.
-     - Configured and stored in a single centralized table/structure and documented.
-  2. Implement concurrency enforcement test:
-     - When queuing 6 concurrent ffmpeg jobs, assert that no more than the cap (2) execute concurrently at any given instant (using a stub or concurrency-tracking harness).
-     - Ensure existing atomic-output tests and concurrent job tests continue to pass without regression.
-  3. Zero assertions weakened or deleted.
+  1. Local-only conversion tracking:
+     - No network code, tracking, or telemetry.
+     - Store conversion metadata (action id, output filename, timestamp) in the app's Application Support folder (`~/Library/Application Support/Pasta/recent_conversions.json`).
+     - Store the full output directory/path only if the user enables the path storage toggle.
+  2. Privacy controls and settings:
+     - Settings toggle to disable history tracking (default ON with a prominent local-privacy note).
+     - "Clear History" button in Settings and history UI.
+  3. Finder integration:
+     - "Reveal in Finder" action for recent conversion entries (`NSWorkspace.shared.activateFileViewerSelecting`).
+  4. Error resilience and test coverage:
+     - Automated tests for record persistence, clearing history, disabling tracking, handling corrupted/malformed store files (graceful reset without crash), and missing output files (graceful handling when file was deleted/moved).
+  5. Zero assertions weakened or deleted.
 - **Gate Criteria**:
-  - Per-engine concurrency cap correctly limits active processes to configured limits (gs: 1, ffmpeg: 2).
-  - Concurrency test passes locally and in CI.
-  - All existing unit tests and Section 8 hardening tests pass.
-  - Both CI jobs (`macos-27` and `macos-latest`) green on the step's branch.
+  - Recent conversions store operates locally without network calls.
+  - Privacy toggle and Clear button function as specified.
+  - Tests pass for persistence, clearing, corrupt JSON store, and missing files.
+  - Both CI jobs green on the step's PR.
