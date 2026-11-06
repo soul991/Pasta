@@ -243,7 +243,6 @@ public final class ToolLocator {
     }
 
     public func requireTool(_ name: String) throws -> URL {
-    public func requireTool(_ name: String) throws -> URL {
         guard let url = findTool(name) ?? findOptionalTool(name) else {
             throw PastaError.missingTool(name)
         }
