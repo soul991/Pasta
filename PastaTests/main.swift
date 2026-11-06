@@ -4672,6 +4672,36 @@ do {
     let moreActs = WheelLayoutModel.shared.moreActions(for: URL(fileURLWithPath: "sample.docx"), isAdvanced: false)
     assertTest(moreActs.contains { $0.id == "docx.to.pdf" }, "37.1 docx.to.pdf appears in More actions list")
     ToolLocator.shared.setUnavailableOverride(tool: "soffice", isUnavailable: false)
+
+    // Behavioral LibreOffice conversion tests (runs on environments with soffice installed)
+    if let _ = ToolLocator.shared.findOptionalTool("soffice") {
+        let mdURL = URL(fileURLWithPath: "Fixtures/sample.md")
+        let htmlURL = URL(fileURLWithPath: "Fixtures/sample.html")
+        let csvURL = URL(fileURLWithPath: "Fixtures/sample.csv")
+        let docxURL = URL(fileURLWithPath: "Fixtures/sample.docx")
+
+        let outMdPDF = tempXLSXDir.appendingPathComponent("md_out.pdf")
+        try OfficeTools.shared.convertMarkdownToPDF(input: mdURL, output: outMdPDF, runner: runner, jobId: UUID())
+        assertTest(FileManager.default.fileExists(atPath: outMdPDF.path) && ((try? Data(contentsOf: outMdPDF))?.count ?? 0) > 0,
+                   "37.1 Behavioral: convertMarkdownToPDF produces non-empty PDF")
+
+        let outHtmlPDF = tempXLSXDir.appendingPathComponent("html_out.pdf")
+        try OfficeTools.shared.convertHTMLToPDF(input: htmlURL, output: outHtmlPDF, runner: runner, jobId: UUID())
+        assertTest(FileManager.default.fileExists(atPath: outHtmlPDF.path) && ((try? Data(contentsOf: outHtmlPDF))?.count ?? 0) > 0,
+                   "37.1 Behavioral: convertHTMLToPDF produces non-empty PDF")
+
+        let outXlsx = tempXLSXDir.appendingPathComponent("csv_out.xlsx")
+        try OfficeTools.shared.convertCSVToXLSX(input: csvURL, output: outXlsx, runner: runner, jobId: UUID())
+        assertTest(FileManager.default.fileExists(atPath: outXlsx.path) && ((try? Data(contentsOf: outXlsx))?.count ?? 0) > 0,
+                   "37.1 Behavioral: convertCSVToXLSX produces non-empty XLSX")
+
+        let outDocxPages = tempXLSXDir.appendingPathComponent("docx_pages")
+        try OfficeTools.shared.convertOfficeToImages(input: docxURL, outputDir: outDocxPages, isSlide: false, runner: runner, jobId: UUID())
+        let pagePNGs = (try? FileManager.default.contentsOfDirectory(atPath: outDocxPages.path))?.filter { $0.hasSuffix(".png") } ?? []
+        assertTest(!pagePNGs.isEmpty, "37.1 Behavioral: convertOfficeToImages extracts at least 1 page PNG from DOCX")
+    } else {
+        print("  ⓘ SKIP: real LibreOffice behavioral conversions (soffice unavailable)")
+    }
 }
 
 // 37.2 Vision OCR Tests (A2)
@@ -4765,6 +4795,47 @@ do {
     let (unlockedText, _) = try runner.executeCapture(invocation: Invocation(toolName: "pdftotext", arguments: [unlockedPDF.path, "-"]))
     let (origText, _) = try runner.executeCapture(invocation: Invocation(toolName: "pdftotext", arguments: [samplePDF.path, "-"]))
     assertTest(unlockedText == origText, "37.3 Unlocked PDF text matches original text exactly")
+
+    // Incorrect password rejection
+    var wrongPasswordFailed = false
+    do {
+        try PDFSecurityTools.shared.unlockPDF(input: lockedPDF, output: secDir.appendingPathComponent("wrong_unlocked.pdf"), password: "WrongPassword123!", runner: runner, jobId: UUID())
+    } catch {
+        wrongPasswordFailed = true
+    }
+    assertTest(wrongPasswordFailed, "37.3 PDFSecurityTools.unlockPDF rejects incorrect password")
+
+    // Empty password rejection
+    var emptyLockPasswordFailed = false
+    do {
+        try PDFSecurityTools.shared.lockPDF(input: samplePDF, output: secDir.appendingPathComponent("empty_pwd.pdf"), password: "", runner: runner, jobId: UUID())
+    } catch PastaError.invalidInput {
+        emptyLockPasswordFailed = true
+    } catch {
+        emptyLockPasswordFailed = false
+    }
+    assertTest(emptyLockPasswordFailed, "37.3 PDFSecurityTools.lockPDF rejects empty password with PastaError.invalidInput")
+
+    var emptyUnlockPasswordFailed = false
+    do {
+        try PDFSecurityTools.shared.unlockPDF(input: lockedPDF, output: secDir.appendingPathComponent("empty_unlock.pdf"), password: "", runner: runner, jobId: UUID())
+    } catch PastaError.invalidInput {
+        emptyUnlockPasswordFailed = true
+    } catch {
+        emptyUnlockPasswordFailed = false
+    }
+    assertTest(emptyUnlockPasswordFailed, "37.3 PDFSecurityTools.unlockPDF rejects empty password with PastaError.invalidInput")
+
+    // Malformed PDF rejection
+    let malformedPDF = secDir.appendingPathComponent("corrupted_garbage.pdf")
+    try "CORRUPTED NOT REAL PDF CONTENT".write(to: malformedPDF, atomically: true, encoding: .utf8)
+    var malformedLockFailed = false
+    do {
+        try PDFSecurityTools.shared.lockPDF(input: malformedPDF, output: secDir.appendingPathComponent("malformed_locked.pdf"), password: "pwd", runner: runner, jobId: UUID())
+    } catch {
+        malformedLockFailed = true
+    }
+    assertTest(malformedLockFailed, "37.3 PDFSecurityTools.lockPDF rejects malformed PDF with error")
 
     // Password redaction in PastaLogger (Rule 19)
     PastaLogger.shared.info("Testing password logging: password=\(password) and secret password: \(password)")
