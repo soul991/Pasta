@@ -13,6 +13,27 @@
 
 ---
 
+## 0. Automated Local Mac Verification Script (`scripts/local_verify.sh`)
+
+To execute the complete end-to-end local hardware and binary verification on a real Mac:
+
+```bash
+./scripts/local_verify.sh
+```
+
+This single command executes and writes an unedited log to `local_verify_report.txt`, covering:
+1. **Host Environment**: Exact `sw_vers`, `xcodebuild -version`, `swift --version`.
+2. **Unit & Integration Suite (Debug)**: Full 840+ test assertions via `swift run PastaTests`.
+3. **Unit & Integration Suite (Release)**: Full 840+ test assertions via `swift run -c release PastaTests`.
+4. **Hardening Tests (Debug Binary)**: Section 8 security/path-traversal hardening suite via `PASTA_BIN=.build/debug/Pasta ./scripts/run_section8_tests.sh`.
+5. **App Bundle Build**: Clean `./scripts/build_app.sh` generation of `Pasta.app`.
+6. **Hardening Tests (Packaged App Bundle)**: Section 8 security hardening suite run directly against `Pasta.app/Contents/MacOS/Pasta`.
+7. **Codesign Integrity**: Strict deep bundle verification via `codesign --verify --deep --strict Pasta.app`.
+8. **Doctor Engine Catalog**: Full `pasta doctor --json` report from `Pasta.app`.
+9. **Retina App Icon Corner Alpha**: Mathematical verification that `assets/AppIcon-1024.png` is 1024x1024 RGBA with 4 fully transparent corner pixels (`alpha == 0`).
+
+---
+
 ## 1. Accessibility Permission Flow (`AXIsProcessTrusted`)
 
 CI runners operate in headless non-interactive environments where Accessibility API trust prompts cannot be displayed or confirmed.
