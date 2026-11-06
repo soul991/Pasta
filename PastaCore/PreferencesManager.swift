@@ -21,6 +21,8 @@ public final class PreferencesManager {
     private let increaseContrastKey = "pasta_increase_contrast"
     private let watchdogTimeoutKey = "pasta_watchdog_timeout_minutes"
     private let maxConcurrentJobsKey = "pasta_max_concurrent_jobs"
+    private let recentConversionsEnabledKey = "pasta_recent_conversions_enabled"
+    private let recentConversionsStoreFullPathKey = "pasta_recent_conversions_store_full_path"
 
     public init() {}
 
@@ -177,6 +179,18 @@ public final class PreferencesManager {
             let clamped = max(newValue, 1)
             UserDefaults.standard.set(clamped, forKey: maxConcurrentJobsKey)
         }
+    }
+
+    /// Whether recent conversions are tracked in local history (default: true)
+    public var recentConversionsEnabled: Bool {
+        get { return false } // Stub for RED baseline
+        set {}
+    }
+
+    /// Whether recent conversions store full file paths or only filenames for privacy (default: true)
+    public var recentConversionsStoreFullPath: Bool {
+        get { return false } // Stub for RED baseline
+        set {}
     }
 
     // MARK: - Last-Used Parameters Per Action
