@@ -66,17 +66,25 @@ public final class FormatRegistry {
         "heic": "camera.viewfinder",
         "tiff": "doc.richtext",
         "bmp": "square.grid.2x2.fill",
+        "avif": "photo.stack",
         "svg": "bezierpath",
 
         // Document & PDF
         "pdf": "doc.text.fill",
+        "pdfa": "archivebox.circle.fill",
         "docx": "doc.text",
         "doc": "doc",
+        "odt": "doc.plaintext",
         "rtf": "text.alignleft",
         "txt": "text.quote",
         "html": "chevron.left.forwardslash.chevron.right",
         "epub": "book.closed.fill",
-        "md": "doc.plaintext",
+        "md": "text.badge.checkmark",
+        "pptx": "rectangle.inset.filled.and.person.filled",
+        "ppt": "play.rectangle.on.rectangle",
+        "xlsx": "tablecells.fill",
+        "xls": "tablecells",
+        "csv": "tablecells.badge.ellipsis",
 
         // Archive
         "zip": "archivebox.fill",
@@ -175,6 +183,12 @@ public final class FormatRegistry {
             URL(fileURLWithPath: "sample.aiff"),
             URL(fileURLWithPath: "sample.pdf"),
             URL(fileURLWithPath: "sample.docx"),
+            URL(fileURLWithPath: "sample.doc"),
+            URL(fileURLWithPath: "sample.rtf"),
+            URL(fileURLWithPath: "sample.odt"),
+            URL(fileURLWithPath: "sample.pptx"),
+            URL(fileURLWithPath: "sample.xlsx"),
+            URL(fileURLWithPath: "sample.csv"),
             URL(fileURLWithPath: "sample.md"),
             URL(fileURLWithPath: "sample.html"),
             URL(fileURLWithPath: "sample.txt"),
@@ -307,8 +321,10 @@ public final class FormatRegistry {
             return pdfActions(for: fileURL)
         case "docx":
             return docxActions(for: fileURL)
-        case "doc", "ppt", "pptx", "xls", "xlsx":
+        case "doc", "odt", "rtf", "ppt", "pptx", "xls", "xlsx":
             return officeActions(for: fileURL, inputExt: ext)
+        case "csv":
+            return csvActions(for: fileURL)
         case "epub":
             return epubActions(for: fileURL)
         case "md", "markdown":
@@ -451,6 +467,38 @@ public final class FormatRegistry {
                 iconName: FormatRegistry.icon(forFormat: "gif")
             ) { input, output in
                 [Invocation(toolName: "magick", arguments: [input.path, output.path])]
+            })
+        }
+
+        if inputExt != "bmp" {
+            list.append(ConversionAction(
+                id: "image.to.bmp",
+                displayName: "Convert to BMP",
+                outputExtension: "bmp",
+                isAdvanced: false,
+                category: .image,
+                iconName: FormatRegistry.icon(forFormat: "bmp")
+            ) { input, output in
+                [Invocation(toolName: "magick", arguments: [input.path, output.path])]
+            })
+        }
+
+        if inputExt != "avif" {
+            list.append(ConversionAction(
+                id: "image.to.avif",
+                displayName: "Convert to AVIF",
+                outputExtension: "avif",
+                isAdvanced: false,
+                category: .image,
+                iconName: FormatRegistry.icon(forFormat: "avif")
+            ) { input, output in
+                if ToolLocator.shared.findTool("avifenc") != nil {
+                    return [Invocation(toolName: "avifenc", arguments: [input.path, output.path])]
+                } else if ToolLocator.shared.findTool("sips") != nil {
+                    return [Invocation(toolName: "sips", arguments: ["-s", "format", "avif", input.path, "--out", output.path])]
+                } else {
+                    return [Invocation(toolName: "magick", arguments: [input.path, output.path])]
+                }
             })
         }
 
@@ -620,6 +668,39 @@ public final class FormatRegistry {
                     throw PastaError.executionFailed(tool: "vision", exitCode: 1, output: "No QR code found in image")
                 }
                 try text.write(to: output, atomically: true, encoding: .utf8)
+            }
+        ))
+
+        list.append(ConversionAction(
+            id: "image.ocr.text",
+            displayName: "OCR to Text",
+            outputExtension: "txt",
+            isAdvanced: true,
+            category: .document,
+            iconName: "text.viewfinder",
+            parameters: [
+                ActionParameter(id: "language", label: "Language", kind: .choice(options: VisionOCRTools.availableLanguages), defaultValue: .text("auto"))
+            ],
+            customRunner: { input, output, params, runner, jobId in
+                let lang = params["language"]?.asString
+                let text = try VisionOCRTools.shared.recognizeText(from: input, language: lang)
+                try text.write(to: output, atomically: true, encoding: .utf8)
+            }
+        ))
+
+        list.append(ConversionAction(
+            id: "image.ocr.searchable",
+            displayName: "Searchable PDF",
+            outputExtension: "pdf",
+            isAdvanced: true,
+            category: .pdf,
+            iconName: "doc.text.magnifyingglass",
+            parameters: [
+                ActionParameter(id: "language", label: "Language", kind: .choice(options: VisionOCRTools.availableLanguages), defaultValue: .text("auto"))
+            ],
+            customRunner: { input, output, params, runner, jobId in
+                let lang = params["language"]?.asString
+                try VisionOCRTools.shared.createSearchablePDF(from: input, outputURL: output, language: lang)
             }
         ))
 
@@ -1443,6 +1524,139 @@ public final class FormatRegistry {
                     let del = params["deletePages"]?.asString ?? ""
                     try PDFTools.shared.reorganize(input: input, output: output, pages: pages, rotate: rot, deletePages: del, runner: runner, jobId: jobId)
                 }
+            ),
+            ConversionAction(
+                id: "pdf.to.epub",
+                displayName: "Convert to EPUB (Text Only)",
+                outputExtension: "epub",
+                isAdvanced: false,
+                category: .pdf,
+                iconName: FormatRegistry.icon(forFormat: "epub"),
+                customRunner: { input, output, params, runner, jobId in
+                    try PDFTools.shared.convertToEPUB(input: input, output: output, runner: runner, jobId: jobId)
+                }
+            ),
+            ConversionAction(
+                id: "pdf.to.epub.calibre",
+                displayName: "Convert to EPUB (Better Layout)",
+                outputExtension: "epub",
+                isAdvanced: true,
+                category: .pdf,
+                iconName: FormatRegistry.icon(forFormat: "epub"),
+                requiredTool: "ebook-convert",
+                customRunner: { input, output, params, runner, jobId in
+                    try PDFTools.shared.convertToEPUBWithCalibre(input: input, output: output, runner: runner, jobId: jobId)
+                }
+            ),
+            ConversionAction(
+                id: "pdf.to.pdfa",
+                displayName: "Convert to PDF/A-2b (Archival)",
+                outputExtension: "pdf",
+                isAdvanced: true,
+                category: .pdf,
+                iconName: FormatRegistry.icon(forFormat: "pdfa"),
+                customRunner: { input, output, params, runner, jobId in
+                    try PDFTools.shared.convertToPDFA(input: input, output: output, runner: runner, jobId: jobId)
+                }
+            ),
+            ConversionAction(
+                id: "pdf.ocr.text",
+                displayName: "OCR to Text",
+                outputExtension: "txt",
+                isAdvanced: true,
+                category: .pdf,
+                iconName: "text.viewfinder",
+                parameters: [
+                    ActionParameter(id: "language", label: "Language", kind: .choice(options: VisionOCRTools.availableLanguages), defaultValue: .text("auto"))
+                ],
+                customRunner: { input, output, params, runner, jobId in
+                    let lang = params["language"]?.asString
+                    let text = try VisionOCRTools.shared.recognizeText(fromPDF: input, language: lang)
+                    try text.write(to: output, atomically: true, encoding: .utf8)
+                }
+            ),
+            ConversionAction(
+                id: "pdf.ocr.searchable",
+                displayName: "Searchable PDF",
+                outputExtension: "pdf",
+                isAdvanced: true,
+                category: .pdf,
+                iconName: "doc.text.magnifyingglass",
+                parameters: [
+                    ActionParameter(id: "language", label: "Language", kind: .choice(options: VisionOCRTools.availableLanguages), defaultValue: .text("auto"))
+                ],
+                customRunner: { input, output, params, runner, jobId in
+                    let lang = params["language"]?.asString
+                    try VisionOCRTools.shared.createSearchablePDF(fromPDF: input, outputURL: output, language: lang)
+                }
+            ),
+            ConversionAction(
+                id: "pdf.security.lock",
+                displayName: "Lock with Password",
+                outputExtension: "pdf",
+                isAdvanced: true,
+                category: .pdf,
+                iconName: "lock.fill",
+                parameters: [
+                    ActionParameter(id: "password", label: "Password", kind: .text, defaultValue: .text(""))
+                ],
+                customRunner: { input, output, params, runner, jobId in
+                    let pwd = params["password"]?.asString ?? ""
+                    try PDFSecurityTools.shared.lockPDF(input: input, output: output, password: pwd, runner: runner, jobId: jobId)
+                }
+            ),
+            ConversionAction(
+                id: "pdf.security.unlock",
+                displayName: "Unlock PDF",
+                outputExtension: "pdf",
+                isAdvanced: true,
+                category: .pdf,
+                iconName: "lock.open.fill",
+                parameters: [
+                    ActionParameter(id: "password", label: "Password", kind: .text, defaultValue: .text(""))
+                ],
+                customRunner: { input, output, params, runner, jobId in
+                    let pwd = params["password"]?.asString ?? ""
+                    try PDFSecurityTools.shared.unlockPDF(input: input, output: output, password: pwd, runner: runner, jobId: jobId)
+                }
+            ),
+            ConversionAction(
+                id: "pdf.watermark",
+                displayName: "Watermark",
+                outputExtension: "pdf",
+                isAdvanced: true,
+                category: .pdf,
+                iconName: "seal.fill",
+                parameters: [
+                    ActionParameter(id: "text", label: "Watermark Text", kind: .text, defaultValue: .text("CONFIDENTIAL")),
+                    ActionParameter(id: "opacity", label: "Opacity", kind: .number, defaultValue: .number(0.3)),
+                    ActionParameter(id: "position", label: "Position", kind: .choice(options: ["diagonal", "center", "top", "bottom"]), defaultValue: .text("diagonal"))
+                ],
+                customRunner: { input, output, params, runner, jobId in
+                    let text = params["text"]?.asString ?? "CONFIDENTIAL"
+                    let opacity = params["opacity"]?.asDouble ?? 0.3
+                    let pos = params["position"]?.asString ?? "diagonal"
+                    try PDFSecurityTools.shared.watermarkPDF(input: input, output: output, watermarkText: text, opacity: opacity, position: pos, runner: runner, jobId: jobId)
+                }
+            ),
+            ConversionAction(
+                id: "pdf.pagenumbers",
+                displayName: "Page Numbers",
+                outputExtension: "pdf",
+                isAdvanced: true,
+                category: .pdf,
+                iconName: "number.square",
+                parameters: [
+                    ActionParameter(id: "position", label: "Position", kind: .choice(options: ["bottom-center", "bottom-right", "top-right"]), defaultValue: .text("bottom-center")),
+                    ActionParameter(id: "start", label: "Start Number", kind: .number, defaultValue: .integer(1)),
+                    ActionParameter(id: "format", label: "Format", kind: .choice(options: ["1, 2, 3", "Page 1", "Page 1 of N"]), defaultValue: .text("1, 2, 3"))
+                ],
+                customRunner: { input, output, params, runner, jobId in
+                    let pos = params["position"]?.asString ?? "bottom-center"
+                    let start = params["start"]?.asInt ?? 1
+                    let fmt = params["format"]?.asString ?? "1, 2, 3"
+                    try PDFSecurityTools.shared.addPageNumbers(input: input, output: output, position: pos, startNumber: start, format: fmt, runner: runner, jobId: jobId)
+                }
             )
         ] + metadataActions(for: "pdf") + [
             archiveCreateZipAction(),
@@ -1495,19 +1709,31 @@ public final class FormatRegistry {
             }
         ]
 
-        if ToolLocator.shared.isOptionalToolAvailable("soffice") {
-            actions.append(ConversionAction(
-                id: "docx.to.pdf",
-                displayName: "Convert to PDF",
-                outputExtension: "pdf",
-                isAdvanced: false,
-                category: .document,
-                iconName: FormatRegistry.icon(forFormat: "pdf")
-            ) { input, output in
-                let outDir = output.deletingLastPathComponent().path
-                return [Invocation(toolName: "soffice", arguments: ["--headless", "--convert-to", "pdf", input.path, "--outdir", outDir])]
-            })
-        }
+        actions.append(ConversionAction(
+            id: "docx.to.pdf",
+            displayName: "Convert to PDF",
+            outputExtension: "pdf",
+            isAdvanced: false,
+            category: .document,
+            iconName: FormatRegistry.icon(forFormat: "pdf"),
+            requiredTool: "soffice",
+            customRunner: { input, output, params, runner, jobId in
+                try OfficeTools.shared.convertOfficeToPDF(input: input, output: output, runner: runner, jobId: jobId)
+            }
+        ))
+        actions.append(ConversionAction(
+            id: "docx.to.images",
+            displayName: "Extract Pages to PNGs",
+            outputExtension: "png",
+            isAdvanced: false,
+            category: .document,
+            iconName: "photo.stack",
+            outputKind: .folder(suffix: "pages"),
+            requiredTool: "soffice",
+            customRunner: { input, output, params, runner, jobId in
+                try OfficeTools.shared.convertOfficeToImages(input: input, outputDir: output, isSlide: false, runner: runner, jobId: jobId)
+            }
+        ))
 
         actions.append(archiveCreateZipAction())
         actions.append(archiveCreateGzipAction())
@@ -1556,6 +1782,18 @@ public final class FormatRegistry {
             ) { input, output in
                 [Invocation(toolName: "pandoc", arguments: ["-o", output.path, input.path])]
             },
+            ConversionAction(
+                id: "md.to.pdf",
+                displayName: "Convert to PDF",
+                outputExtension: "pdf",
+                isAdvanced: false,
+                category: .document,
+                iconName: FormatRegistry.icon(forFormat: "pdf"),
+                requiredTool: "soffice",
+                customRunner: { input, output, params, runner, jobId in
+                    try OfficeTools.shared.convertMarkdownToPDF(input: input, output: output, runner: runner, jobId: jobId)
+                }
+            ),
             archiveCreateZipAction(),
             archiveCreateGzipAction()
         ]
@@ -1640,6 +1878,18 @@ public final class FormatRegistry {
             ) { input, output in
                 [Invocation(toolName: "pandoc", arguments: ["-o", output.path, input.path])]
             },
+            ConversionAction(
+                id: "html.to.pdf",
+                displayName: "Convert to PDF",
+                outputExtension: "pdf",
+                isAdvanced: false,
+                category: .document,
+                iconName: FormatRegistry.icon(forFormat: "pdf"),
+                requiredTool: "soffice",
+                customRunner: { input, output, params, runner, jobId in
+                    try OfficeTools.shared.convertHTMLToPDF(input: input, output: output, runner: runner, jobId: jobId)
+                }
+            ),
             archiveCreateZipAction(),
             archiveCreateGzipAction()
         ]
@@ -1694,22 +1944,73 @@ public final class FormatRegistry {
 
     private func officeActions(for url: URL, inputExt: String) -> [ConversionAction] {
         var list: [ConversionAction] = []
-        if ToolLocator.shared.isOptionalToolAvailable("soffice") {
+        let isSlide = (inputExt == "pptx" || inputExt == "ppt")
+
+        list.append(ConversionAction(
+            id: "office.to.pdf",
+            displayName: "Convert to PDF",
+            outputExtension: "pdf",
+            isAdvanced: false,
+            category: .document,
+            iconName: FormatRegistry.icon(forFormat: "pdf"),
+            requiredTool: "soffice",
+            customRunner: { input, output, params, runner, jobId in
+                try OfficeTools.shared.convertOfficeToPDF(input: input, output: output, runner: runner, jobId: jobId)
+            }
+        ))
+
+        list.append(ConversionAction(
+            id: "office.to.images",
+            displayName: isSlide ? "Extract Slides to PNGs" : "Extract Pages to PNGs",
+            outputExtension: "png",
+            isAdvanced: false,
+            category: .document,
+            iconName: "photo.stack",
+            outputKind: .folder(suffix: isSlide ? "slides" : "pages"),
+            requiredTool: "soffice",
+            customRunner: { input, output, params, runner, jobId in
+                try OfficeTools.shared.convertOfficeToImages(input: input, outputDir: output, isSlide: isSlide, runner: runner, jobId: jobId)
+            }
+        ))
+
+        if inputExt == "xlsx" || inputExt == "xls" {
             list.append(ConversionAction(
-                id: "office.to.pdf",
-                displayName: "Convert to PDF",
-                outputExtension: "pdf",
+                id: "xlsx.to.csv",
+                displayName: "Extract Sheets to CSVs",
+                outputExtension: "csv",
                 isAdvanced: false,
                 category: .document,
-                iconName: "doc.richtext"
-            ) { input, output in
-                let outDir = output.deletingLastPathComponent().path
-                return [Invocation(toolName: "soffice", arguments: ["--headless", "--convert-to", "pdf", input.path, "--outdir", outDir])]
-            })
+                iconName: FormatRegistry.icon(forFormat: "csv"),
+                outputKind: .folder(suffix: "sheets"),
+                requiredTool: (inputExt == "xls" ? "soffice" : nil),
+                customRunner: { input, output, params, runner, jobId in
+                    try OfficeTools.shared.convertXLSXToCSVs(input: input, outputDir: output, runner: runner, jobId: jobId)
+                }
+            ))
         }
+
         list.append(archiveCreateZipAction())
         list.append(archiveCreateGzipAction())
         return list
+    }
+
+    private func csvActions(for url: URL) -> [ConversionAction] {
+        return [
+            ConversionAction(
+                id: "csv.to.xlsx",
+                displayName: "Convert to XLSX",
+                outputExtension: "xlsx",
+                isAdvanced: false,
+                category: .document,
+                iconName: FormatRegistry.icon(forFormat: "xlsx"),
+                requiredTool: "soffice",
+                customRunner: { input, output, params, runner, jobId in
+                    try OfficeTools.shared.convertCSVToXLSX(input: input, output: output, runner: runner, jobId: jobId)
+                }
+            ),
+            archiveCreateZipAction(),
+            archiveCreateGzipAction()
+        ]
     }
 
     // MARK: - Subtitles

@@ -466,6 +466,9 @@ public final class WheelLayoutModel {
             var chosenActions: [ConversionAction] = []
             for targetID in pinnedIDs {
                 if let matched = allActions.first(where: { $0.id == targetID }) {
+                    if let req = matched.requiredTool, !ToolLocator.shared.isOptionalToolAvailable(req) {
+                        continue
+                    }
                     if !isAdvanced && (matched.outputExtension.lowercased() == fileExt || matched.id == "image.to.\(fileExt)" || matched.id == "video.to.\(fileExt)") {
                         continue
                     }
@@ -478,6 +481,9 @@ public final class WheelLayoutModel {
                 let chosenIDs = Set(chosenActions.map { $0.id })
                 let remaining = allActions.filter { act in
                     guard !chosenIDs.contains(act.id) && !isToolHidden(act.id, in: fileCategory) else { return false }
+                    if let req = act.requiredTool, !ToolLocator.shared.isOptionalToolAvailable(req) {
+                        return false
+                    }
                     if !isAdvanced && (act.outputExtension.lowercased() == fileExt || act.id == "image.to.\(fileExt)" || act.id == "video.to.\(fileExt)") {
                         return false
                     }
@@ -518,7 +524,7 @@ public final class WheelLayoutModel {
         return result
     }
 
-    /// Returns all available actions for the file minus the pinned tools, excluding any tool with missing binary
+    /// Returns all available actions for the file minus the pinned tools, placing unavailable pinned tools into More actions
     public func moreActions(for fileURL: URL?, isAdvanced: Bool) -> [ConversionAction] {
         guard let file = fileURL else { return [] }
         let allActions = FormatRegistry.shared.actions(for: file, isOptionHeld: isAdvanced)
@@ -527,8 +533,15 @@ public final class WheelLayoutModel {
         let hidden = hiddenToolIDs(for: first.category)
 
         return allActions.filter { act in
-            // Exclude visible pinned and hidden
-            guard !visiblePinned.contains(act.id) && !hidden.contains(act.id) else { return false }
+            if hidden.contains(act.id) { return false }
+            if visiblePinned.contains(act.id) {
+                // If a pinned action requires an optional tool that is currently unavailable,
+                // it cannot occupy a primary slot and is placed in More actions with its requirement note.
+                if let req = act.requiredTool, !ToolLocator.shared.isOptionalToolAvailable(req) {
+                    return true
+                }
+                return false
+            }
             return true
         }
     }

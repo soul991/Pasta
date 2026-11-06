@@ -267,7 +267,26 @@ public final class ToolLocator {
             if FileManager.default.isExecutableFile(atPath: defaultAppPath) {
                 return URL(fileURLWithPath: defaultAppPath)
             }
-            return findTool(name)
+            return findTool("soffice")
+        }
+        if name == "ebook-convert" {
+            lock.lock()
+            let isForcedUnavailable = unavailableOverrides.contains("ebook-convert")
+            let overridden = overrides["ebook-convert"]
+            lock.unlock()
+            if isForcedUnavailable {
+                return nil
+            }
+            if let overridden = overridden {
+                if FileManager.default.isExecutableFile(atPath: overridden.path) {
+                    return overridden
+                }
+            }
+            let defaultAppPath = "/Applications/Calibre.app/Contents/MacOS/ebook-convert"
+            if FileManager.default.isExecutableFile(atPath: defaultAppPath) {
+                return URL(fileURLWithPath: defaultAppPath)
+            }
+            return findTool("ebook-convert")
         }
         return findTool(name)
     }

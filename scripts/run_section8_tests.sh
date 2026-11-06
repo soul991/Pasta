@@ -316,6 +316,61 @@ else
     fail "pdf.reorganize reverse" "Failed to reorganize pages"
 fi
 
+# 6. Phase 11 Block A Actions Hostile Filename Tests
+echo -e "\n--- 6. Phase 11 Block A Actions Hostile Filename Tests ---"
+
+# image.ocr.text
+cp "Fixtures/sample.png" "$OUT_DIR/ocr photo with 'quotes' & spaces.png"
+if "$PASTA_BIN" convert "$OUT_DIR/ocr photo with 'quotes' & spaces.png" --action image.ocr.text > /dev/null 2>&1 && [ -f "$OUT_DIR/ocr photo with 'quotes' & spaces.txt" ]; then
+    pass "image.ocr.text handled hostile filename safely"
+else
+    fail "image.ocr.text hostile filename" "Failed to produce OCR text file"
+fi
+
+# pdf.watermark
+cp "Fixtures/sample.pdf" "$OUT_DIR/watermark 'secret' -doc.pdf"
+if "$PASTA_BIN" convert "$OUT_DIR/watermark 'secret' -doc.pdf" --action pdf.watermark --param text="CONFIDENTIAL" > /dev/null 2>&1 && [ -f "$OUT_DIR/watermark 'secret' -doc 1.pdf" ]; then
+    pass "pdf.watermark handled hostile filename safely"
+else
+    fail "pdf.watermark hostile filename" "Failed to produce watermarked PDF"
+fi
+
+# image.to.bmp
+cp "Fixtures/sample.png" "$OUT_DIR/sample with spaces -photo.png"
+if "$PASTA_BIN" convert "$OUT_DIR/sample with spaces -photo.png" --action image.to.bmp > /dev/null 2>&1 && [ -f "$OUT_DIR/sample with spaces -photo.bmp" ]; then
+    pass "image.to.bmp handled hostile filename safely"
+else
+    fail "image.to.bmp hostile filename" "Failed to produce BMP"
+fi
+
+# image.to.avif
+cp "Fixtures/sample.png" "$OUT_DIR/photo with 'quotes' & -dash.png"
+if "$PASTA_BIN" convert "$OUT_DIR/photo with 'quotes' & -dash.png" --action image.to.avif > /dev/null 2>&1 && [ -f "$OUT_DIR/photo with 'quotes' & -dash.avif" ]; then
+    pass "image.to.avif handled hostile filename safely"
+else
+    fail "image.to.avif hostile filename" "Failed to produce AVIF"
+fi
+
+# pdf.to.pdfa
+cp "Fixtures/sample.pdf" "$OUT_DIR/-archival sample.pdf"
+if "$PASTA_BIN" convert "$OUT_DIR/-archival sample.pdf" --action pdf.to.pdfa > /dev/null 2>&1 && [ -f "$OUT_DIR/-archival sample 1.pdf" ]; then
+    pass "pdf.to.pdfa handled hostile filename safely"
+else
+    fail "pdf.to.pdfa hostile filename" "Failed to produce PDF/A"
+fi
+
+# pdf.security.lock & unlock
+cp "Fixtures/sample.pdf" "$OUT_DIR/lock & 'key' -doc.pdf"
+if "$PASTA_BIN" convert "$OUT_DIR/lock & 'key' -doc.pdf" --action pdf.security.lock --param password="Sec8_Password_123!" > /dev/null 2>&1 && [ -f "$OUT_DIR/lock & 'key' -doc 1.pdf" ]; then
+    if "$PASTA_BIN" convert "$OUT_DIR/lock & 'key' -doc 1.pdf" --action pdf.security.unlock --param password="Sec8_Password_123!" > /dev/null 2>&1 && [ -f "$OUT_DIR/lock & 'key' -doc 1 1.pdf" ]; then
+        pass "pdf.security lock and unlock handled hostile filename safely"
+    else
+        fail "pdf.security.unlock hostile filename" "Failed to unlock PDF"
+    fi
+else
+    fail "pdf.security.lock hostile filename" "Failed to lock PDF"
+fi
+
 # 7. Atomic Output Reservation Tests
 echo -e "\n--- 7. Atomic Output Reservation Tests ---"
 RACE_DIR="/tmp/Pasta_Sec8_Race_$$"

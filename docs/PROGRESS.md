@@ -22,6 +22,8 @@
 | **Phase 10B Step 4** | Liquid Glass Rendering, Wallpaper Scrim, High-Contrast Modes, VoiceOver & Keyboard Nav | **Complete** | 508/508 Unit/Integration tests passed; 33/33 Section 8 tests passed; 0 leaks, 0 network |
 | **Phase 10B Step 5** | Brand Presence (MenuBarIcon 18pt Template, Pasta Icon in Hub/Settings/About, AppIcon.icns, CFBundleIconFile) | **Complete** | 529/529 Unit/Integration tests passed; 33/33 Section 8 tests passed; 0 leaks, 0 network |
 | **Phase 10B Step 6** | Results, Errors, Size Changes, Reveal in Finder, Copy Details, Accessibility Onboarding & Settings | **Complete** | 549/549 Unit/Integration tests passed; 33/33 Section 8 tests passed; 0 leaks, 0 network |
+| **Phase R0** | Release Readiness: Atomic Output Reservation, Hostile Archive Hardening, Actionable Doctor, Release Tag v0.1.0-beta | **Complete** | All gates verified; tag v0.1.0-beta shipped |
+| **Phase 11 Block A** | Documents, OCR, PDF Security, Formats (Office conversions, Vision OCR, qpdf lock/unlock/watermark/page numbers, BMP, AVIF, PDF/A-2b, PDF to EPUB) | **Complete** | 903/903 Unit tests passed; 47/47 Section 8 tests passed; 0 leaks, 0 network |
 
 ---
 
@@ -211,6 +213,33 @@
 | Atomic output reservation (`OutputReservation`, `open(O_CREAT\|O_EXCL)`, `rename(2)`, zero collisions) | Phase R0 Step 1 | Reliability | **DONE** | `38.1–38.7 Atomic Output Reservation & Collision Race Tests`, `Section 8 Tests 7.1–7.2` |
 | Hostile archive extraction suite (`ArchiveGuard`, traversal rejection, depth/size/symlink/setuid limits) | Phase R0 Step 2 | Security | **DONE** | `39.1–39.11 Hostile Archive Extraction Tests (ArchiveGuard)`, `Section 8 Tests 7.3` |
 | Repo hygiene, actionable doctor (`--json`, Homebrew formula mappings, Settings copy button), release workflow (`release.yml`), automated README generation | Phase R0 Step 3 | Reliability & Release | **DONE** | `40.1–40.8 Actionable Doctor, Homebrew Mappings & Action Catalog Tests`, `Section 8 Tests 7.4` |
+
+---
+
+## Phase 11 Block A Itemized Audit Table (Documents, OCR, PDF Security, Formats)
+
+| Item / Capability | Step | Category | Status | CI Verification Test Name |
+| :--- | :--- | :--- | :--- | :--- |
+| Office to PDF (`office.to.pdf`, `docx.to.pdf`) with isolated profile `-env:UserInstallation` | Block A1 | Documents | **DONE** | `37.1 docx.to.pdf is registered for docx` & `37.1 soffice invocation automatically receives isolated user profile argument` |
+| Office to page/slide images (`docx.to.images`, `office.to.images`) | Block A1 | Documents | **DONE** | `37.1 docx.to.images is registered for docx` & `37.1 office.to.images is labeled 'Extract Slides to PNGs' for pptx` |
+| Multi-sheet XLSX to CSVs extraction in dedicated folder (`xlsx.to.csv`) | Block A1 | Spreadsheets | **DONE** | `37.1 XLSX multi-sheet extraction created Employees.csv` & `37.1 Salaries.csv contains numeric cell data` |
+| CSV to XLSX conversion (`csv.to.xlsx`) | Block A1 | Spreadsheets | **DONE** | `37.1 csv.to.xlsx is registered for csv` |
+| Markdown & HTML to PDF (`md.to.pdf`, `html.to.pdf`) | Block A1 | Documents | **DONE** | `37.1 md.to.pdf is registered for md` & `37.1 html.to.pdf is registered for html` |
+| Optional `soffice` tool detection, requirement note, and wheel slot hiding | Block A1 | Tools | **DONE** | `37.1 Missing soffice tool throws PastaError.missingTool('soffice')` & `37.1 docx.to.pdf is hidden from primary wheel slots when soffice is missing` |
+| Image to Text OCR via Apple Vision (`image.ocr.text`) | Block A2 | OCR | **DONE** | `37.2 VisionOCRTools recognizes known text from generated image fixture` & `Section 8 image.ocr.text handled hostile filename safely` |
+| PDF to Text OCR for scanned PDFs (`pdf.ocr.text`) | Block A2 | OCR | **DONE** | `37.2 VisionOCRTools recognizes text directly from PDF pages` |
+| Searchable PDF creation with invisible text layer (`image.ocr.searchable`, `pdf.ocr.searchable`) | Block A2 | OCR | **DONE** | `37.2 Searchable PDF created successfully` & `37.2 pdftotext extracts invisible text layer from searchable PDF` |
+| PDF AES-256 password lock with 0600 temp argument file (`pdf.security.lock`) | Block A3 | PDF Security | **DONE** | `37.3 PDFSecurityTools.lockPDF creates encrypted PDF` & `37.3 Encrypted PDF rejects pdftotext without password` |
+| PDF password unlock with verification (`pdf.security.unlock`) | Block A3 | PDF Security | **DONE** | `37.3 PDFSecurityTools.unlockPDF restores decrypted PDF` & `37.3 Unlocked PDF text matches original text exactly` |
+| PDF security password edge cases (wrong password, empty password, malformed PDF) | Block A3 | PDF Security | **DONE** | `37.3 PDFSecurityTools.unlockPDF rejects incorrect password` & `37.3 PDFSecurityTools.lockPDF rejects malformed PDF with error` |
+| Rule 19 password redaction in logs and arguments | Block A3 | Security | **DONE** | `37.3 Rule 19: Password string 'SuperSecret_P@ssword_2026!' NEVER appears in pasta.log` |
+| PDF watermark stamping with position and opacity (`pdf.watermark`) | Block A3 | PDF Stamping | **DONE** | `37.3 Watermark PDF created` & `37.3 Watermark text 'PASTA_SECRET_STAMP' present in output via pdftotext` |
+| PDF page numbering on multi-page documents (`pdf.pagenumbers`) | Block A3 | PDF Stamping | **DONE** | `37.3 Page numbers stamped on 3-page fixture` & `37.3 Page numbers 'Page 1 of 3', 'Page 2 of 3', 'Page 3 of 3' present on all pages` |
+| BMP image conversion (`image.to.bmp`) | Block A4 | Image Formats | **DONE** | `37.4 image.to.bmp produces output file` & `37.4 BMP output format verified with file` |
+| AVIF image conversion (`image.to.avif`) | Block A4 | Image Formats | **DONE** | `37.4 image.to.avif produces output file` & `37.4 AVIF output format verified with file` |
+| PDF to EPUB text-only conversion (`pdf.to.epub`) | Block A4 | Documents | **DONE** | `37.4 PDF to EPUB creates output file` & `37.4 EPUB zip structure contains valid mimetype application/epub+zip` |
+| PDF to PDF/A-2b archival format (`pdf.to.pdfa`) | Block A4 | Documents | **DONE** | `37.4 PDF to PDF/A-2b creates output file` & `37.4 PDF/A-2b metadata verified with exiftool (Part: 2, Conformance: B)` |
+| Calibre optional tool registration & doctor hint (`pdf.to.epub.calibre`) | Block A4 | Tools | **DONE** | `37.4 pdf.to.epub.calibre action is registered` & `37.4 pdf.to.epub.calibre requirementNote is 'needs Calibre' when missing` |
 
 
 

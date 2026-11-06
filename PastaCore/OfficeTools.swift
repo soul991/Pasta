@@ -1,0 +1,272 @@
+import Foundation
+
+public final class OfficeTools {
+    public static let shared = OfficeTools()
+
+    public init() {}
+
+    /// Converts an office document (DOCX, DOC, RTF, ODT, PPTX, PPT, XLSX, XLS) to PDF using LibreOffice
+    public func convertOfficeToPDF(input: URL, output: URL, runner: JobRunner, jobId: UUID) throws {
+        _ = try ToolLocator.shared.requireTool("soffice")
+        let outDir = output.deletingLastPathComponent()
+        let expectedGeneratedName = input.deletingPathExtension().lastPathComponent + ".pdf"
+        let expectedURL = outDir.appendingPathComponent(expectedGeneratedName)
+
+        let inv = Invocation(toolName: "soffice", arguments: [
+            "--headless",
+            "--convert-to", "pdf",
+            input.path,
+            "--outdir", outDir.path
+        ])
+        try runner.execute(invocation: inv, timeoutSeconds: 120, inactivityTimeoutSeconds: 30, jobId: jobId)
+
+        if expectedURL.path != output.path && FileManager.default.fileExists(atPath: expectedURL.path) {
+            try? FileManager.default.removeItem(at: output)
+            try FileManager.default.moveItem(at: expectedURL, to: output)
+        }
+    }
+
+    /// Converts Markdown to PDF through pandoc to HTML then LibreOffice to PDF
+    public func convertMarkdownToPDF(input: URL, output: URL, runner: JobRunner, jobId: UUID) throws {
+        _ = try ToolLocator.shared.requireTool("pandoc")
+        _ = try ToolLocator.shared.requireTool("soffice")
+
+        let scratchDir = try OutputPlanner.makeTempDirectory()
+        defer {
+            try? FileManager.default.removeItem(at: scratchDir)
+        }
+
+        let tempHTML = scratchDir.appendingPathComponent("document.html")
+        let pandocInv = Invocation(toolName: "pandoc", arguments: ["-s", input.path, "-o", tempHTML.path])
+        try runner.execute(invocation: pandocInv, timeoutSeconds: 30, jobId: jobId)
+
+        let outDir = output.deletingLastPathComponent()
+        let expectedURL = outDir.appendingPathComponent("document.pdf")
+        let sofficeInv = Invocation(toolName: "soffice", arguments: [
+            "--headless",
+            "--convert-to", "pdf",
+            tempHTML.path,
+            "--outdir", outDir.path
+        ])
+        try runner.execute(invocation: sofficeInv, timeoutSeconds: 120, inactivityTimeoutSeconds: 30, jobId: jobId)
+
+        if expectedURL.path != output.path && FileManager.default.fileExists(atPath: expectedURL.path) {
+            try? FileManager.default.removeItem(at: output)
+            try FileManager.default.moveItem(at: expectedURL, to: output)
+        }
+    }
+
+    /// Converts HTML to PDF using LibreOffice
+    public func convertHTMLToPDF(input: URL, output: URL, runner: JobRunner, jobId: UUID) throws {
+        _ = try ToolLocator.shared.requireTool("soffice")
+        let outDir = output.deletingLastPathComponent()
+        let expectedGeneratedName = input.deletingPathExtension().lastPathComponent + ".pdf"
+        let expectedURL = outDir.appendingPathComponent(expectedGeneratedName)
+
+        let inv = Invocation(toolName: "soffice", arguments: [
+            "--headless",
+            "--convert-to", "pdf",
+            input.path,
+            "--outdir", outDir.path
+        ])
+        try runner.execute(invocation: inv, timeoutSeconds: 120, inactivityTimeoutSeconds: 30, jobId: jobId)
+
+        if expectedURL.path != output.path && FileManager.default.fileExists(atPath: expectedURL.path) {
+            try? FileManager.default.removeItem(at: output)
+            try FileManager.default.moveItem(at: expectedURL, to: output)
+        }
+    }
+
+    /// Converts an office document to individual page/slide PNG images in a folder
+    public func convertOfficeToImages(input: URL, outputDir: URL, isSlide: Bool = false, runner: JobRunner, jobId: UUID) throws {
+        _ = try ToolLocator.shared.requireTool("soffice")
+        _ = try ToolLocator.shared.requireTool("pdftoppm")
+
+        let scratchDir = try OutputPlanner.makeTempDirectory()
+        defer {
+            try? FileManager.default.removeItem(at: scratchDir)
+        }
+
+        // Step 1: Render office document to PDF in scratch directory
+        let sofficeInv = Invocation(toolName: "soffice", arguments: [
+            "--headless",
+            "--convert-to", "pdf",
+            input.path,
+            "--outdir", scratchDir.path
+        ])
+        try runner.execute(invocation: sofficeInv, timeoutSeconds: 120, inactivityTimeoutSeconds: 30, jobId: jobId)
+
+        // Find rendered PDF
+        let fm = FileManager.default
+        let contents = (try? fm.contentsOfDirectory(at: scratchDir, includingPropertiesForKeys: nil)) ?? []
+        guard let pdfFile = contents.first(where: { $0.pathExtension.lowercased() == "pdf" }) else {
+            throw PastaError.executionFailed(tool: "soffice", exitCode: 1, output: "LibreOffice failed to generate PDF intermediate")
+        }
+
+        // Step 2: Render PDF pages to PNGs in outputDir
+        try fm.createDirectory(at: outputDir, withIntermediateDirectories: true)
+        let prefixName = isSlide ? "slide" : "page"
+        let prefixPath = outputDir.appendingPathComponent(prefixName).path
+
+        let pdftoppmInv = Invocation(toolName: "pdftoppm", arguments: [
+            "-png",
+            "-r", "150",
+            pdfFile.path,
+            prefixPath
+        ])
+        try runner.execute(invocation: pdftoppmInv, timeoutSeconds: 60, inactivityTimeoutSeconds: 20, jobId: jobId)
+    }
+
+    /// Converts XLSX to separate CSV files (one CSV per sheet) in outputDir
+    public func convertXLSXToCSVs(input: URL, outputDir: URL, runner: JobRunner, jobId: UUID) throws {
+        let fm = FileManager.default
+        try fm.createDirectory(at: outputDir, withIntermediateDirectories: true)
+
+        let scratchDir = try OutputPlanner.makeTempDirectory()
+        defer {
+            try? fm.removeItem(at: scratchDir)
+        }
+
+        // Attempt direct OOXML multi-sheet extraction first
+        let sheets = extractSheetsFromXLSX(fileURL: input, scratchDir: scratchDir)
+        if !sheets.isEmpty {
+            for (sheetName, rows) in sheets {
+                let safeName = sheetName.replacingOccurrences(of: "/", with: "-")
+                    .replacingOccurrences(of: ":", with: "-")
+                let csvFile = outputDir.appendingPathComponent("\(safeName).csv")
+                let csvContent = formatRowsAsCSV(rows)
+                try csvContent.write(to: csvFile, atomically: true, encoding: .utf8)
+            }
+            return
+        }
+
+        // Fallback to LibreOffice Calc CSV conversion
+        if ToolLocator.shared.isOptionalToolAvailable("soffice") {
+            let inv = Invocation(toolName: "soffice", arguments: [
+                "--headless",
+                "--convert-to", "csv",
+                input.path,
+                "--outdir", scratchDir.path
+            ])
+            try runner.execute(invocation: inv, timeoutSeconds: 60, jobId: jobId)
+
+            let csvs = (try? fm.contentsOfDirectory(at: scratchDir, includingPropertiesForKeys: nil))?.filter {
+                $0.pathExtension.lowercased() == "csv"
+            } ?? []
+
+            if let firstCSV = csvs.first {
+                let dest = outputDir.appendingPathComponent("Sheet1.csv")
+                try fm.copyItem(at: firstCSV, to: dest)
+                return
+            }
+        }
+
+        throw PastaError.executionFailed(tool: "xlsx.to.csv", exitCode: 1, output: "Failed to extract sheets from XLSX document")
+    }
+
+    /// Converts CSV to XLSX via LibreOffice
+    public func convertCSVToXLSX(input: URL, output: URL, runner: JobRunner, jobId: UUID) throws {
+        _ = try ToolLocator.shared.requireTool("soffice")
+        let outDir = output.deletingLastPathComponent()
+        let expectedGeneratedName = input.deletingPathExtension().lastPathComponent + ".xlsx"
+        let expectedURL = outDir.appendingPathComponent(expectedGeneratedName)
+
+        let inv = Invocation(toolName: "soffice", arguments: [
+            "--headless",
+            "--convert-to", "xlsx",
+            input.path,
+            "--outdir", outDir.path
+        ])
+        try runner.execute(invocation: inv, timeoutSeconds: 60, jobId: jobId)
+
+        if expectedURL.path != output.path && FileManager.default.fileExists(atPath: expectedURL.path) {
+            try? FileManager.default.removeItem(at: output)
+            try FileManager.default.moveItem(at: expectedURL, to: output)
+        }
+    }
+
+    // MARK: - XLSX Multi-Sheet XML Parsing Helper
+
+    private func extractSheetsFromXLSX(fileURL: URL, scratchDir: URL) -> [(name: String, rows: [[String]])] {
+        let unzipDir = scratchDir.appendingPathComponent("unzipped")
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
+        proc.arguments = ["-q", fileURL.path, "-d", unzipDir.path]
+        try? proc.run()
+        proc.waitUntilExit()
+        guard proc.terminationStatus == 0 else { return [] }
+
+        // 1. Read shared strings
+        var sharedStrings: [String] = []
+        let stringsURL = unzipDir.appendingPathComponent("xl/sharedStrings.xml")
+        if let data = try? Data(contentsOf: stringsURL),
+           let doc = try? XMLDocument(data: data) {
+            if let items = try? doc.nodes(forXPath: "//*[local-name()='si']") {
+                for item in items {
+                    let text = item.stringValue ?? ""
+                    sharedStrings.append(text)
+                }
+            }
+        }
+
+        // 2. Read workbook.xml for sheet names and rIds
+        let workbookURL = unzipDir.appendingPathComponent("xl/workbook.xml")
+        guard let wbData = try? Data(contentsOf: workbookURL),
+              let wbDoc = try? XMLDocument(data: wbData),
+              let sheetNodes = try? wbDoc.nodes(forXPath: "//*[local-name()='sheet']") else {
+            return []
+        }
+
+        var results: [(name: String, rows: [[String]])] = []
+
+        for (index, node) in sheetNodes.enumerated() {
+            guard let element = node as? XMLElement else { continue }
+            let sheetName = element.attribute(forName: "name")?.stringValue ?? "Sheet\(index + 1)"
+            let sheetFile = unzipDir.appendingPathComponent("xl/worksheets/sheet\(index + 1).xml")
+
+            guard let sheetData = try? Data(contentsOf: sheetFile),
+                  let sheetDoc = try? XMLDocument(data: sheetData),
+                  let rowNodes = try? sheetDoc.nodes(forXPath: "//*[local-name()='row']") else {
+                continue
+            }
+
+            var rows: [[String]] = []
+            for rowNode in rowNodes {
+                guard let cNodes = try? rowNode.nodes(forXPath: "./*[local-name()='c']") else { continue }
+                var rowCells: [String] = []
+                for c in cNodes {
+                    guard let cElem = c as? XMLElement else { continue }
+                    let t = cElem.attribute(forName: "t")?.stringValue
+                    let vNode = (try? cElem.nodes(forXPath: "./*[local-name()='v']"))?.first
+                    let val = vNode?.stringValue ?? ""
+
+                    if t == "s", let idx = Int(val), idx >= 0, idx < sharedStrings.count {
+                        rowCells.append(sharedStrings[idx])
+                    } else {
+                        rowCells.append(val)
+                    }
+                }
+                if !rowCells.isEmpty {
+                    rows.append(rowCells)
+                }
+            }
+
+            results.append((name: sheetName, rows: rows))
+        }
+
+        return results
+    }
+
+    private func formatRowsAsCSV(_ rows: [[String]]) -> String {
+        return rows.map { row in
+            row.map { cell in
+                let escaped = cell.replacingOccurrences(of: "\"", with: "\"\"")
+                if escaped.contains(",") || escaped.contains("\n") || escaped.contains("\"") {
+                    return "\"\(escaped)\""
+                } else {
+                    return escaped
+                }
+            }.joined(separator: ",")
+        }.joined(separator: "\n") + "\n"
+    }
+}

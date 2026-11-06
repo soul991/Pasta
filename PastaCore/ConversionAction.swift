@@ -42,6 +42,7 @@ public struct ConversionAction: Identifiable, Equatable {
     public typealias CustomRunner = (URL, URL, ParameterValues, JobRunner, UUID) throws -> Void
     public typealias CustomBatchRunner = ([URL], URL, ParameterValues, JobRunner, UUID) throws -> Void
 
+    public let requiredTool: String?
     public let buildInvocationsWithParams: (URL, URL, ParameterValues) -> [Invocation]
     public let buildBatchInvocationsWithParams: (([URL], URL, ParameterValues) -> [Invocation])?
     public let customRunner: CustomRunner?
@@ -68,6 +69,19 @@ public struct ConversionAction: Identifiable, Equatable {
         return dict
     }
 
+    public var requirementNote: String? {
+        guard let req = requiredTool else { return nil }
+        if !ToolLocator.shared.isOptionalToolAvailable(req) {
+            switch req {
+            case "soffice": return "needs LibreOffice"
+            case "ebook-convert": return "needs Calibre"
+            case "avifenc": return "needs avifenc"
+            default: return "needs \(req)"
+            }
+        }
+        return nil
+    }
+
     public var shortHumanName: String {
         var name = displayName
         if name.hasPrefix("Convert to ") {
@@ -83,7 +97,11 @@ public struct ConversionAction: Identifiable, Equatable {
         if name == "Plain Text" {
             name = "TXT"
         }
-        return name.isEmpty ? outputExtension.uppercased() : name
+        let base = name.isEmpty ? outputExtension.uppercased() : name
+        if let note = requirementNote {
+            return "\(base) (\(note))"
+        }
+        return base
     }
 
     public init(
@@ -96,6 +114,7 @@ public struct ConversionAction: Identifiable, Equatable {
         outputKind: OutputKind = .file,
         parameters: [ActionParameter] = [],
         isBatch: Bool = false,
+        requiredTool: String? = nil,
         buildInvocations: @escaping (URL, URL, ParameterValues) -> [Invocation] = { _, _, _ in [] },
         buildBatchInvocations: (([URL], URL, ParameterValues) -> [Invocation])? = nil,
         customRunner: CustomRunner? = nil,
@@ -110,6 +129,7 @@ public struct ConversionAction: Identifiable, Equatable {
         self.outputKind = outputKind
         self.parameters = parameters
         self.isBatch = isBatch
+        self.requiredTool = requiredTool
         self.buildInvocationsWithParams = buildInvocations
         self.buildBatchInvocationsWithParams = buildBatchInvocations ?? { inputs, out, params in
             guard let first = inputs.first else { return [] }
@@ -128,6 +148,7 @@ public struct ConversionAction: Identifiable, Equatable {
         iconName: String = "gearshape",
         outputKind: OutputKind = .file,
         parameters: [ActionParameter] = [],
+        requiredTool: String? = nil,
         buildBatchInvocations: @escaping ([URL], URL, ParameterValues) -> [Invocation]
     ) {
         self.init(
@@ -140,6 +161,7 @@ public struct ConversionAction: Identifiable, Equatable {
             outputKind: outputKind,
             parameters: parameters,
             isBatch: true,
+            requiredTool: requiredTool,
             buildInvocations: { input, out, params in buildBatchInvocations([input], out, params) },
             buildBatchInvocations: buildBatchInvocations
         )
@@ -153,6 +175,7 @@ public struct ConversionAction: Identifiable, Equatable {
         category: ActionCategory,
         iconName: String = "gearshape",
         outputKind: OutputKind = .file,
+        requiredTool: String? = nil,
         buildInvocations: @escaping (URL, URL) -> [Invocation]
     ) {
         self.init(
@@ -165,6 +188,7 @@ public struct ConversionAction: Identifiable, Equatable {
             outputKind: outputKind,
             parameters: [],
             isBatch: false,
+            requiredTool: requiredTool,
             buildInvocations: { input, output, _ in buildInvocations(input, output) }
         )
     }
