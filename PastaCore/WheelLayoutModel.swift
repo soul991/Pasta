@@ -152,6 +152,25 @@ public enum LabelMode: String, CaseIterable, Codable {
     case onHover = "onHover"
 }
 
+// MARK: - Wheel Side & Profiles (Part C Step C3)
+
+public enum WheelSide: String, CaseIterable, Codable {
+    case primary
+    case secondary
+}
+
+public struct FileTypeWheelProfile: Codable, Equatable {
+    public let fileExtension: String
+    public var primaryActionIDs: [String]
+    public var secondaryActionIDs: [String]
+
+    public init(fileExtension: String, primaryActionIDs: [String], secondaryActionIDs: [String]) {
+        self.fileExtension = fileExtension.lowercased()
+        self.primaryActionIDs = primaryActionIDs
+        self.secondaryActionIDs = secondaryActionIDs
+    }
+}
+
 // MARK: - Slot Architecture
 
 public enum WheelSlotKind: Equatable {
@@ -299,6 +318,96 @@ public final class WheelLayoutModel {
         }
         set {
             setStorageString(newValue.rawValue, forKey: labelModeKey)
+        }
+    }
+
+    // MARK: - Wheel Side & Profiles (Part C Step C3)
+
+    private let profilePrefix = "pasta_profile_"
+
+    public private(set) var currentSide: WheelSide = .primary
+
+    @discardableResult
+    public func flipSide() -> WheelSide {
+        currentSide = (currentSide == .primary ? .secondary : .primary)
+        return currentSide
+    }
+
+    public func resetSide() {
+        currentSide = .primary
+    }
+
+    public static func defaultProfile(for fileExtension: String) -> FileTypeWheelProfile {
+        let ext = fileExtension.lowercased()
+        switch ext {
+        case "png", "jpg", "jpeg", "webp", "gif", "avif", "bmp", "heic", "tiff", "svg":
+            return FileTypeWheelProfile(
+                fileExtension: ext,
+                primaryActionIDs: ["image.to.jpeg", "image.to.png", "image.to.webp", "image.to.gif", "image.to.pdf", "image.compress"],
+                secondaryActionIDs: ["image.to.avif", "image.to.bmp", "image.ocr.text", "image.qr.read", "metadata.read", "metadata.edit"]
+            )
+        case "pdf":
+            return FileTypeWheelProfile(
+                fileExtension: ext,
+                primaryActionIDs: ["pdf.to.text", "pdf.to.images", "pdf.advanced.split", "pdf.compress", "pdf.reorganize", "pdf.merge"],
+                secondaryActionIDs: ["pdf.watermark", "pdf.pagenumbers", "pdf.to.pdfa", "pdf.to.epub", "pdf.security.lock", "pdf.ocr.text"]
+            )
+        case "mp4", "mov", "mkv", "webm", "avi", "m4v":
+            return FileTypeWheelProfile(
+                fileExtension: ext,
+                primaryActionIDs: ["video.to.mp4", "video.to.mkv", "video.to.mov", "video.to.webm", "video.extract.mp3", "video.to.gif"],
+                secondaryActionIDs: ["video.speed", "video.crop", "video.snapshot", "video.split", "video.compress", "metadata.read"]
+            )
+        case "mp3", "wav", "m4a", "flac", "aac", "ogg":
+            return FileTypeWheelProfile(
+                fileExtension: ext,
+                primaryActionIDs: ["audio.to.mp3", "audio.to.wav", "audio.to.m4a", "audio.to.flac", "audio.to.aac", "audio.normalize"],
+                secondaryActionIDs: ["audio.trim", "audio.compress", "audio.channels", "audio.bleep", "metadata.read", "metadata.edit"]
+            )
+        case "docx", "xlsx", "pptx", "md", "html", "txt", "csv":
+            return FileTypeWheelProfile(
+                fileExtension: ext,
+                primaryActionIDs: ["docx.to.pdf", "docx.to.md", "docx.to.epub", "md.to.html", "md.to.pdf", "html.to.pdf"],
+                secondaryActionIDs: ["office.to.pdf", "office.to.images", "xlsx.to.csvs", "csv.to.xlsx", "metadata.read", "archive.create.zip"]
+            )
+        case "zip", "tar", "gz", "7z", "rar":
+            return FileTypeWheelProfile(
+                fileExtension: ext,
+                primaryActionIDs: ["archive.extract", "archive.create.zip", "archive.create.tar", "archive.create.7z", "archive.create.gzip", "metadata.read"],
+                secondaryActionIDs: ["archive.extract.inspect", "metadata.edit", "image.qr.read", "archive.create.zip", "archive.create.tar", "archive.create.7z"]
+            )
+        default:
+            let dummyURL = URL(fileURLWithPath: "sample.\(ext)")
+            let actions = FormatRegistry.shared.actions(for: dummyURL)
+            let cat = actions.first?.category ?? .document
+            let primary = defaultPinnedToolIDs(for: cat)
+            let all = FormatRegistry.shared.allActions(for: cat).map(\.id)
+            let secondary = all.filter { !primary.contains($0) }
+            return FileTypeWheelProfile(
+                fileExtension: ext,
+                primaryActionIDs: primary,
+                secondaryActionIDs: Array(secondary.prefix(6))
+            )
+        }
+    }
+
+    public func profile(for fileExtension: String) -> FileTypeWheelProfile {
+        let ext = fileExtension.lowercased()
+        let key = profilePrefix + ext
+        if let jsonStr = storageString(forKey: key),
+           let data = jsonStr.data(using: .utf8),
+           let decoded = try? JSONDecoder().decode(FileTypeWheelProfile.self, from: data) {
+            return decoded
+        }
+        return WheelLayoutModel.defaultProfile(for: ext)
+    }
+
+    public func setProfile(_ profile: FileTypeWheelProfile) {
+        let ext = profile.fileExtension.lowercased()
+        let key = profilePrefix + ext
+        if let data = try? JSONEncoder().encode(profile),
+           let jsonStr = String(data: data, encoding: .utf8) {
+            setStorageString(jsonStr, forKey: key)
         }
     }
 
@@ -451,20 +560,34 @@ public final class WheelLayoutModel {
     /// - Slots 0..5 (1 to 6): primary pinned tools for that category
     /// - Slot 6 (7): More (ellipsis glyph)
     /// - Slot 7 (8): Customize (gear glyph)
-    public func slots(for fileURL: URL?, isAdvanced: Bool) -> [WheelSlot] {
+    public func slots(for fileURL: URL?, isAdvanced: Bool, side: WheelSide? = nil) -> [WheelSlot] {
         let totalSlots = 8
         var result: [WheelSlot] = []
+        let activeSide = side ?? currentSide
 
         if let file = fileURL {
             let allActions = FormatRegistry.shared.actions(for: file, isOptionHeld: isAdvanced)
             let fileCategory = allActions.first?.category ?? .image
-            let pinnedIDs = pinnedToolIDs(for: fileCategory).filter { !isToolHidden($0, in: fileCategory) }
-
             let fileExt = file.pathExtension.lowercased()
+            let prof = profile(for: fileExt)
 
-            // 1. Gather all pinned tools that are valid for this specific file
+            let preferredIDs: [String]
+            switch activeSide {
+            case .primary:
+                preferredIDs = prof.primaryActionIDs.filter { !isToolHidden($0, in: fileCategory) }
+            case .secondary:
+                let sec = prof.secondaryActionIDs.filter { !isToolHidden($0, in: fileCategory) }
+                if sec.isEmpty {
+                    let primarySet = Set(prof.primaryActionIDs)
+                    preferredIDs = allActions.map(\.id).filter { !primarySet.contains($0) && !isToolHidden($0, in: fileCategory) }
+                } else {
+                    preferredIDs = sec
+                }
+            }
+
+            // 1. Gather all preferred tools that are valid for this specific file
             var chosenActions: [ConversionAction] = []
-            for targetID in pinnedIDs {
+            for targetID in preferredIDs {
                 if let matched = allActions.first(where: { $0.id == targetID }) {
                     if let req = matched.requiredTool, !ToolLocator.shared.isOptionalToolAvailable(req) {
                         continue
@@ -501,12 +624,13 @@ public final class WheelLayoutModel {
                 result.append(WheelSlot(slotIndex: slotIndex, kind: .action(chosenActions[slotIndex]), angle: angle))
             }
         } else {
-            // Preview mode (no file dragged): display the 6 pinned tools for .image
+            // Preview mode (no file dragged): display the 6 tools based on activeSide
             let fileCategory: ActionCategory = .image
-            let pinnedIDs = pinnedToolIDs(for: fileCategory).filter { !isToolHidden($0, in: fileCategory) }
-            for slotIndex in 0..<min(6, pinnedIDs.count) {
+            let prof = profile(for: "png")
+            let preferredIDs = (activeSide == .primary ? prof.primaryActionIDs : prof.secondaryActionIDs).filter { !isToolHidden($0, in: fileCategory) }
+            for slotIndex in 0..<min(6, preferredIDs.count) {
                 let angle = (-CGFloat.pi / 2.0) + (CGFloat(slotIndex) * (2.0 * CGFloat.pi / CGFloat(totalSlots)))
-                let targetID = pinnedIDs[slotIndex]
+                let targetID = preferredIDs[slotIndex]
                 if let act = FormatRegistry.shared.action(byId: targetID) {
                     result.append(WheelSlot(slotIndex: slotIndex, kind: .action(act), angle: angle))
                 }

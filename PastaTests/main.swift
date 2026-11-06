@@ -6014,6 +6014,90 @@ do {
                details: "existingRevealed: \(existingRevealed)")
 }
 
+do {
+    print("\n--- 44. Per-File-Type Wheel Profiles & Tab Flip Side Tests (Step C3) ---")
+
+    let model = WheelLayoutModel.shared
+
+    // 44.1: Default profiles exist for core file types
+    let pngProfile = model.profile(for: "png")
+    let pdfProfile = model.profile(for: "pdf")
+    let mp4Profile = model.profile(for: "mp4")
+    let mp3Profile = model.profile(for: "mp3")
+    let docxProfile = model.profile(for: "docx")
+    let zipProfile = model.profile(for: "zip")
+
+    assertTest(!pngProfile.primaryActionIDs.isEmpty && !pdfProfile.primaryActionIDs.isEmpty && !mp4Profile.primaryActionIDs.isEmpty,
+               "44.1 Default file-type wheel profiles define primary actions for core formats",
+               details: "png: \(pngProfile.primaryActionIDs.count), pdf: \(pdfProfile.primaryActionIDs.count), mp4: \(mp4Profile.primaryActionIDs.count)")
+
+    assertTest(!pngProfile.secondaryActionIDs.isEmpty && !pdfProfile.secondaryActionIDs.isEmpty && !mp4Profile.secondaryActionIDs.isEmpty,
+               "44.2 Default file-type wheel profiles define secondary (flip-side) actions",
+               details: "png: \(pngProfile.secondaryActionIDs.count), pdf: \(pdfProfile.secondaryActionIDs.count), mp4: \(mp4Profile.secondaryActionIDs.count)")
+
+    // 44.3: Primary actions contain expected top actions
+    assertTest(pdfProfile.primaryActionIDs.contains("pdf.compress") && pdfProfile.primaryActionIDs.contains("pdf.to.text"),
+               "44.3 PDF profile primary actions contain essential compression and extraction tools",
+               details: "primary: \(pdfProfile.primaryActionIDs)")
+
+    // 44.4: Secondary actions contain extended/flip tools
+    assertTest(pdfProfile.secondaryActionIDs.contains("pdf.watermark") || pdfProfile.secondaryActionIDs.contains("pdf.to.pdfa"),
+               "44.4 PDF profile secondary actions contain watermark, archival, and security tools",
+               details: "secondary: \(pdfProfile.secondaryActionIDs)")
+
+    // 44.5: Tab flip side state transitions
+    model.resetSide()
+    assertTest(model.currentSide == .primary, "44.5 Initial side is primary")
+
+    let flippedSide = model.flipSide()
+    assertTest(flippedSide == .secondary && model.currentSide == .secondary,
+               "44.6 flipSide toggles side to secondary",
+               details: "flippedSide: \(flippedSide), currentSide: \(model.currentSide)")
+
+    let flippedBack = model.flipSide()
+    assertTest(flippedBack == .primary && model.currentSide == .primary,
+               "44.7 flipSide second toggle returns side to primary",
+               details: "flippedBack: \(flippedBack), currentSide: \(model.currentSide)")
+
+    model.flipSide()
+    model.resetSide()
+    assertTest(model.currentSide == .primary, "44.8 resetSide returns side to primary")
+
+    // 44.9: Wheel slots reflect active side for a target file
+    let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("Pasta_wheel_profile_test_\(UUID().uuidString)")
+    try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: tempDir) }
+
+    let testPdf = tempDir.appendingPathComponent("sample.pdf")
+    try? Data("%PDF-1.4\n".utf8).write(to: testPdf)
+
+    let primarySlots = model.slots(for: testPdf, isAdvanced: false, side: .primary)
+    let secondarySlots = model.slots(for: testPdf, isAdvanced: false, side: .secondary)
+
+    let primaryActionIDs = primarySlots.compactMap { $0.action?.id }
+    let secondaryActionIDs = secondarySlots.compactMap { $0.action?.id }
+
+    assertTest(!primaryActionIDs.isEmpty && !secondaryActionIDs.isEmpty && primaryActionIDs != secondaryActionIDs,
+               "44.9 Primary and secondary slots produce distinct action sets for target file",
+               details: "primary slots: \(primaryActionIDs), secondary slots: \(secondaryActionIDs)")
+
+    // 44.10: Shift-hold preferences and duration behavior remain intact
+    let shiftDuration = PreferencesManager.shared.shiftHoldDurationMs
+    let stayOpen = PreferencesManager.shared.stayOpenAfterRelease
+    assertTest(shiftDuration >= 300.0 && shiftDuration <= 1000.0 && stayOpen == true,
+               "44.10 Existing Shift-hold duration and latch behavior preferences remain intact",
+               details: "shiftHoldDurationMs: \(shiftDuration), stayOpenAfterRelease: \(stayOpen)")
+
+    // 44.11: Custom profile override persistence
+    var customPng = pngProfile
+    customPng.primaryActionIDs = ["image.to.webp", "image.compress", "image.to.jpeg"]
+    model.setProfile(customPng)
+    let fetchedCustom = model.profile(for: "png")
+    assertTest(fetchedCustom.primaryActionIDs.first == "image.to.webp",
+               "44.11 Custom per-file-type profile can be updated and retrieved",
+               details: "first action: \(String(describing: fetchedCustom.primaryActionIDs.first))")
+}
+
 print("\n==================================================")
 print("Test Suite Summary: \(passedTests)/\(totalTests) Passed, \(failedTests) Failed")
 print("==================================================")

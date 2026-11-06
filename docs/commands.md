@@ -485,5 +485,22 @@ Pasta maintains a local, privacy-respecting conversion history:
 - **Clear Action**:
   - Accessible via Settings or programmatic API (`RecentConversionsStore.shared.clear()`) to instantly wipe in-memory records and delete the on-disk JSON store.
 
+---
+
+## 9. Per-File-Type Wheel Profiles & Tab Flip Side (Part C Step C3)
+
+The radial options wheel adapts intelligently to the exact type of file dragged:
+
+- **Per-File-Type Profiles (`FileTypeWheelProfile`)**:
+  - Each file format family (`png`, `pdf`, `mp4`, `mp3`, `docx`, `zip`, etc.) defines an ordered primary tool set (6 slots) and an extended secondary tool set.
+  - Profiles are customizable and persist locally across app launches.
+- **Tab Flip Side**:
+  - Tapping `<Tab>` while the wheel is open flips the wheel between its primary side (slots 0–5) and secondary flip side without closing the wheel or interrupting the drag session.
+  - Slots 6 (More) and 7 (Customize) remain anchored in place.
+  - Dismissing the wheel or starting a new drag session automatically resets the wheel to the primary profile.
+- **Shift-Hold Invariance**:
+  - The core Shift-hold gesture (450 ms charging progress ring with 120 ms delay, latching open after Shift release) remains 100% unchanged.
+
+
 
 
