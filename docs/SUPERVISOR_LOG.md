@@ -56,8 +56,8 @@ As the read-only supervisor sub-agent, the supervisor adheres strictly to the fo
 | **B1** | Fix Phase 11 Block A 9 Failing Assertions (`soffice` stubs + root causes) | **PASS** | `6b0aee2` | `42187288812` | Yes (899 u, 41 s8) | Yes (901 u, 41 s8) | **PASS** |
 | **B2** | Complete Phase 11 Block A Scope (Office, OCR, PDF security, atomic reservation) | **PASS** | `1df099d` | `42207897934` | Yes (903 u, 47 s8) | Yes (909 u, 47 s8) | **PASS** |
 | **C1** | Per-Engine Concurrency Cap (Ghostscript 1, FFmpeg 2) | **PASS** | `8cf019c` | `42220883417` | Yes (908 u, 47 s8) | Yes (914 u, 47 s8) | **PASS** |
-| **C2** | Recent Conversions List (App Support store, privacy toggle, Reveal in Finder) | **READY TO SUPERVISE** | - | - | - | - | - |
-| **C3** | Per-File-Type Wheel Profiles & Tab Flip Side | PENDING | - | - | - | - | - |
+| **C2** | Recent Conversions List (App Support store, privacy toggle, Reveal in Finder) | **PASS** | `73e36e2` | `42234072828` | Yes (920 u, 47 s8) | Yes (926 u, 47 s8) | **PASS** |
+| **C3** | Per-File-Type Wheel Profiles & Tab Flip Side | **READY TO SUPERVISE** | - | - | - | - | - |
 
 ---
 
@@ -573,22 +573,93 @@ As the read-only supervisor sub-agent, the supervisor adheres strictly to the fo
 ---
 
 ### Step C2 — Recent Conversions List
+- **Status**: **PASS**
+- **Verified Commits & PR**:
+  - Pull Request #11: `https://github.com/soul991/Pasta/pull/11` merged cleanly into `main` without force.
+  - Merge Commit on `main`: `73e36e2f1e63a3d5483f9ec6723223011a681c26`.
+  - Head Commit: `8fb5c2576b5d9d71c66280ea0c3aa152ea351b8d`.
+  - RED Baseline Commit: `624f5b08779951680d29ae557343d5c589b2762b`.
+- **GitHub Actions CI Runs**:
+  - RED Baseline Run: `42227522960` (failed as expected; Job `127924685136` exited 1, failing 6 Section 43 tests on unpatched codebase: 43.1, 43.3, 43.5, 43.6, 43.7, 43.12).
+  - PR #11 Run: `42230770038` (Status: completed, conclusion: success).
+    - Job 1: `Build & Verify (Xcode 27 arm64)` (ID `127935765996`) in 11m26s — **Success**
+    - Job 2: `Compatibility fallback (macos-latest)` (ID `127941526319`) in 5m22s — **Success**
+  - Post-Merge Run on `main`: `42234072828` (Status: completed, conclusion: success).
+    - Job 1: `Build & Verify (Xcode 27 arm64)` (ID `127947024569`) in 12m26s — **Success**
+      - Unit Tests (Debug): 926/926 Passed, 0 Failed
+      - Unit Tests (Release): 926/926 Passed, 0 Failed
+      - Section 8 Tests (Debug): 47/47 Passed, 0 Failed
+      - Section 8 Tests (Pasta.app): 47/47 Passed, 0 Failed
+      - Real-Timer Smoke Test (50x Loop): 50/50 Passed (100.0%)
+    - Job 2: `Compatibility fallback (macos-latest)` (ID `127953419680`) in 7m33s — **Success**
+      - Unit Tests: 926/926 Passed, 0 Failed
+      - Real-Timer Smoke Test (50x Loop): 50/50 Passed (100.0%)
+- **Independent Verification of Gate Items**:
+  1. **Local Storage & Zero Network**: **PASS**
+     - Recent conversion store resides strictly in local app support: `~/Library/Application Support/Pasta/recent_conversions.json`.
+     - Zero network calls, telemetry, or third-party dependencies.
+  2. **Privacy Controls (`PreferencesManager`)**: **PASS**
+     - `recentConversionsEnabled`: Default `true`. When toggled to `false`, new conversions are not recorded.
+     - `recentConversionsStoreFullPath`: Default `true`. When toggled to `false`, records store only filename and timestamp while omitting `fullPath`.
+     - Prominent local-privacy explanatory label added to preferences UI.
+  3. **Clear History Action**: **PASS**
+     - `RecentConversionsStore.shared.clear()` empties in-memory buffer and removes or truncates the on-disk JSON file.
+     - Settings sheet provides "Clear Recent History" button with feedback.
+  4. **Finder Integration**: **PASS**
+     - `RecentConversionsStore.shared.revealInFinder(item:)` activates macOS Finder via `NSWorkspace.shared.activateFileViewerSelecting`.
+     - Safely returns `false` when file is missing, deleted, or when `fullPath` was suppressed for privacy, without throwing or crashing.
+  5. **Automated Test Coverage (RED & GREEN)**: **PASS**
+     - Section 43 test suite (`PastaTests/main.swift`):
+       - 43.1: Default preferences for recent conversions (enabled == true, storeFullPath == true).
+       - 43.2: Initial fresh store has empty items list.
+       - 43.3: RecentConversionsStore records conversion item.
+       - 43.4: Recorded item contains actionId, fileName, and fullPath.
+       - 43.5: Recent conversions persist across store instances reading from disk.
+       - 43.6: Privacy off switch prevents recording new conversion items.
+       - 43.7: Disabling storeFullPath records fileName but omits fullPath.
+       - 43.8: Clear wipes in-memory items and removes or empties disk file.
+       - 43.9: Corrupt JSON store file recovers gracefully without crashing.
+       - 43.10: Reveal in Finder on nonexistent file safely returns false without crashing.
+       - 43.11: Reveal in Finder on item without fullPath safely returns false.
+       - 43.12: Reveal in Finder on existing file returns true.
+     - RED evidence confirmed in CI run `42227522960` (failed 6 tests as expected).
+     - GREEN evidence confirmed locally (920/920) and in CI (926/926).
+  6. **Documentation**: **PASS**
+     - Documented in `docs/commands.md` Section 8 ("Recent Conversions History & Privacy") and `docs/PROGRESS.md`.
+  7. **Local Re-Check on macOS 27.2**: **PASS**
+     - `sw_vers`: macOS 27.2 (Build 26B123).
+     - `xcodebuild -version`: Xcode 27.2 (Build 27B52).
+     - `swift --version`: Swift 6.4.2 (arm64-apple-macosx27.2.0).
+     - `swift run PastaTests`: 920/920 Passed, 0 Failed.
+     - `swift run -c release PastaTests`: 920/920 Passed, 0 Failed.
+     - `./scripts/run_section8_tests.sh`: 47/47 Passed, 0 Failed.
+     - `./scripts/run_real_timer_smoke_test.sh`: 50/50 Passed (100.0%).
+  8. **Assertion Integrity**: **PASS**
+     - Zero assertions weakened or deleted. All previous tests (A1 through C1) continue to pass.
+- **Supervisor Verdict**: **PASS**
+
+---
+
+### Step C3 — Per-File-Type Wheel Profiles and a Tab Flip Side
 - **Status**: **READY TO SUPERVISE**
 - **Scope**:
-  1. Local-only conversion tracking:
-     - No network code, tracking, or telemetry.
-     - Store conversion metadata (action id, output filename, timestamp) in the app's Application Support folder (`~/Library/Application Support/Pasta/recent_conversions.json`).
-     - Store the full output directory/path only if the user enables the path storage toggle.
-  2. Privacy controls and settings:
-     - Settings toggle to disable history tracking (default ON with a prominent local-privacy note).
-     - "Clear History" button in Settings and history UI.
-  3. Finder integration:
-     - "Reveal in Finder" action for recent conversion entries (`NSWorkspace.shared.activateFileViewerSelecting`).
-  4. Error resilience and test coverage:
-     - Automated tests for record persistence, clearing history, disabling tracking, handling corrupted/malformed store files (graceful reset without crash), and missing output files (graceful handling when file was deleted/moved).
-  5. Zero assertions weakened or deleted.
+  1. Per-file-type wheel action profiles:
+     - Each file type receives an ordered primary set of actions for the radial wheel.
+     - A secondary set of actions reachable by pressing `<Tab>` while the wheel is open ("Tab flip side").
+     - Existing Shift-hold behavior remains completely unchanged.
+  2. Pure logic test coverage:
+     - Profile definitions, action ordering per file category/extension, and Tab flip toggle states must be verified as pure deterministic logic in `PastaTests/main.swift`.
+     - Explicit RED evidence before implementation, followed by GREEN proof after.
+  3. UI Manual Verification Documentation:
+     - Because interactive key press and visual flip transitions cannot be triggered in headless CI, the exact manual verification procedure must be recorded in `docs/MANUAL_CHECKS.md` for human verification.
+  4. Non-negotiable constraints:
+     - Zero assertions weakened or deleted.
+     - PR merged cleanly into `main` without force.
+     - Dual CI jobs green (`Xcode 27 arm64` and `macos-latest`).
+     - Local verification passes on macOS 27.2.
 - **Gate Criteria**:
-  - Recent conversions store operates locally without network calls.
-  - Privacy toggle and Clear button function as specified.
-  - Tests pass for persistence, clearing, corrupt JSON store, and missing files.
+  - Deterministic profile logic tested with RED then GREEN evidence.
+  - Existing Shift-hold behavior intact.
+  - Manual verification steps documented in `docs/MANUAL_CHECKS.md`.
   - Both CI jobs green on the step's PR.
+
