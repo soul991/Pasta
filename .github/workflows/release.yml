@@ -44,6 +44,22 @@ jobs:
           echo "SHA-256 Checksum:"
           cat Pasta-macOS.zip.sha256
 
+      - name: Verify Packaged Release Archive (Download & Unpack Test)
+        run: |
+          echo "Verifying SHA-256 checksum..."
+          shasum -a 256 -c Pasta-macOS.zip.sha256
+          echo "Unpacking Pasta-macOS.zip into isolated directory..."
+          mkdir -p /tmp/pasta_release_verify
+          unzip -q Pasta-macOS.zip -d /tmp/pasta_release_verify
+          echo "Verifying unpacked application code signature..."
+          codesign --verify --deep --strict /tmp/pasta_release_verify/Pasta.app
+          echo "Executing headless pasta doctor --json from unpacked bundle..."
+          /tmp/pasta_release_verify/Pasta.app/Contents/MacOS/Pasta doctor --json
+          echo "Verifying pasta version..."
+          /tmp/pasta_release_verify/Pasta.app/Contents/MacOS/Pasta --version || true
+          rm -rf /tmp/pasta_release_verify
+          echo "Release archive verified successfully."
+
       - name: Upload Artifacts (Action Run)
         uses: actions/upload-artifact@v4
         with:
@@ -61,7 +77,7 @@ jobs:
           cat << 'EOF' > release_body.md
           ## Pasta 🍝 Release
 
-          A fast, native, 100% offline macOS file converter and utility with an interactive Shift-hold radial wheel.
+          A fast, native macOS file converter and utility with verified local processing, zero telemetry, and an interactive Shift-hold radial wheel.
 
           ### ⚠️ Security & Signing Notice
           - **Ad-Hoc Signed (Not Notarized)**: This build is ad-hoc signed and **not notarized** by an Apple Developer account.
@@ -72,7 +88,7 @@ jobs:
           - **Accessibility Permission**: For the Shift-hold radial wheel to intercept drag gestures outside the window, grant Pasta Accessibility permissions in **System Settings > Privacy & Security > Accessibility**.
 
           ### 📦 Homebrew Prerequisites
-          Pasta runs 100% offline and does not bundle third-party binary engines. Install dependencies via:
+          Pasta processes files strictly on your local machine with zero telemetry and does not bundle third-party binary engines. Install dependencies via:
           ```bash
           brew install ffmpeg imagemagick webp ghostscript qpdf poppler exiftool pandoc librsvg unar sevenzip
           ```
