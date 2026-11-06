@@ -5,6 +5,8 @@ import AppKit
 /// Manages running at most `maxConcurrent` jobs at a time, tracks queued items,
 /// handles individual failures without stopping others, and supports clean cancellation.
 public final class BatchJobQueue {
+    /// Centralized table of per-engine concurrency limits.
+    public static var perEngineLimits: [String: Int] = [:]
     public struct QueueItem {
         public let id: UUID
         public let file: URL

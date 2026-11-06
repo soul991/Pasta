@@ -5739,6 +5739,190 @@ do {
     assertTest(!auditContent.isEmpty && missingUrlsOrUnverified.isEmpty, "41.4 Every tool row in docs/LICENSE_AUDIT.md contains an upstream license URL or is marked UNVERIFIED (invalid: \(missingUrlsOrUnverified))")
 }
 
+do {
+    print("\n--- 42. Per-Engine Concurrency Cap Tests (Step C1) ---")
+
+    // 42.1 Centralized limits table specifies caps: 1 for gs/ghostscript, 2 for ffmpeg
+    let ffmpegCap = BatchJobQueue.perEngineLimits["ffmpeg"]
+    let gsCap = BatchJobQueue.perEngineLimits["ghostscript"] ?? BatchJobQueue.perEngineLimits["gs"]
+    assertTest(ffmpegCap == 2 && gsCap == 1,
+               "42.1 Default per-engine limits table specifies cap 2 for ffmpeg and 1 for ghostscript",
+               details: "ffmpeg: \(String(describing: ffmpegCap)), gs: \(String(describing: gsCap))")
+
+    // Setup temporary stub tool infrastructure
+    let scratchDir = FileManager.default.temporaryDirectory.appendingPathComponent("Pasta_concurrency_test_\(UUID().uuidString)")
+    try? FileManager.default.createDirectory(at: scratchDir, withIntermediateDirectories: true)
+    defer {
+        try? FileManager.default.removeItem(at: scratchDir)
+    }
+
+    let trackerFile = scratchDir.appendingPathComponent("concurrency_tracker.txt")
+    try? "0,0\n".write(to: trackerFile, atomically: true, encoding: .utf8)
+
+    // Helper to create concurrency-tracking stub script
+    let stubScript = scratchDir.appendingPathComponent("stub_engine.py")
+    let stubPython = """
+#!/usr/bin/env python3
+import sys, time, fcntl, os
+
+tracker_path = "\(trackerFile.path)"
+
+# Find output destination: either after -sOutputFile= or the last argument
+out_path = sys.argv[-1]
+for arg in sys.argv[1:]:
+    if arg.startswith("-sOutputFile="):
+        out_path = arg.split("=", 1)[1]
+
+# Safely record entry
+try:
+    with open(tracker_path, "r+") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        content = f.read().strip()
+        parts = content.split(",") if content else ["0", "0"]
+        active = int(parts[0]) + 1
+        peak = max(int(parts[1]), active)
+        f.seek(0)
+        f.truncate()
+        f.write(f"{active},{peak}\\n")
+        fcntl.flock(f, fcntl.LOCK_UN)
+except Exception as e:
+    pass
+
+# Hold process active for concurrency window
+time.sleep(0.35)
+
+# Produce valid dummy output file for JobRunner output check
+try:
+    os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
+    with open(out_path, "wb") as f:
+        if out_path.endswith(".pdf"):
+            f.write(b"%PDF-1.4\\n%%EOF\\n")
+        else:
+            f.write(b"DUMMY_MEDIA_OUTPUT\\n")
+except Exception as e:
+    pass
+
+# Safely record leave
+try:
+    with open(tracker_path, "r+") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        content = f.read().strip()
+        parts = content.split(",") if content else ["0", "0"]
+        active = max(0, int(parts[0]) - 1)
+        peak = int(parts[1])
+        f.seek(0)
+        f.truncate()
+        f.write(f"{active},{peak}\\n")
+        fcntl.flock(f, fcntl.LOCK_UN)
+except Exception as e:
+    pass
+
+sys.exit(0)
+"""
+    try? stubPython.write(to: stubScript, atomically: true, encoding: .utf8)
+    chmod(stubScript.path, 0o755)
+
+    // Helper to read peak concurrency from tracker file
+    func readPeakConcurrency() -> Int {
+        guard let content = try? String(contentsOf: trackerFile, encoding: .utf8) else { return 0 }
+        let parts = content.trimmingCharacters(in: .whitespacesAndNewlines).split(separator: ",")
+        if parts.count >= 2, let peak = Int(parts[1]) {
+            return peak
+        }
+        return 0
+    }
+
+    func resetTracker() {
+        try? "0,0\n".write(to: trackerFile, atomically: true, encoding: .utf8)
+    }
+
+    // 42.2 Test: with 6 queued ffmpeg jobs, never more than cap (2) run at once
+    ToolLocator.shared.setOverride(tool: "ffmpeg", url: stubScript)
+    defer {
+        ToolLocator.shared.setOverride(tool: "ffmpeg", url: nil)
+    }
+
+    let fakeFfmpegAction = ConversionAction(
+        id: "video.to.mp4",
+        displayName: "Convert to MP4",
+        outputExtension: "mp4",
+        category: .video,
+        buildInvocations: { inUrl, outUrl, _ in
+            [Invocation(toolName: "ffmpeg", arguments: ["-i", inUrl.path, outUrl.path])]
+        }
+    )
+
+    let sixFiles = (1...6).map { idx -> URL in
+        let u = scratchDir.appendingPathComponent("input_\(idx).mp4")
+        try? Data("dummy_video_input".utf8).write(to: u)
+        return u
+    }
+
+    resetTracker()
+    let semaFfmpeg = DispatchSemaphore(value: 0)
+    let queueFfmpeg = BatchJobQueue(
+        files: sixFiles,
+        action: fakeFfmpegAction,
+        maxConcurrent: 6 // Request 6, but queue must enforce engine cap of 2!
+    )
+    queueFfmpeg.onAllFinished = {
+        semaFfmpeg.signal()
+    }
+    queueFfmpeg.start()
+    _ = semaFfmpeg.wait(timeout: .now() + 10.0)
+
+    let ffmpegPeak = readPeakConcurrency()
+    assertTest(queueFfmpeg.completedCount == 6,
+               "42.2 All 6 queued ffmpeg jobs complete successfully",
+               details: "completed: \(queueFfmpeg.completedCount)/6")
+    assertTest(ffmpegPeak <= 2,
+               "42.3 Peak concurrency for 6 queued ffmpeg jobs never exceeds cap 2",
+               details: "Recorded peak: \(ffmpegPeak), expected <= 2")
+
+    // 42.4 Test: with 4 queued ghostscript jobs, never more than cap (1) run at once
+    ToolLocator.shared.setOverride(tool: "gs", url: stubScript)
+    defer {
+        ToolLocator.shared.setOverride(tool: "gs", url: nil)
+    }
+
+    let fakeGsAction = ConversionAction(
+        id: "pdf.compress",
+        displayName: "Compress PDF",
+        outputExtension: "pdf",
+        category: .pdf,
+        buildInvocations: { inUrl, outUrl, _ in
+            [Invocation(toolName: "gs", arguments: ["-sOutputFile=\(outUrl.path)", inUrl.path])]
+        }
+    )
+
+    let fourFiles = (1...4).map { idx -> URL in
+        let u = scratchDir.appendingPathComponent("doc_\(idx).pdf")
+        try? Data("dummy_pdf_input".utf8).write(to: u)
+        return u
+    }
+
+    resetTracker()
+    let semaGs = DispatchSemaphore(value: 0)
+    let queueGs = BatchJobQueue(
+        files: fourFiles,
+        action: fakeGsAction,
+        maxConcurrent: 4 // Request 4, but queue must enforce engine cap of 1!
+    )
+    queueGs.onAllFinished = {
+        semaGs.signal()
+    }
+    queueGs.start()
+    _ = semaGs.wait(timeout: .now() + 10.0)
+
+    let gsPeak = readPeakConcurrency()
+    assertTest(queueGs.completedCount == 4,
+               "42.4 All 4 queued ghostscript jobs complete successfully",
+               details: "completed: \(queueGs.completedCount)/4")
+    assertTest(gsPeak <= 1,
+               "42.5 Peak concurrency for 4 queued ghostscript jobs never exceeds cap 1",
+               details: "Recorded peak: \(gsPeak), expected <= 1")
+}
+
 print("\n==================================================")
 print("Test Suite Summary: \(passedTests)/\(totalTests) Passed, \(failedTests) Failed")
 print("==================================================")

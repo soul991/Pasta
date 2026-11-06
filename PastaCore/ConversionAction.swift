@@ -104,6 +104,26 @@ public struct ConversionAction: Identifiable, Equatable {
         return base
     }
 
+    /// Resolves the primary conversion engine tool name for this action.
+    public var primaryEngine: String {
+        if let req = requiredTool, !req.isEmpty {
+            return req
+        }
+        if id == "pdf.compress" || id == "pdf.advanced.compress" || id == "pdf.to.pdfa" {
+            return "ghostscript"
+        }
+        let dummyIn = URL(fileURLWithPath: "/tmp/in.tmp")
+        let dummyOut = URL(fileURLWithPath: "/tmp/out.tmp")
+        let invocations = buildInvocationsWithParams(dummyIn, dummyOut, defaultParameterValues)
+        if let first = invocations.first {
+            return first.toolName
+        }
+        if id.hasPrefix("video.") || id.hasPrefix("audio.") {
+            return "ffmpeg"
+        }
+        return ""
+    }
+
     public init(
         id: String,
         displayName: String,
