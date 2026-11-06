@@ -1,6 +1,6 @@
 ==================================================
 Pasta Local Mac Verification Report
-Generated at: 2026-11-06T00:39:35Z
+Generated at: 2026-11-06T22:38:53Z
 ==================================================
 
 --- 1. Environment Diagnostics ---
@@ -18,23 +18,23 @@ swift-driver version: 1.168.6 Apple Swift version 6.4.2 (swiftlang-6.4.2.1.9 cla
 Target: arm64-apple-macosx27.2.0
 
 --- 2. PastaTests (Debug) ---
-Test Suite Summary: 841/841 Passed, 0 Failed
+Test Suite Summary: 938/938 Passed, 0 Failed
 
 --- 3. PastaTests (Release) ---
-Test Suite Summary: 841/841 Passed, 0 Failed
+Test Suite Summary: 938/938 Passed, 0 Failed
 
 --- 4. Section 8 Hardening Tests (Debug Binary) ---
-Section 8 Test Results: 41/41 Passed, 0 Failed
+Section 8 Test Results: 47/47 Passed, 0 Failed
 
 --- 5. Build Application Bundle (./scripts/build_app.sh) ---
 Building Pasta in release configuration...
 Building for production...
-[2 / 6]
+[2 / 4] Pasta-product
 [4 / 7] Pasta-product
 [5 / 8] Pasta-product
 [7 / 8] Pasta-product
 [8 / 8] Pasta-product
-Build complete! (1.64 sec)
+Build complete! (1.39 sec)
 Creating application bundle structure at Pasta.app...
 Copying AppIcon.icns to Resources...
 Copying MenuBarIcon to Resources...
@@ -43,10 +43,10 @@ Generating Info.plist...
 Signing application bundle with stable designated requirement...
 Pasta.app: replacing existing signature
 Verifying code signature...
-Pasta.app built and signed successfully at: /Users/istakahamed06/Desktop/Pasta/Pasta.app
+Pasta.app built and signed successfully at: ./Pasta.app
 
 --- 6. Section 8 Hardening Tests (against Pasta.app) ---
-Section 8 Test Results: 41/41 Passed, 0 Failed
+Section 8 Test Results: 47/47 Passed, 0 Failed
 
 --- 7. Codesign Verification ---
 Codesign: VALID

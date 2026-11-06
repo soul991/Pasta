@@ -13,6 +13,9 @@ public final class VisionOCRTools {
         "auto", "en-US", "fr-FR", "de-DE", "es-ES", "it-IT", "pt-BR", "zh-Hans", "zh-Hant", "ja-JP", "ko-KR"
     ]
 
+    public var forceFallbackToFast: Bool = false
+    public private(set) var didExecuteFallback: Bool = false
+
     public init() {}
 
     private func loadCGImage(from url: URL) -> CGImage? {
@@ -208,9 +211,13 @@ public final class VisionOCRTools {
 
         let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
         do {
+            if forceFallbackToFast {
+                throw PastaError.executionFailed(tool: "VisionOCR", exitCode: 1, output: "Simulated accurate mode failure for fallback test")
+            }
             try handler.perform([request])
         } catch {
             // Fallback for headless environments or runners where accurate level / language correction is unsupported
+            didExecuteFallback = true
             request.recognitionLevel = .fast
             request.usesLanguageCorrection = false
             do {

@@ -5,7 +5,8 @@ DEST_DIR="$HOME/Library/Services/Convert with Pasta.workflow"
 CONTENTS_DIR="$DEST_DIR/Contents"
 PASTA_BIN="/Applications/Pasta.app/Contents/MacOS/Pasta"
 if [ ! -f "$PASTA_BIN" ]; then
-    PASTA_BIN="/Users/istakahamed06/Desktop/Pasta/Pasta.app/Contents/MacOS/Pasta"
+    SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+    PASTA_BIN="$(cd "$SCRIPT_DIR/.." && pwd)/Pasta.app/Contents/MacOS/Pasta"
 fi
 
 echo "Creating Quick Action at $DEST_DIR..."

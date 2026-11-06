@@ -531,9 +531,9 @@ do {
 
     // 5.9 Phase 8 Fix 5: Finder selection and permission helper tests
     do {
-        let rawFinderPaths = "/Users/test/file1.png\n/Users/test/file 2 with spaces.jpg\n\n/Users/test/-weird.mp4\n"
+        let rawFinderPaths = "/mock/test/file1.png\n/mock/test/file 2 with spaces.jpg\n\n/mock/test/-weird.mp4\n"
         let parsed = FinderSelectionHelper.parseSelectionPaths(from: rawFinderPaths)
-        assertTest(parsed.count == 3 && parsed[1] == "/Users/test/file 2 with spaces.jpg", "Fix 5: FinderSelectionHelper parses multiple paths with spaces correctly")
+        assertTest(parsed.count == 3 && parsed[1] == "/mock/test/file 2 with spaces.jpg", "Fix 5: FinderSelectionHelper parses multiple paths with spaces correctly")
         let permMsg = FinderSelectionHelper.formatPermissionDeniedMessage()
         assertTest(permMsg.contains("System Settings") && permMsg.contains("Automation"), "Fix 5: FinderSelectionHelper provides helpful permission guidance")
     }
@@ -790,6 +790,17 @@ do {
     ToolLocator.shared.setUnavailableOverride(tool: "soffice", isUnavailable: true)
     let sofficeAvailable = ToolLocator.shared.isOptionalToolAvailable("soffice")
     assertTest(sofficeAvailable == false, "Step 2: soffice is correctly reported as missing optional tool without failure")
+    let docxWheelSlots = WheelLayoutModel.shared.slots(for: sampleDocx, isAdvanced: false)
+    assertTest(!docxWheelSlots.contains { $0.action?.id == "docx.to.pdf" }, "Step 2: forced-missing soffice hides docx.to.pdf from primary wheel slots without failure")
+    var missingDocxThrew = false
+    do {
+        try OfficeTools.shared.convertOfficeToPDF(input: sampleDocx, output: testTempDir.appendingPathComponent("docx_fail.pdf"), runner: JobRunner(), jobId: UUID())
+    } catch PastaError.missingTool(let tool) {
+        missingDocxThrew = (tool == "soffice")
+    } catch {
+        missingDocxThrew = false
+    }
+    assertTest(missingDocxThrew, "Step 2: forced-missing soffice prevents docx conversion execution with PastaError.missingTool")
     ToolLocator.shared.setUnavailableOverride(tool: "soffice", isUnavailable: false)
 
     let fakeSoffice = URL(fileURLWithPath: "/usr/bin/true")
@@ -4743,11 +4754,19 @@ do {
     // Verify searchable PDF text via pdftotext
     let runner = JobRunner()
     let (stdout, _) = try runner.executeCapture(invocation: Invocation(toolName: "pdftotext", arguments: [searchablePDFURL.path, "-"]))
-    assertTest(stdout.contains("PASTA") && stdout.contains("OCR"), "37.2 pdftotext extracts invisible text layer from searchable PDF")
+    assertTest(stdout.contains("PASTA") && stdout.contains("OCR") && stdout.contains("2026"), "37.2 pdftotext extracts invisible text layer with full year from searchable PDF")
 
     // Recognize text from PDF page
     let pdfRecognized = try VisionOCRTools.shared.recognizeText(fromPDF: searchablePDFURL, language: "en-US")
-    assertTest(pdfRecognized.contains("PASTA"), "37.2 VisionOCRTools recognizes text directly from PDF pages")
+    assertTest(pdfRecognized.contains("PASTA") && pdfRecognized.contains("OCR"), "37.2 VisionOCRTools recognizes text directly from PDF pages")
+
+    // Vision OCR fallback test (simulating failure of accurate mode)
+    VisionOCRTools.shared.forceFallbackToFast = true
+    let fallbackText = try VisionOCRTools.shared.recognizeText(from: testImgURL, language: "en-US")
+    let fallbackDidRun = VisionOCRTools.shared.didExecuteFallback
+    VisionOCRTools.shared.forceFallbackToFast = false
+    assertTest(fallbackDidRun && (fallbackText.contains("PASTA") || fallbackText.contains("OCR")),
+               "37.2 VisionOCRTools executes fallback to .fast mode when accurate mode fails")
 
     // Error handling on empty image
     let emptyImgURL = ocrDir.appendingPathComponent("empty.png")
@@ -4858,6 +4877,36 @@ do {
     assertTest(FileManager.default.fileExists(atPath: watermarkedPDF.path), "37.3 Watermark PDF created")
     let (watermarkOut, _) = try runner.executeCapture(invocation: Invocation(toolName: "pdftotext", arguments: [watermarkedPDF.path, "-"]))
     assertTest(watermarkOut.contains("PASTA_SECRET_STAMP"), "37.3 Watermark text 'PASTA_SECRET_STAMP' present in output via pdftotext")
+
+    // Watermark stamping - center position
+    let centerWatermarkedPDF = secDir.appendingPathComponent("watermarked_center.pdf")
+    try PDFSecurityTools.shared.watermarkPDF(
+        input: samplePDF,
+        output: centerWatermarkedPDF,
+        watermarkText: "PASTA_SECRET_STAMP",
+        opacity: 0.5,
+        position: "center",
+        runner: runner,
+        jobId: UUID()
+    )
+    assertTest(FileManager.default.fileExists(atPath: centerWatermarkedPDF.path), "37.3 Watermark PDF (center position) created")
+    let (centerWatermarkOut, _) = try runner.executeCapture(invocation: Invocation(toolName: "pdftotext", arguments: [centerWatermarkedPDF.path, "-"]))
+    assertTest(centerWatermarkOut.contains("PASTA_SECRET_STAMP"), "37.3 Watermark text 'PASTA_SECRET_STAMP' present in center output via pdftotext")
+
+    // Watermark stamping - top position
+    let topWatermarkedPDF = secDir.appendingPathComponent("watermarked_top.pdf")
+    try PDFSecurityTools.shared.watermarkPDF(
+        input: samplePDF,
+        output: topWatermarkedPDF,
+        watermarkText: "PASTA_SECRET_STAMP",
+        opacity: 0.5,
+        position: "top",
+        runner: runner,
+        jobId: UUID()
+    )
+    assertTest(FileManager.default.fileExists(atPath: topWatermarkedPDF.path), "37.3 Watermark PDF (top position) created")
+    let (topWatermarkOut, _) = try runner.executeCapture(invocation: Invocation(toolName: "pdftotext", arguments: [topWatermarkedPDF.path, "-"]))
+    assertTest(topWatermarkOut.contains("PASTA_SECRET_STAMP"), "37.3 Watermark text 'PASTA_SECRET_STAMP' present in top output via pdftotext")
 
     // Page numbering on 3-page fixture
     let threePagesFixture = URL(fileURLWithPath: "Fixtures/three_numbered_pages.pdf")
@@ -6027,11 +6076,11 @@ do {
     let docxProfile = model.profile(for: "docx")
     let zipProfile = model.profile(for: "zip")
 
-    assertTest(!pngProfile.primaryActionIDs.isEmpty && !pdfProfile.primaryActionIDs.isEmpty && !mp4Profile.primaryActionIDs.isEmpty,
+    assertTest(!pngProfile.primaryActionIDs.isEmpty && !pdfProfile.primaryActionIDs.isEmpty && !mp4Profile.primaryActionIDs.isEmpty && !mp3Profile.primaryActionIDs.isEmpty && !docxProfile.primaryActionIDs.isEmpty && !zipProfile.primaryActionIDs.isEmpty,
                "44.1 Default file-type wheel profiles define primary actions for core formats",
                details: "png: \(pngProfile.primaryActionIDs.count), pdf: \(pdfProfile.primaryActionIDs.count), mp4: \(mp4Profile.primaryActionIDs.count)")
 
-    assertTest(!pngProfile.secondaryActionIDs.isEmpty && !pdfProfile.secondaryActionIDs.isEmpty && !mp4Profile.secondaryActionIDs.isEmpty,
+    assertTest(!pngProfile.secondaryActionIDs.isEmpty && !pdfProfile.secondaryActionIDs.isEmpty && !mp4Profile.secondaryActionIDs.isEmpty && !mp3Profile.secondaryActionIDs.isEmpty && !docxProfile.secondaryActionIDs.isEmpty && !zipProfile.secondaryActionIDs.isEmpty,
                "44.2 Default file-type wheel profiles define secondary (flip-side) actions",
                details: "png: \(pngProfile.secondaryActionIDs.count), pdf: \(pdfProfile.secondaryActionIDs.count), mp4: \(mp4Profile.secondaryActionIDs.count)")
 
