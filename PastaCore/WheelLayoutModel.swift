@@ -152,6 +152,25 @@ public enum LabelMode: String, CaseIterable, Codable {
     case onHover = "onHover"
 }
 
+// MARK: - Wheel Side & Profiles (Part C Step C3)
+
+public enum WheelSide: String, CaseIterable, Codable {
+    case primary
+    case secondary
+}
+
+public struct FileTypeWheelProfile: Codable, Equatable {
+    public let fileExtension: String
+    public var primaryActionIDs: [String]
+    public var secondaryActionIDs: [String]
+
+    public init(fileExtension: String, primaryActionIDs: [String], secondaryActionIDs: [String]) {
+        self.fileExtension = fileExtension.lowercased()
+        self.primaryActionIDs = primaryActionIDs
+        self.secondaryActionIDs = secondaryActionIDs
+    }
+}
+
 // MARK: - Slot Architecture
 
 public enum WheelSlotKind: Equatable {
@@ -302,6 +321,25 @@ public final class WheelLayoutModel {
         }
     }
 
+    // MARK: - Wheel Side (Part C Step C3)
+
+    public var currentSide: WheelSide = .primary
+
+    @discardableResult
+    public func flipSide() -> WheelSide {
+        return .primary // Stub for RED baseline
+    }
+
+    public func resetSide() {
+        currentSide = .primary
+    }
+
+    public func profile(for fileExtension: String) -> FileTypeWheelProfile {
+        return FileTypeWheelProfile(fileExtension: fileExtension, primaryActionIDs: [], secondaryActionIDs: []) // Stub for RED baseline
+    }
+
+    public func setProfile(_ profile: FileTypeWheelProfile) {}
+
     // MARK: - Pinned Tools per Category
 
     /// Default 6 pinned tools for each supported category
@@ -451,7 +489,7 @@ public final class WheelLayoutModel {
     /// - Slots 0..5 (1 to 6): primary pinned tools for that category
     /// - Slot 6 (7): More (ellipsis glyph)
     /// - Slot 7 (8): Customize (gear glyph)
-    public func slots(for fileURL: URL?, isAdvanced: Bool) -> [WheelSlot] {
+    public func slots(for fileURL: URL?, isAdvanced: Bool, side: WheelSide? = nil) -> [WheelSlot] {
         let totalSlots = 8
         var result: [WheelSlot] = []
 
