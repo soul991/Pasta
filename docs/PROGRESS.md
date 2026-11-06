@@ -241,6 +241,19 @@
 | PDF to PDF/A-2b archival format (`pdf.to.pdfa`) | Block A4 | Documents | **DONE** | `37.4 PDF to PDF/A-2b creates output file` & `37.4 PDF/A-2b metadata verified with exiftool (Part: 2, Conformance: B)` |
 | Calibre optional tool registration & doctor hint (`pdf.to.epub.calibre`) | Block A4 | Tools | **DONE** | `37.4 pdf.to.epub.calibre action is registered` & `37.4 pdf.to.epub.calibre requirementNote is 'needs Calibre' when missing` |
 
+---
+
+## Part C Itemized Audit Table (Small Features)
+
+| Item / Capability | Step | Category | Status | CI Verification Test Name |
+| :--- | :--- | :--- | :--- | :--- |
+| Per-engine concurrency limit table (`BatchJobQueue.perEngineLimits`) with default caps (gs/ghostscript: 1, ffmpeg: 2, others unconstrained) | Step C1 | Concurrency | **DONE** | `42.1 Default per-engine limits table specifies cap 2 for ffmpeg and 1 for ghostscript` |
+| Queue-level and global slot acquisition limiting concurrent ffmpeg jobs to at most 2 | Step C1 | Concurrency | **DONE** | `42.2 All 6 queued ffmpeg jobs complete successfully` & `42.3 Peak concurrency for 6 queued ffmpeg jobs never exceeds cap 2` |
+| Queue-level and global slot acquisition limiting concurrent ghostscript jobs to at most 1 | Step C1 | Concurrency | **DONE** | `42.4 All 4 queued ghostscript jobs complete successfully` & `42.5 Peak concurrency for 4 queued ghostscript jobs never exceeds cap 1` |
+| Recent conversions list (App Support store, privacy toggle, Reveal in Finder) | Step C2 | Features | Pending | Scheduled for Step C2 |
+| Per-file-type wheel profiles & Tab flip side | Step C3 | UI / Wheel | Pending | Scheduled for Step C3 |
+
+
 
 
 

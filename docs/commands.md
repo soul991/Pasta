@@ -453,3 +453,18 @@ Every wired extractor has been tested against symlink hop attacks (`dir_link -> 
 ### Offline QR Barcode Reading
 - Native Apple Vision framework via `VNDetectBarcodesRequest` using `.qr` symbology on `CGImageSource`. Completely offline with zero network lookups or automatic URL opening.
 
+---
+
+## 7. Engine Concurrency Limits & Queue Throttling (Part C Step C1)
+
+To protect system responsiveness and prevent memory exhaustion from resource-intensive engines, `BatchJobQueue` enforces centralized per-engine concurrency limits across all batch conversions:
+
+| Engine | Default Concurrency Cap | Rationale |
+| :--- | :--- | :--- |
+| **Ghostscript (`gs`)** | **1** | Heavy resident memory footprint and non-reentrant PDF interpreter state. Serialized execution prevents OOM crashes. |
+| **FFmpeg (`ffmpeg`)** | **2** | Heavy multi-threaded CPU and GPU encoder utilization. Limiting to 2 concurrent instances balances multi-core throughput without starving macOS UI / WindowServer threads. |
+| **All Other Engines** (`sips`, `magick`, `qpdf`, `pandoc`, etc.) | **Unconstrained** | Governed only by queue `maxConcurrent` or user preferences (`PreferencesManager.shared.maxConcurrentJobs`). |
+
+The limits are centralized in `BatchJobQueue.perEngineLimits` and enforced dynamically via global slot tracking and queue wakeup callbacks.
+
+
