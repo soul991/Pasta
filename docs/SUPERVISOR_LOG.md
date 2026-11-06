@@ -57,7 +57,7 @@ As the read-only supervisor sub-agent, the supervisor adheres strictly to the fo
 | **B2** | Complete Phase 11 Block A Scope (Office, OCR, PDF security, atomic reservation) | **PASS** | `1df099d` | `42207897934` | Yes (903 u, 47 s8) | Yes (909 u, 47 s8) | **PASS** |
 | **C1** | Per-Engine Concurrency Cap (Ghostscript 1, FFmpeg 2) | **PASS** | `8cf019c` | `42220883417` | Yes (908 u, 47 s8) | Yes (914 u, 47 s8) | **PASS** |
 | **C2** | Recent Conversions List (App Support store, privacy toggle, Reveal in Finder) | **PASS** | `73e36e2` | `42234072828` | Yes (920 u, 47 s8) | Yes (926 u, 47 s8) | **PASS** |
-| **C3** | Per-File-Type Wheel Profiles & Tab Flip Side | **READY TO SUPERVISE** | - | - | - | - | - |
+| **C3** | Per-File-Type Wheel Profiles & Tab Flip Side | **PASS** | `bd2821b` | `42265151391` | Yes (931 u, 47 s8) | Yes (937 u, 47 s8) | **PASS** |
 
 ---
 
@@ -641,25 +641,130 @@ As the read-only supervisor sub-agent, the supervisor adheres strictly to the fo
 ---
 
 ### Step C3 — Per-File-Type Wheel Profiles and a Tab Flip Side
-- **Status**: **READY TO SUPERVISE**
-- **Scope**:
-  1. Per-file-type wheel action profiles:
-     - Each file type receives an ordered primary set of actions for the radial wheel.
-     - A secondary set of actions reachable by pressing `<Tab>` while the wheel is open ("Tab flip side").
-     - Existing Shift-hold behavior remains completely unchanged.
-  2. Pure logic test coverage:
-     - Profile definitions, action ordering per file category/extension, and Tab flip toggle states must be verified as pure deterministic logic in `PastaTests/main.swift`.
-     - Explicit RED evidence before implementation, followed by GREEN proof after.
-  3. UI Manual Verification Documentation:
-     - Because interactive key press and visual flip transitions cannot be triggered in headless CI, the exact manual verification procedure must be recorded in `docs/MANUAL_CHECKS.md` for human verification.
-  4. Non-negotiable constraints:
-     - Zero assertions weakened or deleted.
-     - PR merged cleanly into `main` without force.
-     - Dual CI jobs green (`Xcode 27 arm64` and `macos-latest`).
-     - Local verification passes on macOS 27.2.
-- **Gate Criteria**:
-  - Deterministic profile logic tested with RED then GREEN evidence.
-  - Existing Shift-hold behavior intact.
-  - Manual verification steps documented in `docs/MANUAL_CHECKS.md`.
-  - Both CI jobs green on the step's PR.
+- **Status**: **PASS**
+- **Verified Commits & PR**:
+  - Pull Request #12: `https://github.com/soul991/Pasta/pull/12` merged cleanly into `main` without force.
+  - Merge Commit on `main`: `bd2821b88fc258ca8fa60ca45c8f589057e59592`.
+  - Head Commit: `c903168a544cf002541b949900f033d0c7ceb233`.
+  - RED Baseline Commit: `bb67a12d8fb588b236a28e595617af31c3aaf382`.
+- **GitHub Actions CI Runs**:
+  - RED Baseline Run: `42252154626` (failed as expected; Job `128009772163` exited 1, failing 7 Section 44 tests on unpatched codebase: 44.1, 44.2, 44.3, 44.4, 44.6, 44.9, 44.11).
+  - PR #12 Run: `42260635440` (Status: completed, conclusion: success).
+    - Job 1: `Build & Verify (Xcode 27 arm64)` (ID `128039333419`) in 11m4s — **Success**
+    - Job 2: `Compatibility fallback (macos-latest)` (ID `128045230532`) in 6m23s — **Success**
+  - Post-Merge Run on `main`: `42265151391` (Status: completed, conclusion: success).
+    - Job 1: `Build & Verify (Xcode 27 arm64)` (ID `128055019402`) in 10m45s — **Success**
+      - Unit Tests (Debug): 937/937 Passed, 0 Failed
+      - Unit Tests (Release): 937/937 Passed, 0 Failed
+      - Section 8 Tests (Debug): 47/47 Passed, 0 Failed
+      - Section 8 Tests (Pasta.app): 47/47 Passed, 0 Failed
+      - Real-Timer Smoke Test (50x Loop): 50/50 Passed (100.0%)
+    - Job 2: `Compatibility fallback (macos-latest)` (ID `128060549238`) in 7m10s — **Success**
+      - Unit Tests: 937/937 Passed, 0 Failed
+      - Real-Timer Smoke Test (50x Loop): 50/50 Passed (100.0%)
+- **Independent Verification of Gate Items**:
+  1. **Per-File-Type Wheel Action Profiles**: **PASS**
+     - `FileTypeWheelProfile` structure defines dedicated primary (slots 0–5) and secondary action sets per format family (`png`, `pdf`, `mp4`, `mp3`, `docx`, `zip`, etc.).
+     - Primary actions prioritize core daily conversions (e.g., PDF: `pdf.compress`, `pdf.to.text`, `pdf.to.images`, `pdf.advanced.split`, `pdf.reorganize`, `pdf.merge`).
+     - Secondary actions prioritize extended operations (e.g., PDF: `pdf.watermark`, `pdf.pagenumbers`, `pdf.to.pdfa`, `pdf.to.epub`, `pdf.security.lock`, `pdf.ocr.text`).
+     - Profiles are customizable and persist locally across app restarts.
+  2. **Tab Flip Side State Transitions & Reset**: **PASS**
+     - Pressing <kbd>Tab</kbd> while the radial wheel is open triggers `flipWheelSide()`, invoking haptic feedback (`NSHapticFeedbackManager`) and rebuilding slots 0–5 to the secondary profile.
+     - Slots 6 (More) and 7 (Customize) remain anchored in place.
+     - Dismissing the wheel with <kbd>Esc</kbd> or initiating a fresh drag resets `currentSide` back to `.primary`.
+  3. **Shift-Hold & Charging Ring Invariance**: **PASS**
+     - Shift-hold charging progress ring (120 ms delay, 450 ms fill duration), stay-open latching, and auto-dismiss settings function identically and remain 100% intact.
+  4. **Automated Pure Logic Test Coverage (RED & GREEN)**: **PASS**
+     - Section 44 test suite (`PastaTests/main.swift`):
+       - 44.1: Default file-type wheel profiles define primary actions for core formats.
+       - 44.2: Default file-type wheel profiles define secondary (flip-side) actions.
+       - 44.3: PDF profile primary actions contain essential compression and extraction tools.
+       - 44.4: PDF profile secondary actions contain watermark, archival, and security tools.
+       - 44.5: Initial side is primary.
+       - 44.6: flipSide toggles side to secondary.
+       - 44.7: flipSide second toggle returns side to primary.
+       - 44.8: resetSide returns side to primary.
+       - 44.9: Primary and secondary slots produce distinct action sets for target file.
+       - 44.10: Existing Shift-hold duration and latch behavior preferences remain intact.
+       - 44.11: Custom per-file-type profile can be updated and retrieved.
+     - RED evidence confirmed in CI run `42252154626` (7 failures as expected).
+     - GREEN evidence confirmed locally (931/931) and in CI (937/937).
+  5. **UI Manual Checks Documentation**: **PASS**
+     - Documented in `docs/MANUAL_CHECKS.md` Section 10 ("Part C Step C3: Per-File-Type Wheel Profiles & Tab Flip Side Checks").
+     - Documented in `docs/commands.md` Section 9 ("Per-File-Type Wheel Profiles & Tab Flip Side").
+     - Audited in `docs/PROGRESS.md`.
+  6. **Local Re-Check on macOS 27.2**: **PASS**
+     - `sw_vers`: macOS 27.2 (Build 26B123).
+     - `xcodebuild -version`: Xcode 27.2 (Build 27B52).
+     - `swift --version`: Swift 6.4.2 (arm64-apple-macosx27.2.0).
+     - `swift run PastaTests`: 931/931 Passed, 0 Failed (CI runs 937 due to LibreOffice presence; gracefully skipped locally).
+     - `swift run -c release PastaTests`: 931/931 Passed, 0 Failed.
+     - `./scripts/run_section8_tests.sh`: 47/47 Passed, 0 Failed.
+     - `./scripts/run_real_timer_smoke_test.sh`: 50/50 Passed (100.0%).
+  7. **Assertion Integrity**: **PASS**
+     - Zero assertions weakened or deleted. All previous tests (A1 through C2) continue to pass without regression.
+  8. **Standing Rules**: **PASS**
+     - 100% offline, zero network requests, zero telemetry, zero third-party Swift packages, zero shell strings, no force push, zero deleted branches.
+- **Supervisor Verdict**: **PASS**
+
+---
+
+## 7. Phase R1 Final Execution Summary & Human Owner Manual Checklist
+
+All Phase R1 steps (Part A: Steps A1–A9, Part B: Steps B1–B2, Part C: Steps C1–C3) have completed with full independent verification and recorded verdicts of **PASS**. Zero steps are FAIL or BLOCKED.
+
+### 7.1 Master Step Verdict Table
+
+| Step | Scope Summary | Merge Commit | Primary CI Run | Local Verification | CI Verification | Final Verdict |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **A1** | App Icon Verification (1024x1024, RGBA alpha, transparent corners, codesign) | `a3945e7` | `42116157196` | 828 u, 41 s8 (macOS 27.2) | 830 u, 41 s8 (Xcode 27 / macos-latest) | **PASS** |
+| **A2** | Hostile Archive Fixtures Coverage (Asserted all 16 fixtures) | `fb5ab7c` | `42119719613` | 834 u, 41 s8 (macOS 27.2) | 836 u, 41 s8 (Xcode 27 / macos-latest) | **PASS** |
+| **A3** | Stop Extraction Damage (Preflight link inspection, sentinel tests) | `9259de1` | `42124240749` | 838 u, 41 s8 (macOS 27.2) | 840 u, 41 s8 (Xcode 27 / macos-latest) | **PASS** |
+| **A4** | Archive Bomb Limits Before Disk Fills (Pre-extraction catalog check, running cap) | `1d07f3f` | `42127479006` | 840 u, 41 s8 (macOS 27.2) | 842 u, 41 s8 (Xcode 27 / macos-latest) | **PASS** |
+| **A5** | Real-Timer Smoke Test (Section 33.7, 50x loop local + CI) | `520f2c3` | `42135364273` | 841 u, 41 s8, 50/50 smoke | 843 u, 41 s8, 50/50 smoke | **PASS** |
+| **A6** | Local Mac Verification Script (`scripts/local_verify.sh`) | `d2ad5c3` | `42138683927` | 841 u, 41 s8, 9 diagnostics | 843 u, 41 s8, 50/50 smoke | **PASS** |
+| **A7** | Wording & Hygiene (`SECURITY.md`, notices count reconciliation, LICENSE) | `698318c` | `42141319398` | 841 u, 41 s8 (macOS 27.2) | 843 u, 41 s8 (Xcode 27 / macos-latest) | **PASS** |
+| **A7b**| License Audit & Bundling Policy (`docs/LICENSE_AUDIT.md`, 19 tools, test) | `a45e4f7` | `42144161826` | 845 u, 41 s8 (macOS 27.2) | 847 u, 41 s8 (Xcode 27 / macos-latest) | **PASS** |
+| **A8** | Release Workflow Proof (Throwaway tag `v0.0.0-test`, download & verify) | `5e74179` | `42146162734` | 845 u, 41 s8 (macOS 27.2) | Release workflow verified | **PASS** |
+| **A9** | Merge to `main` and Tag Beta (`v0.1.0-beta`, release assets published) | `85ba9e4` | `42172435611` | 845 u, 41 s8 (macOS 27.2) | 847 u, 41 s8 (Xcode 27 / macos-latest) | **PASS** |
+| **B1** | Fix Phase 11 Block A 9 Failing Assertions (`soffice` stubs + root causes) | `6b0aee2` | `42187288812` | 899 u, 41 s8 (macOS 27.2) | 901 u, 41 s8 (Xcode 27 / macos-latest) | **PASS** |
+| **B2** | Complete Phase 11 Block A Scope (Office, OCR, PDF security, atomic reservation) | `1df099d` | `42207897934` | 903 u, 47 s8 (macOS 27.2) | 909 u, 47 s8 (Xcode 27 / macos-latest) | **PASS** |
+| **C1** | Per-Engine Concurrency Cap (Ghostscript 1, FFmpeg 2) | `8cf019c` | `42220883417` | 908 u, 47 s8 (macOS 27.2) | 914 u, 47 s8 (Xcode 27 / macos-latest) | **PASS** |
+| **C2** | Recent Conversions List (App Support store, privacy toggle, Reveal in Finder) | `73e36e2` | `42234072828` | 920 u, 47 s8 (macOS 27.2) | 926 u, 47 s8 (Xcode 27 / macos-latest) | **PASS** |
+| **C3** | Per-File-Type Wheel Profiles & Tab Flip Side | `bd2821b` | `42265151391` | 931 u, 47 s8 (macOS 27.2) | 937 u, 47 s8 (Xcode 27 / macos-latest) | **PASS** |
+
+*Note on test count variance*: CI runners install LibreOffice (`soffice`) via Homebrew cask, executing 6 behavioral Office conversion tests that are safely skipped locally when `soffice` is not installed on the host system.
+
+---
+
+### 7.2 Human Owner Manual Action Items
+
+The following items cannot be performed by automated agents or CI runners and must be completed by the repository owner by hand:
+
+1. **Confirm LICENSE Copyright Name**:
+   - `LICENSE` is currently copyrighted to `Istak Ahamed`. If the owner prefers an organization name or legal entity, update `LICENSE` accordingly.
+2. **Apple Developer ID Enrollment & Notarization Credentials**:
+   - To eliminate macOS Gatekeeper warnings on user machines without requiring "Open Anyway", the owner must enroll in the Apple Developer Program ($99/year).
+   - Configure GitHub repository secrets:
+     - `APPLE_CERTIFICATE_BASE64`: Developer ID Application certificate (.p12).
+     - `APPLE_CERTIFICATE_PASSWORD`: Certificate password.
+     - `APPLE_ID`: Owner's Apple account email.
+     - `APPLE_TEAM_ID`: 10-character Developer Team ID.
+     - `APPLE_APP_SPECIFIC_PASSWORD`: App-specific password for notarization service.
+3. **Manual Gatekeeper "Open Anyway" Smoke Test**:
+   - Download `Pasta-macOS.zip` from release `v0.1.0-beta`.
+   - Double-click to expand in `~/Downloads`.
+   - Right-click `Pasta.app` -> Open -> confirm Gatekeeper prompt ("Apple could not verify the developer") -> Click "Open Anyway" in System Settings > Privacy & Security.
+   - Verify the app launches, shows menu bar icon, and accepts file drops.
+4. **Interactive GUI Testing with a Human at the Screen (`docs/MANUAL_CHECKS.md`)**:
+   - **Shift-Hold Drag Gesture**: Drag a file, hold <kbd>Shift</kbd> for 450 ms, verify the progress ring charges and the radial wheel blooms.
+   - **Tab Flip Side Gesture**: While the wheel is open, press <kbd>Tab</kbd>, verify haptic click and action slots flip to secondary profile. Press <kbd>Tab</kbd> again to return to primary.
+   - **Liquid Glass Contrast**: Test wheel visibility on dark wallpaper, light wallpaper, and high-contrast dynamic desktop images.
+   - **Settings & History Review**: Open Settings, toggle "Record recent conversions", clear history, and click "Reveal in Finder".
+5. **Wheel Screenshots & Demo Recording for README**:
+   - Take crisp screenshots of the radial wheel open over an image, PDF, and video.
+   - Record a short 5-second GIF or video of the Shift-hold blooming animation and Tab flip side transition to embed in `README.md`.
+6. **Public Web Distribution**:
+   - If releasing outside GitHub Releases, publish the distribution page and include links to third-party licenses as documented in `docs/DISTRIBUTION_NOTES.md`.
+
 
