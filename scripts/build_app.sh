@@ -76,4 +76,4 @@ codesign --force --deep -s - -r='designated => identifier "com.local.pasta"' "$A
 echo "Verifying code signature..."
 codesign -v "$APP_DIR"
 
-echo "Pasta.app built and signed successfully at: $(pwd)/$APP_DIR"
+echo "Pasta.app built and signed successfully at: ./$APP_DIR"

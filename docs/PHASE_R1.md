@@ -10,7 +10,7 @@ You are continuing Pasta (repo soul991/Pasta, branch `codex/r0`). Phase R0 is do
 4. Never hand-type test counts anywhere in docs. Counts come from CI logs or `scripts/test_counts.sh`.
 5. Never force-push. Never delete branches. You may delete only tags/releases you created yourself for testing.
 6. Report honestly. If something is blocked, partial, or unverified, say so in the step report. "Not verified" is an acceptable answer; a false "verified" is not.
-7. You now run directly on the owner's Mac (macOS 27.2, Xcode 27.2). Run every build and test locally AND in GitHub Actions. A step passes only when the local run and both CI jobs (the macos-27 job and the `macos-latest` fallback job) are green. If local and CI results differ, report the difference and its cause; do not hide either one. Use the repo's real Mac path, not any old Windows path (`d:/Istak/Pasta`) mentioned in earlier reports.
+7. You now run directly on the owner's Mac (macOS 27.2, Xcode 27.2). Run every build and test locally AND in GitHub Actions. A step passes only when the local run and both CI jobs (the macos-27 job and the `macos-latest` fallback job) are green. If local and CI results differ, report the difference and its cause; do not hide either one. Use the repo's real Mac path, not any old Windows path (e.g. `d:/.../Pasta`) mentioned in earlier reports.
 8. Do not start Block B of Phase 11, notarization, a route planner, bundled engines, browser-URL drags, watch folders, HWP, CAD or 3D. They are out of scope.
 9. If the plan is unclear or two rules conflict, write the question to `docs/QUESTIONS.md`, stop that step, and continue with the next independent step if one exists.
 

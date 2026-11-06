@@ -14,7 +14,7 @@
 
 ## 0.1 Known state at handoff (reported by the owner on Nov 2, 2026)
 
-The owner's Mac (`/Users/istakahamed06/Desktop/Pasta`, branch `main`, up to date with `origin/main` at `d774c8f`) had **uncommitted work that was never pushed**:
+The owner's Mac (`~/Desktop/Pasta`, branch `main`, up to date with `origin/main` at `d774c8f`) had **uncommitted work that was never pushed**:
 - Modified: `.github/workflows/macos-ci.yml`, `PastaCore/ConversionAction.swift`, `FormatRegistry.swift`, `JobRunner.swift`, `PDFTools.swift`, `PastaCLI.swift`, `PastaLogger.swift`, `ToolLocator.swift`, `Views/RadialWheelMoreView.swift`, `WheelLayoutModel.swift`, `PastaTests/main.swift`.
 - Untracked: `PastaCore/OfficeTools.swift`, `PDFSecurityTools.swift`, `VisionOCRTools.swift`, `Fixtures/sample.csv`, `Fixtures/sample.xlsx`, `test_stamp.swift` (a scratch file at the repo root).
 This looks like **Phase 11 Block A started** (Office, PDF security, Vision OCR) by an earlier agent session, unreviewed and untested. The owner will save it on a branch named `wip/phase11-local-before-codex` (pushed, never merged to `main`) before you start. Treat that work as **unverified**: review it line by line in the audit, then keep, fix or rewrite it. Delete `test_stamp.swift` if it is only scratch. If the branch does not exist yet, stop and ask the owner to create it.
