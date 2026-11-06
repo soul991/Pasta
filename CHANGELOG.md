@@ -30,12 +30,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - POSIX `open(path, O_CREAT | O_EXCL)` atomic file placeholder reservation.
   - `mkdir` folder reservation with APFS-safe atomic publication and pre-macOS 27 directory fallback.
   - Strict "never overwrite existing files" invariant preserved across parallel CLI and App instances.
-- **Hostile Archive Defense Suite (`ArchiveGuard`) (Phase R0)**:
+- **Hostile Archive Defense Suite (`ArchiveGuard`) (Phases R0 & R1)**:
   - Protection against Zip Slip, relative and absolute directory traversal, symlink hopping, and hard-link escapes.
-  - Decompression bomb protection with configurable size (4 GB file / 8 GB total) and depth (64 levels) limits.
+  - Preflight link inspection and sentinel directory traversal validation preventing extraction damage.
+  - Decompression bomb protection with pre-extraction catalog sizing and running disk scratch cap with process termination and atomic cleanup.
   - Automated rejection of special device nodes, FIFOs, and setuid/setgid elevated privilege binaries.
-  - Preflight catalog inspection using `tar -tf`, `7zz l -slt`, and `zipinfo -1`.
-- **Repo Hygiene & CI (Phase R0)**:
+  - Full automated coverage asserting 15 hostile archive fixtures in CI.
+- **Licensing & Documentation**:
+  - Comprehensive 19-tool license audit (`docs/LICENSE_AUDIT.md`) detailing SPDX identifiers, upstream URLs, and bundling decisions.
+  - Pre-release distribution guide (`docs/DISTRIBUTION_NOTES.md`) covering Developer ID, notarization, and trademark clearances.
+  - Reconciled notices and verified zero telemetry / local-only processing documentation.
+- **Repo Hygiene & CI (Phases R0 & R1)**:
+  - App icon validation: verified 1024x1024 dimensions, alpha channel, and transparent corner pixels.
   - 100% offline network verification in CI binary analysis.
   - Dual macOS CI pipeline covering macOS 27 (Xcode 27) and macOS 26 (Xcode 26 fallback).
-  - Ad-hoc signed GitHub Actions release pipeline packaging `Pasta.app` with SHA-256 verification.
+  - Ad-hoc signed GitHub Actions release pipeline packaging `Pasta.app` with automated unpacking, SHA-256 checksum verification, codesign validation, and headless diagnostics test.
