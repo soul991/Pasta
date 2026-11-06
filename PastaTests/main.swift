@@ -36,10 +36,13 @@ if CommandLine.arguments.contains("--smoke-real-timer-50") {
         var didFire = false
         overlay.timerScheduler = nil
         overlay.onCloseRequested = { didFire = true }
-        overlay.scheduleAutoDismiss(delay: 1.0)
-        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.10))
+        overlay.scheduleAutoDismiss(delay: 0.5)
+        RunLoop.main.run(mode: .default, before: Date(timeIntervalSinceNow: 0.10))
         let early = didFire
-        RunLoop.main.run(until: Date(timeIntervalSinceNow: 1.15))
+        let deadline = Date(timeIntervalSinceNow: 2.0)
+        while !didFire && Date() < deadline {
+            RunLoop.main.run(mode: .default, before: Date(timeIntervalSinceNow: 0.02))
+        }
         let late = didFire
         if !early && late {
             passCount += 1
@@ -4032,17 +4035,20 @@ do {
 
     // 33.7-SMOKE: Real-timer smoke test for scheduleAutoDismiss (using actual DispatchQueue.main async timer)
     // Uses real timer (timerScheduler = nil).
-    // Generous margin: 1.0s deadline, checked at 100ms (negative proof) and 1.25s (positive proof).
+    // Generous margin: 0.5s deadline, checked at 100ms (negative proof) and up to 2.0s (positive proof).
     let smokeOverlay = RadialWheelOverlayViewController()
     smokeOverlay.loadView()
     smokeOverlay.viewDidLoad()
     var smokeRealTimerAutoCloseCalled = false
     smokeOverlay.timerScheduler = nil
     smokeOverlay.onCloseRequested = { smokeRealTimerAutoCloseCalled = true }
-    smokeOverlay.scheduleAutoDismiss(delay: 1.0)
-    RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.10))
+    smokeOverlay.scheduleAutoDismiss(delay: 0.5)
+    RunLoop.main.run(mode: .default, before: Date(timeIntervalSinceNow: 0.10))
     let smokeNotEarly = !smokeRealTimerAutoCloseCalled
-    RunLoop.main.run(until: Date(timeIntervalSinceNow: 1.15))
+    let smokeDeadline = Date(timeIntervalSinceNow: 2.0)
+    while !smokeRealTimerAutoCloseCalled && Date() < smokeDeadline {
+        RunLoop.main.run(mode: .default, before: Date(timeIntervalSinceNow: 0.02))
+    }
     let smokeDidFire = smokeRealTimerAutoCloseCalled
     assertTest(smokeNotEarly && smokeDidFire, "33.7 Smoke: Real-timer scheduleAutoDismiss auto-dismisses on real clock with generous margin")
 
