@@ -34,6 +34,9 @@ if [ -f "PastaCore/Resources/theme_tokens.json" ]; then
     cp PastaCore/Resources/theme_tokens.json "$RESOURCES_DIR/theme_tokens.json"
 fi
 
+echo "Packaging bundled relocatable engines into $RESOURCES_DIR/Engines..."
+./scripts/build_engines.sh "$RESOURCES_DIR/Engines"
+
 echo "Generating Info.plist..."
 cat << 'EOF' > "$CONTENTS_DIR/Info.plist"
 <?xml version="1.0" encoding="UTF-8"?>
@@ -70,8 +73,8 @@ cat << 'EOF' > "$CONTENTS_DIR/Info.plist"
 </plist>
 EOF
 
-echo "Signing application bundle with stable designated requirement..."
-codesign --force --deep -s - -r='designated => identifier "com.local.pasta"' "$APP_DIR"
+echo "Signing application bundle with stable designated requirement and hardened runtime..."
+codesign --force --deep -s - --options runtime --entitlements assets/entitlements.plist -r='designated => identifier "com.local.pasta"' "$APP_DIR"
 
 echo "Verifying code signature..."
 codesign -v "$APP_DIR"

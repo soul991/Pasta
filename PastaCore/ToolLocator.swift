@@ -8,6 +8,7 @@ public struct PastaToolStatus: Equatable, Codable, Sendable {
     public let formula: String?
     public let isCask: Bool
     public let dependentActions: [String]
+    public let isBundled: Bool
 
     public init(
         name: String,
@@ -16,7 +17,8 @@ public struct PastaToolStatus: Equatable, Codable, Sendable {
         version: String? = nil,
         formula: String? = nil,
         isCask: Bool = false,
-        dependentActions: [String] = []
+        dependentActions: [String] = [],
+        isBundled: Bool = false
     ) {
         self.name = name
         self.isOptional = isOptional
@@ -25,6 +27,7 @@ public struct PastaToolStatus: Equatable, Codable, Sendable {
         self.formula = formula
         self.isCask = isCask
         self.dependentActions = dependentActions
+        self.isBundled = isBundled
     }
 
     public var isAvailable: Bool { path != nil }
@@ -32,9 +35,10 @@ public struct PastaToolStatus: Equatable, Codable, Sendable {
     public var displayLine: String {
         let state = isAvailable ? "Available" : (isOptional ? "Optional missing" : "Missing")
         let ver = version.map { " (\($0))" } ?? ""
+        let sourceTag = isAvailable ? (isBundled ? " [bundled]" : " [system]") : ""
         let p = path.map { " — \($0)" } ?? ""
         let form = (!isAvailable && formula != nil) ? " [Formula: \(isCask ? "--cask " : "")\(formula!)]" : ""
-        return "\(name): \(state)\(ver)\(p)\(form)"
+        return "\(name): \(state)\(ver)\(sourceTag)\(p)\(form)"
     }
 }
 
@@ -175,12 +179,85 @@ public final class ToolLocator {
         "/usr/sbin"
     ]
 
+    public var developerModeUseInstalledTools: Bool = false {
+        didSet {
+            lock.lock()
+            cache.removeAll()
+            lock.unlock()
+        }
+    }
+    public var customEnginesDirectoryURL: URL? {
+        didSet {
+            lock.lock()
+            cache.removeAll()
+            lock.unlock()
+        }
+    }
+
     private var overrides: [String: URL] = [:]
     private var unavailableOverrides: Set<String> = []
     private var cache: [String: URL] = [:]
     private let lock = NSLock()
 
     public init() {}
+
+    public func clearCache() {
+        lock.lock()
+        defer { lock.unlock() }
+        cache.removeAll()
+    }
+
+    public func bundledEnginesURL() -> URL? {
+        if let custom = customEnginesDirectoryURL {
+            return custom
+        }
+        if let customEnv = ProcessInfo.processInfo.environment["PASTA_ENGINES_DIR"] {
+            let u = URL(fileURLWithPath: customEnv)
+            if FileManager.default.fileExists(atPath: u.path) {
+                return u
+            }
+        }
+        if let res = Bundle.main.resourceURL?.appendingPathComponent("Engines") {
+            if FileManager.default.fileExists(atPath: res.path) {
+                return res
+            }
+        }
+        let exec = Bundle.main.executableURL ?? URL(fileURLWithPath: ProcessInfo.processInfo.arguments.first ?? "")
+        let bundleURL = exec.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        if bundleURL.pathExtension == "app" {
+            let res = bundleURL.appendingPathComponent("Contents/Resources/Engines")
+            if FileManager.default.fileExists(atPath: res.path) {
+                return res
+            }
+        }
+        return nil
+    }
+
+    public func findBundledEngine(_ name: String) -> URL? {
+        guard let enginesDir = bundledEnginesURL() else { return nil }
+        let fm = FileManager.default
+
+        // 1. Check bin/<name>
+        let binCandidate = enginesDir.appendingPathComponent("bin").appendingPathComponent(name)
+        if fm.isExecutableFile(atPath: binCandidate.path) {
+            return binCandidate
+        }
+
+        // 2. Check bundled application packages
+        if name == "soffice" {
+            let sofficeCandidate = enginesDir.appendingPathComponent("LibreOffice.app/Contents/MacOS/soffice")
+            if fm.isExecutableFile(atPath: sofficeCandidate.path) {
+                return sofficeCandidate
+            }
+        } else if name == "ebook-convert" {
+            let calibreCandidate = enginesDir.appendingPathComponent("calibre.app/Contents/MacOS/ebook-convert")
+            if fm.isExecutableFile(atPath: calibreCandidate.path) {
+                return calibreCandidate
+            }
+        }
+
+        return nil
+    }
 
     public func setOverride(tool: String, url: URL?) {
         lock.lock()
@@ -222,6 +299,16 @@ public final class ToolLocator {
         }
 
         let fm = FileManager.default
+
+        // 1. If NOT in developer mode, prefer bundled engines first
+        if !developerModeUseInstalledTools {
+            if let bundled = findBundledEngine(name) {
+                cache[name] = bundled
+                return bundled
+            }
+        }
+
+        // 2. Search standard system and Homebrew paths
         for path in searchPaths {
             let candidate = URL(fileURLWithPath: path).appendingPathComponent(name)
             if fm.isExecutableFile(atPath: candidate.path) {
@@ -236,6 +323,14 @@ public final class ToolLocator {
                 let candidate = URL(fileURLWithPath: defaultAppPath)
                 cache[name] = candidate
                 return candidate
+            }
+        }
+
+        // 3. Fallback to bundled engine if developer mode was on but tool was missing from system
+        if developerModeUseInstalledTools {
+            if let bundled = findBundledEngine(name) {
+                cache[name] = bundled
+                return bundled
             }
         }
 
@@ -263,6 +358,11 @@ public final class ToolLocator {
                     return overridden
                 }
             }
+            if !developerModeUseInstalledTools {
+                if let bundled = findBundledEngine("soffice") {
+                    return bundled
+                }
+            }
             let defaultAppPath = "/Applications/LibreOffice.app/Contents/MacOS/soffice"
             if FileManager.default.isExecutableFile(atPath: defaultAppPath) {
                 return URL(fileURLWithPath: defaultAppPath)
@@ -282,9 +382,18 @@ public final class ToolLocator {
                     return overridden
                 }
             }
-            let defaultAppPath = "/Applications/Calibre.app/Contents/MacOS/ebook-convert"
+            if !developerModeUseInstalledTools {
+                if let bundled = findBundledEngine("ebook-convert") {
+                    return bundled
+                }
+            }
+            let defaultAppPath = "/Applications/calibre.app/Contents/MacOS/ebook-convert"
+            let fallbackAppPath = "/Applications/Calibre.app/Contents/MacOS/ebook-convert"
             if FileManager.default.isExecutableFile(atPath: defaultAppPath) {
                 return URL(fileURLWithPath: defaultAppPath)
+            }
+            if FileManager.default.isExecutableFile(atPath: fallbackAppPath) {
+                return URL(fileURLWithPath: fallbackAppPath)
             }
             return findTool("ebook-convert")
         }
@@ -333,6 +442,7 @@ public final class ToolLocator {
     }
 
     public func doctorStatuses(fetchVersions: Bool = false) -> [PastaToolStatus] {
+        let enginesURL = bundledEnginesURL()
         return Self.toolDefinitions.map { def in
             let pathURL: URL?
             if def.isOptional {
@@ -341,6 +451,12 @@ public final class ToolLocator {
                 pathURL = findTool(def.name)
             }
             let path = pathURL?.path
+            let isBundled: Bool
+            if let pathURL = pathURL, let enginesURL = enginesURL {
+                isBundled = pathURL.path.hasPrefix(enginesURL.path)
+            } else {
+                isBundled = false
+            }
             let ver: String?
             if fetchVersions, let pathURL = pathURL {
                 ver = Self.fetchToolVersion(executableURL: pathURL, flag: def.versionFlag)
@@ -354,7 +470,8 @@ public final class ToolLocator {
                 version: ver,
                 formula: def.formula,
                 isCask: def.isCask,
-                dependentActions: def.dependentActions
+                dependentActions: def.dependentActions,
+                isBundled: isBundled
             )
         }
     }
