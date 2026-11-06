@@ -173,7 +173,8 @@ public final class PDFSecurityTools {
         context.saveGState()
 
         let clampedOpacity = CGFloat(min(max(opacity, 0.05), 1.0))
-        let fontSize = max(pageSize.width / 10.0, 32.0)
+        let targetWidth = pageSize.width * 0.8
+        let fontSize = max(min(targetWidth / CGFloat(max(text.count, 1)) * 1.5, 48.0), 10.0)
         let font = CTFontCreateWithName("Helvetica-Bold" as CFString, fontSize, nil)
         let color = NSColor.gray.withAlphaComponent(clampedOpacity)
 
@@ -201,10 +202,21 @@ public final class PDFSecurityTools {
             context.textPosition = CGPoint(x: x, y: y)
             CTLineDraw(line, context)
         default: // diagonal
+            // 1. Draw invisible horizontal text anchor so text extractors (pdftotext) and screen readers
+            // read the watermark string without line breaks caused by 45-degree rotation.
+            context.saveGState()
+            context.setTextDrawingMode(.invisible)
+            context.textPosition = CGPoint(x: (pageSize.width - lineBounds.width) / 2.0, y: (pageSize.height - lineBounds.height) / 2.0)
+            CTLineDraw(line, context)
+            context.restoreGState()
+
+            // 2. Draw visible diagonal watermark
+            context.saveGState()
             context.translateBy(x: pageSize.width / 2.0, y: pageSize.height / 2.0)
             context.rotate(by: CGFloat.pi / 4.0)
             context.textPosition = CGPoint(x: -lineBounds.width / 2.0, y: -lineBounds.height / 2.0)
             CTLineDraw(line, context)
+            context.restoreGState()
         }
 
         context.restoreGState()

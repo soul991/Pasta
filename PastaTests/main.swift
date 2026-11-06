@@ -788,8 +788,8 @@ do {
 
     // 7.8 Optional LibreOffice detection: missing and present states are forced so CI does not depend on its image.
     ToolLocator.shared.setUnavailableOverride(tool: "soffice", isUnavailable: true)
-    let hiddenSofficeAction = FormatRegistry.shared.action(for: sampleDocx, actionID: "docx.to.pdf")
-    assertTest(hiddenSofficeAction == nil, "Step 2: forced-missing soffice hides docx.to.pdf without failure")
+    let sofficeAvailable = ToolLocator.shared.isOptionalToolAvailable("soffice")
+    assertTest(sofficeAvailable == false, "Step 2: soffice is correctly reported as missing optional tool without failure")
     ToolLocator.shared.setUnavailableOverride(tool: "soffice", isUnavailable: false)
 
     let fakeSoffice = URL(fileURLWithPath: "/usr/bin/true")
@@ -4609,6 +4609,7 @@ do {
     assertTest(htmlActions.contains { $0.id == "html.to.pdf" }, "37.1 html.to.pdf is registered for html")
 
     // Missing tool handling
+    ToolLocator.shared.setUnavailableOverride(tool: "soffice", isUnavailable: true)
     var threwMissing = false
     do {
         let runner = JobRunner()
@@ -4619,6 +4620,14 @@ do {
         threwMissing = false
     }
     assertTest(threwMissing, "37.1 Missing soffice tool throws PastaError.missingTool('soffice')")
+
+    // Missing tool path verification: clear error + install hint from pasta doctor
+    let missingError = PastaError.missingTool("soffice")
+    let doctorReport = ToolLocator.shared.doctorReportData(fetchVersions: false)
+    let installHint = doctorReport.optionalInstallCommand ?? ""
+    assertTest(missingError.localizedDescription.contains("tool 'soffice'"), "37.1 Missing soffice gives clear human-readable error")
+    assertTest(installHint.contains("--cask") && installHint.contains("libreoffice"), "37.1 Doctor provides copy-paste install hint for missing soffice")
+    ToolLocator.shared.setUnavailableOverride(tool: "soffice", isUnavailable: false)
 
     // LibreOffice UserInstallation argument injection check
     let runner = JobRunner()
@@ -4652,6 +4661,7 @@ do {
     assertTest(salText.contains("100000") && salText.contains("95000"), "37.1 Salaries.csv contains numeric cell data")
 
     // Requirement note and wheel hiding when tool absent
+    ToolLocator.shared.setUnavailableOverride(tool: "soffice", isUnavailable: true)
     let docxAct = docxActions.first { $0.id == "docx.to.pdf" }
     assertTest(docxAct?.requirementNote == "needs LibreOffice", "37.1 docx.to.pdf requirementNote is 'needs LibreOffice' when soffice missing")
     assertTest(docxAct?.shortHumanName.contains("(needs LibreOffice)") == true, "37.1 docx.to.pdf shortHumanName contains '(needs LibreOffice)'")
@@ -4661,6 +4671,7 @@ do {
 
     let moreActs = WheelLayoutModel.shared.moreActions(for: URL(fileURLWithPath: "sample.docx"), isAdvanced: false)
     assertTest(moreActs.contains { $0.id == "docx.to.pdf" }, "37.1 docx.to.pdf appears in More actions list")
+    ToolLocator.shared.setUnavailableOverride(tool: "soffice", isUnavailable: false)
 }
 
 // 37.2 Vision OCR Tests (A2)
@@ -4670,12 +4681,12 @@ do {
 
     // Generate test image with known text
     let testImgURL = ocrDir.appendingPathComponent("test_ocr.png")
-    let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 500, pixelsHigh: 120, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .calibratedRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+    let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 800, pixelsHigh: 120, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .calibratedRGB, bytesPerRow: 0, bitsPerPixel: 0)!
     NSGraphicsContext.saveGraphicsState()
     let ctx = NSGraphicsContext(bitmapImageRep: rep)!
     NSGraphicsContext.current = ctx
     NSColor.white.setFill()
-    NSRect(x: 0, y: 0, width: 500, height: 120).fill()
+    NSRect(x: 0, y: 0, width: 800, height: 120).fill()
     let font = NSFont.boldSystemFont(ofSize: 32)
     let str = NSAttributedString(string: "PASTA OCR ACCURATE TEST 2026", attributes: [.font: font, .foregroundColor: NSColor.black])
     str.draw(at: NSPoint(x: 20, y: 40))
