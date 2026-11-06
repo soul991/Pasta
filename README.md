@@ -4,7 +4,7 @@
 [![Release](https://github.com/soul991/Pasta/actions/workflows/release.yml/badge.svg)](https://github.com/soul991/Pasta/actions/workflows/release.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-> **A fast, native, 100% offline macOS file converter and utility with a dynamic circular radial options wheel.**
+> **A fast, native macOS file converter and utility with verified local processing, zero telemetry, and a dynamic circular radial options wheel.**
 
 Pasta is a personal, zero-cloud file converter for macOS. Drag any supported file while holding <kbd>Shift</kbd> for 450 ms to summon an interactive circular radial options wheel right at your cursor. The wheel latches open when you release Shift, lets you choose your target format or action, and places the converted file right next to your original in seconds.
 
@@ -15,7 +15,7 @@ Pasta is a personal, zero-cloud file converter for macOS. Drag any supported fil
 Most existing file converters either upload your confidential documents, private photos, and videos to remote third-party cloud servers, or wrap heavy, sluggish web runtimes.
 
 Pasta is built with a different philosophy:
-- **100% Offline & Private**: Zero network calls, zero telemetry, zero analytics, zero external API requests. Everything runs strictly on your Mac.
+- **Verified Local Processing & Zero Telemetry**: No network frameworks or APIs (`URLSession`, BSD sockets) are imported or linked into the app binary (verified by CI symbol scan). Zero telemetry, tracking, or analytics exist in the codebase. Pasta invokes only the tools installed on your Mac, never downloads anything on its own, and files never leave the machine.
 - **Fast & Native**: Written in pure Swift with native AppKit components. No Electron, no web wrappers, no sluggish startup times.
 - **Battle-Tested Engines**: Drives industry-standard open-source CLI tools (`ffmpeg`, `imagemagick`, `poppler`, `pandoc`, etc.) directly via POSIX process isolation without shell string injection.
 - **Deliberate Frictionless Interaction**: Summons an intuitive circular wheel right under your cursor via Shift-drag hold.
@@ -25,7 +25,7 @@ Pasta is built with a different philosophy:
 
 ## ✨ Features
 
-- **100% Offline & Private**: Zero network calls, no telemetry, no analytics, no cloud uploads. Everything runs locally on your Mac.
+- **Verified Local Processing**: No network APIs or external connections linked in the app binary. Pasta processes files strictly on your local machine using user-managed engines.
 - **Deliberate Shift-Hold Radial Wheel**: While a file drag is active, holding <kbd>Shift</kbd> for **450 ms** opens the radial wheel at the cursor. A quick graze or typing tap (<450 ms) is ignored. After a 120 ms delay, a thin charging progress ring fills around the cursor. Releasing Shift or pressing any other key cancels the charge. Once opened, the wheel **latches** and remains open after Shift is released. A second Shift-hold, dropping outside, or pressing <kbd>Esc</kbd> closes it. Fully configurable in Settings with a hold duration slider (300 ms to 1000 ms, default 450 ms), latch toggle, and charging ring toggle.
 - **Quick Option-Tap Mode Switch**: A quick tap of <kbd>Option</kbd> (<kbd>⌥</kbd>) (< 250 ms) while the wheel is open toggles between **Convert** mode (target file formats) and **Advanced** mode (lossless/lossy compression, media trimming, crop/speed/channels, PDF reorganize, metadata stripping). A long hold does not toggle mode.
 - **Menu Bar Utility**: Persistent status bar app (`LSUIElement`) with a native `NSPopover` drag-and-drop window, progress indicators, "Reveal in Finder" actions, and customizable accent color palettes.

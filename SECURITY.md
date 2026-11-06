@@ -1,11 +1,12 @@
 # Security Policy
 
-## 100% Offline & Zero Telemetry Guarantee
+## Verified Local Processing & Zero Telemetry Architecture
 
-Pasta is designed with strict local privacy and offline guarantees:
-- **Zero Network Calls**: Pasta contains no network stack usage (`URLSession`, BSD sockets, or external HTTP requests) in its application and CLI code.
-- **Zero Telemetry & Tracking**: No analytics, crash telemetry, pingbacks, or user surveillance mechanisms exist in Pasta.
-- **Verified by CI**: Every build of the CLI binary and the macOS App bundle is automatically checked in continuous integration for foreign network strings, sockets, and endpoints (`scripts/run_section8_tests.sh`).
+Pasta is designed with strict local privacy and verified architectural isolation:
+- **No Network Frameworks or Symbols**: No network frameworks (such as `CFNetwork` or `Network.framework`) or network APIs (`URLSession`, BSD sockets, or HTTP client code) are imported or linked into the application or CLI binaries. This is verified by binary symbol and string scanning (`nm` and `strings`) on every CI build via `scripts/run_section8_tests.sh`.
+- **Zero Telemetry & Tracking**: Zero analytics, crash telemetry, pingbacks, usage reporting, or user surveillance mechanisms exist in the codebase.
+- **Local Engine Invocation Only**: When performing conversions, Pasta invokes only the tools the user has installed on their Mac (system utilities in `/usr/bin` or user-managed Homebrew binaries in `/opt/homebrew/bin` and `/usr/local/bin`). Pasta never downloads anything on its own, never connects to external servers, and files never leave the machine.
+- **Input Validation & Sandboxing**: In-flight conversions write to isolated temporary scratch directories and publish atomically via collision-safe output reservations. Archive operations enforce pre-extraction catalog checks, running disk expansion caps, and reject path traversal escapes.
 
 All file processing and conversions run strictly on your local machine using standard system tools and user-managed open-source engines.
 
