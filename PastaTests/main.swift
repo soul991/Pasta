@@ -5350,6 +5350,38 @@ do {
     assertTest(allActions.count >= 40 && categories.contains(.image) && categories.contains(.video) && categories.contains(.audio) && categories.contains(.pdf) && categories.contains(.archive), "40.8 FormatRegistry.allRegisteredActions covers all core categories with >= 40 actions (\(allActions.count) actions)")
 }
 
+do {
+    print("\n--- 41. License Audit & ToolLocator Coverage Tests ---")
+    let repoRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+    let licenseAuditURL = repoRoot.appendingPathComponent("docs/LICENSE_AUDIT.md")
+
+    // Test 41.1: docs/LICENSE_AUDIT.md exists and is readable
+    let auditExists = FileManager.default.fileExists(atPath: licenseAuditURL.path)
+    assertTest(auditExists, "41.1 docs/LICENSE_AUDIT.md exists")
+
+    let auditContent = (try? String(contentsOf: licenseAuditURL, encoding: .utf8)) ?? ""
+    let doctorTools = ToolLocator.shared.doctorReportData().tools.map { $0.name }
+    assertTest(doctorTools.count == 19, "41.2 ToolLocator doctor report lists exactly 19 tools (got \(doctorTools.count))")
+
+    var missingAuditTools: [String] = []
+    var missingUrlsOrUnverified: [String] = []
+
+    for toolName in doctorTools {
+        let toolPattern = "| `\(toolName)` |"
+        let toolPatternPlain = "| \(toolName) |"
+        if let line = auditContent.components(separatedBy: .newlines).first(where: { $0.contains(toolPattern) || $0.contains(toolPatternPlain) }) {
+            if !(line.contains("http://") || line.contains("https://") || line.contains("UNVERIFIED")) {
+                missingUrlsOrUnverified.append(toolName)
+            }
+        } else {
+            missingAuditTools.append(toolName)
+        }
+    }
+
+    assertTest(!auditContent.isEmpty && missingAuditTools.isEmpty, "41.3 All 19 ToolLocator tools have a dedicated row in docs/LICENSE_AUDIT.md (missing: \(missingAuditTools))")
+    assertTest(!auditContent.isEmpty && missingUrlsOrUnverified.isEmpty, "41.4 Every tool row in docs/LICENSE_AUDIT.md contains an upstream license URL or is marked UNVERIFIED (invalid: \(missingUrlsOrUnverified))")
+}
+
 print("\n==================================================")
 print("Test Suite Summary: \(passedTests)/\(totalTests) Passed, \(failedTests) Failed")
 print("==================================================")
