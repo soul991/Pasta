@@ -19,6 +19,7 @@ public final class RadialOptionNodeView: NSView {
     }
 
     private let visualEffect = NSVisualEffectView()
+    private let systemGlass = SystemGlassSurfaceView(cornerRadius: 32, isInteractive: true)
     private let gradientLayer = CAGradientLayer()
     private let titleLabel = NSTextField(labelWithString: "")
     private let iconView = NSImageView()
@@ -72,6 +73,14 @@ public final class RadialOptionNodeView: NSView {
 
         registerForDraggedTypes([.fileURL])
 
+        addSubview(systemGlass)
+        NSLayoutConstraint.activate([
+            systemGlass.leadingAnchor.constraint(equalTo: leadingAnchor),
+            systemGlass.trailingAnchor.constraint(equalTo: trailingAnchor),
+            systemGlass.topAnchor.constraint(equalTo: topAnchor),
+            systemGlass.bottomAnchor.constraint(equalTo: bottomAnchor)
+        ])
+
         let tracking = NSTrackingArea(
             rect: bounds,
             options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
@@ -95,7 +104,7 @@ public final class RadialOptionNodeView: NSView {
         gradientLayer.cornerRadius = 32
         gradientLayer.masksToBounds = true
         gradientLayer.isHidden = true
-        visualEffect.layer?.addSublayer(gradientLayer)
+        layer?.addSublayer(gradientLayer)
 
         // Icon
         iconView.translatesAutoresizingMaskIntoConstraints = false
@@ -138,12 +147,15 @@ public final class RadialOptionNodeView: NSView {
         setAccessibilityRole(.button)
         switch slotKind {
         case .action(let act):
+            toolTip = act.displayName
             setAccessibilityLabel(act.displayName)
             setAccessibilityHelp("Convert file to \(act.outputExtension.uppercased())")
         case .more:
+            toolTip = "More Tools"
             setAccessibilityLabel("More Tools")
             setAccessibilityHelp("Open full categorized tools list")
         case .customize:
+            toolTip = "Customize Wheel"
             setAccessibilityLabel("Customize Wheel")
             setAccessibilityHelp("Open wheel customization settings")
         }
@@ -185,6 +197,13 @@ public final class RadialOptionNodeView: NSView {
         updateState()
     }
 
+    /// Diagnostic description of what this node is actually showing (used by wheel snapshot logging).
+    public func debugSnapshot() -> String {
+        let iconState = iconView.image == nil ? "nil" : "set"
+        let colorText = String(describing: titleLabel.textColor)
+        return "alpha=\(alphaValue) hidden=\(isHidden) frame=\(NSStringFromRect(frame)) glass=\(systemGlass.usesSystemGlass) icon=\(iconState) iconHidden=\(iconView.isHidden) title='\(titleLabel.stringValue)' titleHidden=\(titleLabel.isHidden) titleAlpha=\(titleLabel.alphaValue) titleColor=\(colorText)"
+    }
+
     private func updateState() {
         let accent = ThemeManager.shared.accentColor
         let darkInk = NSColor(hex: "#1A0F05") ?? .black
@@ -194,6 +213,8 @@ public final class RadialOptionNodeView: NSView {
         let isReduceMotion = PreferencesManager.shared.reduceMotionEnabled
         let isIncreaseContrast = PreferencesManager.shared.increaseContrastEnabled
         let isReduceTransparency = PreferencesManager.shared.reduceTransparencyEnabled
+
+        systemGlass.configure(cornerRadius: bounds.width / 2.0, tintColor: ThemeManager.shared.accentColor.withAlphaComponent(0.15), isInteractive: true)
 
         // Label visibility mode
         let labelMode = WheelLayoutModel.shared.labelMode
@@ -210,10 +231,12 @@ public final class RadialOptionNodeView: NSView {
 
         // Reduce Transparency: Use opaque dark background
         if isReduceTransparency {
+            systemGlass.isHidden = true
             visualEffect.isHidden = true
             layer?.backgroundColor = ThemeManager.shared.reduceTransparencyBackground.cgColor
         } else {
-            visualEffect.isHidden = false
+            systemGlass.isHidden = false
+            visualEffect.isHidden = systemGlass.usesSystemGlass
             layer?.backgroundColor = NSColor.clear.cgColor
         }
 
@@ -321,7 +344,9 @@ public final class RadialOptionNodeView: NSView {
     // MARK: - Testing Helpers
     public var testTitleLabel: NSTextField { titleLabel }
     public var testHasDarkScrimView: Bool {
-        return subviews.contains { $0 != titleLabel && $0 != iconView && $0 != visualEffect }
+        return subviews.contains { view in
+            view != titleLabel && view != iconView && view != visualEffect && view != systemGlass
+        }
     }
     public var testGradientIsActive: Bool { !gradientLayer.isHidden }
     public var testTitleTextColor: NSColor { titleLabel.textColor ?? .clear }

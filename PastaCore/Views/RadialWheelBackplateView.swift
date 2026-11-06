@@ -20,6 +20,7 @@ public final class RadialWheelBackplateView: NSView {
     }
 
     private let visualEffect = NSVisualEffectView()
+    private let systemGlass = SystemGlassSurfaceView(cornerRadius: 200, tintColor: NSColor(white: 0.10, alpha: 0.75))
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: NSRect(x: 0, y: 0, width: 400, height: 400))
@@ -35,6 +36,14 @@ public final class RadialWheelBackplateView: NSView {
         wantsLayer = true
         layer?.masksToBounds = false
 
+        addSubview(systemGlass)
+        NSLayoutConstraint.activate([
+            systemGlass.leadingAnchor.constraint(equalTo: leadingAnchor),
+            systemGlass.trailingAnchor.constraint(equalTo: trailingAnchor),
+            systemGlass.topAnchor.constraint(equalTo: topAnchor),
+            systemGlass.bottomAnchor.constraint(equalTo: bottomAnchor)
+        ])
+
         visualEffect.translatesAutoresizingMaskIntoConstraints = false
         visualEffect.blendingMode = .behindWindow
         visualEffect.material = .hudWindow
@@ -42,6 +51,8 @@ public final class RadialWheelBackplateView: NSView {
         visualEffect.wantsLayer = true
         visualEffect.layer?.masksToBounds = true
         addSubview(visualEffect)
+
+        registerForDraggedTypes([.fileURL])
 
         NSLayoutConstraint.activate([
             visualEffect.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -59,6 +70,8 @@ public final class RadialWheelBackplateView: NSView {
     }
 
     private func updateAnnulusMask() {
+        systemGlass.configure(cornerRadius: outerDiameter / 2.0, tintColor: NSColor(white: 0.10, alpha: 0.75), isInteractive: false)
+        visualEffect.isHidden = systemGlass.usesSystemGlass
         let center = CGPoint(x: bounds.midX, y: bounds.midY)
         let outerR = outerDiameter / 2.0
         let innerR = hubDiameter / 2.0
@@ -70,7 +83,7 @@ public final class RadialWheelBackplateView: NSView {
         let maskLayer = CAShapeLayer()
         maskLayer.path = path
         maskLayer.fillRule = .evenOdd
-        visualEffect.layer?.mask = maskLayer
+        (systemGlass.usesSystemGlass ? systemGlass.layer : visualEffect.layer)?.mask = maskLayer
         visualEffect.layer?.backgroundColor = (ThemeManager.shared.isReduceTransparency
             ? ThemeManager.shared.reduceTransparencyBackground
             : NSColor(red: 0.10, green: 0.10, blue: 0.11, alpha: 0.75)).cgColor
@@ -142,11 +155,31 @@ public final class RadialWheelBackplateView: NSView {
 
             context.saveGState()
             context.addPath(wedgePath)
-            let accent = ThemeManager.shared.accentColor.withAlphaComponent(0.12).cgColor
+            let accent = ThemeManager.shared.accentColor.withAlphaComponent(0.18).cgColor
             context.setFillColor(accent)
             context.fillPath()
             context.restoreGState()
         }
+
+        // 3a. Subtle Hairline Radial Dividers between 8 sectors (Obsidian Glass Craft)
+        context.saveGState()
+        context.setLineWidth(1.0)
+        let dividerColor = NSColor(white: 1.0, alpha: 0.08).cgColor
+        context.setStrokeColor(dividerColor)
+        let totalSlots = 8
+        let halfWedge = (2.0 * CGFloat.pi / CGFloat(totalSlots)) / 2.0
+        for slot in 0..<totalSlots {
+            let slotAngle = (-CGFloat.pi / 2.0) + (CGFloat(slot) * (2.0 * CGFloat.pi / CGFloat(totalSlots)))
+            let dividerAngle = slotAngle + halfWedge
+            let x1 = center.x + ((innerR + 1.0) * cos(dividerAngle))
+            let y1 = center.y + ((innerR + 1.0) * sin(dividerAngle))
+            let x2 = center.x + ((outerR - 2.0) * cos(dividerAngle))
+            let y2 = center.y + ((outerR - 2.0) * sin(dividerAngle))
+            context.move(to: CGPoint(x: x1, y: y1))
+            context.addLine(to: CGPoint(x: x2, y: y2))
+        }
+        context.strokePath()
+        context.restoreGState()
 
         // 4. Outer Annulus 1pt Hairline Gradient Stroke (or 2.0pt in Increase Contrast)
         // Top-left white 0.45 to bottom-right white 0.08
@@ -193,5 +226,50 @@ public final class RadialWheelBackplateView: NSView {
         context.setStrokeColor(innerStrokeColor)
         context.strokePath()
         context.restoreGState()
+    }
+
+    // MARK: - NSDraggingDestination (Fitts' Law W = ∞ Hit-Testing)
+
+    public var onSectorHovered: ((Int?) -> Void)?
+    public var onSectorDropped: ((Int, [URL]) -> Void)?
+
+    public override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        return draggingUpdated(sender)
+    }
+
+    public override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        let loc = convert(sender.draggingLocation, from: nil)
+        let center = CGPoint(x: bounds.midX, y: bounds.midY)
+        if let slot = WheelGeometry.sectorIndex(for: loc, center: center, totalSlots: 8) {
+            hoveredSlotIndex = slot
+            onSectorHovered?(slot)
+            return .copy
+        } else {
+            hoveredSlotIndex = nil
+            onSectorHovered?(nil)
+            return []
+        }
+    }
+
+    public override func draggingExited(_ sender: NSDraggingInfo?) {
+        hoveredSlotIndex = nil
+        onSectorHovered?(nil)
+    }
+
+    public override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        let loc = convert(sender.draggingLocation, from: nil)
+        let center = CGPoint(x: bounds.midX, y: bounds.midY)
+        guard let slot = WheelGeometry.sectorIndex(for: loc, center: center, totalSlots: 8) else {
+            return false
+        }
+
+        guard let pasteboard = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: nil) as? [URL],
+              !pasteboard.isEmpty else {
+            return false
+        }
+
+        hoveredSlotIndex = nil
+        onSectorDropped?(slot, pasteboard)
+        return true
     }
 }

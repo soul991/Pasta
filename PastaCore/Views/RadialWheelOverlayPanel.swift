@@ -33,6 +33,19 @@ public final class RadialWheelOverlayPanel: NSPanel {
         return true
     }
 
+    /// Esc fallback: works whenever the panel itself receives the key, even if global key monitoring is unavailable.
+    public override func cancelOperation(_ sender: Any?) {
+        DragMonitor.shared.closeWheel(reason: "Esc via wheel panel responder")
+    }
+
+    public override func keyDown(with event: NSEvent) {
+        if event.keyCode == 53 {
+            DragMonitor.shared.closeWheel(reason: "Esc keyDown on wheel panel")
+        } else {
+            super.keyDown(with: event)
+        }
+    }
+
     public func configure(files: [URL]) {
         wheelViewController.configure(files: files, isOptionHeld: false)
     }
@@ -47,7 +60,8 @@ public final class RadialWheelOverlayPanel: NSPanel {
         let panelSize = NSSize(width: WheelGeometry.panelWidth, height: WheelGeometry.panelHeight)
         setContentSize(panelSize)
 
-        let visibleFrame = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1920, height: 1080)
+        let targetScreen = NSScreen.screens.first(where: { NSPointInRect(point, $0.frame) }) ?? NSScreen.main
+        let visibleFrame = targetScreen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1920, height: 1080)
         let origin = WheelGeometry.computePanelOrigin(
             cursorPoint: point,
             panelSize: panelSize,
@@ -63,6 +77,7 @@ public final class RadialWheelOverlayPanel: NSPanel {
 
         alphaValue = 0.0
         orderFront(nil)
+        makeKey()
 
         let isReduceMotion = PreferencesManager.shared.reduceMotionEnabled
         if !isReduceMotion {

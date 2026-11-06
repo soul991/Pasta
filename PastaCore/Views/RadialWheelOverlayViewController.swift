@@ -12,6 +12,7 @@ public final class RadialWheelOverlayViewController: NSViewController {
     private let centerDisc = RadialWheelCenterDiscView()
     private let hudView = RadialConversionHUDView()
     private var nodeViews: [RadialOptionNodeView] = []
+    private var glassContentView: NSView?
     private var parameterPanelView: ParameterPanelView?
     private var moreView: RadialWheelMoreView?
     private var customizeSheet: RadialWheelCustomizeSheet?
@@ -32,7 +33,8 @@ public final class RadialWheelOverlayViewController: NSViewController {
     }
 
     // Floating hint pill
-    public let hintPillContainer = NSVisualEffectView()
+    public let hintPillContainer = NSView()
+    private let hintPillGlass = SystemGlassSurfaceView(cornerRadius: 14, tintColor: NSColor(white: 0.10, alpha: 0.78), isInteractive: true)
     public let hintPillLabel = NSTextField(labelWithString: "")
     public private(set) var isHintPillAboveWheel: Bool = false
 
@@ -52,9 +54,28 @@ public final class RadialWheelOverlayViewController: NSViewController {
     public var lastOutputURL: URL?
     public var lastErrorMessage: String?
     private var autoDismissWorkItem: DispatchWorkItem?
+    public typealias TimerScheduler = (_ delay: TimeInterval, _ queue: DispatchQueue, _ work: @escaping () -> Void) -> (() -> Void)
+    public var timerScheduler: TimerScheduler?
+    private var customTimerCanceller: (() -> Void)?
+    private var isCustomTimerScheduled: Bool = false
+
+    public var isAutoDismissScheduled: Bool { autoDismissWorkItem != nil || isCustomTimerScheduled }
+
+    private var contentHost: NSView { glassContentView ?? view }
 
     public func scheduleAutoDismiss(delay: TimeInterval = 2.2) {
         cancelAutoDismiss()
+        if let customScheduler = timerScheduler {
+            let cancelBlock = customScheduler(delay, DispatchQueue.main) { [weak self] in
+                guard let self = self else { return }
+                self.isCustomTimerScheduled = false
+                self.customTimerCanceller = nil
+                self.onCloseRequested?()
+            }
+            customTimerCanceller = cancelBlock
+            isCustomTimerScheduled = true
+            return
+        }
         let item = DispatchWorkItem { [weak self] in
             guard let self = self else { return }
             self.onCloseRequested?()
@@ -64,6 +85,11 @@ public final class RadialWheelOverlayViewController: NSViewController {
     }
 
     public func cancelAutoDismiss() {
+        if let cancelBlock = customTimerCanceller {
+            cancelBlock()
+            customTimerCanceller = nil
+            isCustomTimerScheduled = false
+        }
         autoDismissWorkItem?.cancel()
         autoDismissWorkItem = nil
     }
@@ -71,9 +97,14 @@ public final class RadialWheelOverlayViewController: NSViewController {
     public override func loadView() {
         // Frame sized via WheelGeometry to accommodate all 8 nodes, max 1.06 hover scale,
         // 18pt accent glow, 10pt shadow, and controls with >= 8pt margin.
-        view = NSView(frame: NSRect(x: 0, y: 0, width: WheelGeometry.panelWidth, height: WheelGeometry.panelHeight))
+        let rootView = NSView(frame: NSRect(x: 0, y: 0, width: WheelGeometry.panelWidth, height: WheelGeometry.panelHeight))
+        view = rootView
         view.wantsLayer = true
         view.layer?.masksToBounds = false
+        // NOTE: do NOT host the wheel content inside an NSGlassEffectContainerView. A glass container
+        // renders everything in its contentView as glass, which blurs away node icons, labels and the
+        // hub text (owner screenshots, Nov 3). Individual glass surfaces (SystemGlassSurfaceView) are
+        // layered inside nodes, hub, backplate and hint pill instead; content sits above them.
     }
 
     public override func viewDidLoad() {
@@ -93,7 +124,35 @@ public final class RadialWheelOverlayViewController: NSViewController {
             width: outerD,
             height: outerD
         )
-        view.addSubview(backplateView)
+        contentHost.addSubview(backplateView)
+
+        // Fitts' Law W = ∞ Sector Drag Routing
+        backplateView.onSectorHovered = { [weak self] hoveredSlot in
+            guard let self = self else { return }
+            self.focusedSlotIndex = hoveredSlot
+            for (index, node) in self.nodeViews.enumerated() {
+                node.isKeyFocused = (index == hoveredSlot)
+            }
+        }
+
+        backplateView.onSectorDropped = { [weak self] slotIndex, droppedFiles in
+            guard let self = self else { return }
+            self.targetFiles = droppedFiles
+            guard slotIndex < self.nodeViews.count else { return }
+            let node = self.nodeViews[slotIndex]
+            switch node.slotKind {
+            case .action(let act):
+                if act.parameters.isEmpty {
+                    self.performConversion(action: act)
+                } else {
+                    self.showParameterPanel(for: act)
+                }
+            case .more:
+                self.showMoreView()
+            case .customize:
+                self.showCustomizeSheet()
+            }
+        }
 
         // Center Disc centered at (WheelGeometry.wheelCenterX, WheelGeometry.wheelCenterY)
         centerDisc.diameter = hubD
@@ -103,7 +162,7 @@ public final class RadialWheelOverlayViewController: NSViewController {
             width: hubD,
             height: hubD
         )
-        view.addSubview(centerDisc)
+        contentHost.addSubview(centerDisc)
 
         // HUD View (initially hidden)
         hudView.frame = NSRect(
@@ -116,19 +175,24 @@ public final class RadialWheelOverlayViewController: NSViewController {
         hudView.onDismiss = { [weak self] in
             self?.onCloseRequested?()
         }
-        view.addSubview(hudView)
+        contentHost.addSubview(hudView)
 
         // Hint pill container
         hintPillContainer.translatesAutoresizingMaskIntoConstraints = false
-        hintPillContainer.blendingMode = .behindWindow
-        hintPillContainer.material = .hudWindow
-        hintPillContainer.state = .active
         hintPillContainer.wantsLayer = true
         hintPillContainer.layer?.cornerRadius = 14
         hintPillContainer.layer?.borderWidth = 1.0
         hintPillContainer.layer?.borderColor = NSColor(white: 1.0, alpha: 0.15).cgColor
         hintPillContainer.layer?.masksToBounds = true
-        view.addSubview(hintPillContainer)
+        contentHost.addSubview(hintPillContainer)
+
+        hintPillContainer.addSubview(hintPillGlass)
+        NSLayoutConstraint.activate([
+            hintPillGlass.leadingAnchor.constraint(equalTo: hintPillContainer.leadingAnchor),
+            hintPillGlass.trailingAnchor.constraint(equalTo: hintPillContainer.trailingAnchor),
+            hintPillGlass.topAnchor.constraint(equalTo: hintPillContainer.topAnchor),
+            hintPillGlass.bottomAnchor.constraint(equalTo: hintPillContainer.bottomAnchor)
+        ])
 
         hintPillLabel.translatesAutoresizingMaskIntoConstraints = false
         hintPillLabel.stringValue = "Esc closes · ⌥ mode · ⇧ re-targets"
@@ -149,7 +213,7 @@ public final class RadialWheelOverlayViewController: NSViewController {
         compactProgressContainer.layer?.borderColor = NSColor(white: 1.0, alpha: 0.18).cgColor
         compactProgressContainer.layer?.masksToBounds = true
         compactProgressContainer.isHidden = true
-        view.addSubview(compactProgressContainer)
+        contentHost.addSubview(compactProgressContainer)
 
         compactProgressIcon.translatesAutoresizingMaskIntoConstraints = false
         if let img = NSImage(systemSymbolName: "arrow.triangle.2.circlepath", accessibilityDescription: nil) {
@@ -184,10 +248,10 @@ public final class RadialWheelOverlayViewController: NSViewController {
         compactStack.spacing = 8
         compactProgressContainer.addSubview(compactStack)
 
-        let pillBottom = hintPillContainer.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -12)
-        let pillTop = hintPillContainer.topAnchor.constraint(equalTo: view.topAnchor, constant: 12)
+        let pillBottom = hintPillContainer.bottomAnchor.constraint(equalTo: contentHost.bottomAnchor, constant: -12)
+        let pillTop = hintPillContainer.topAnchor.constraint(equalTo: contentHost.topAnchor, constant: 12)
         let progAbovePill = compactProgressContainer.bottomAnchor.constraint(equalTo: hintPillContainer.topAnchor, constant: -8)
-        let progBottom = compactProgressContainer.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -12)
+        let progBottom = compactProgressContainer.bottomAnchor.constraint(equalTo: contentHost.bottomAnchor, constant: -12)
 
         self.hintPillBottomConstraint = pillBottom
         self.hintPillTopConstraint = pillTop
@@ -195,19 +259,19 @@ public final class RadialWheelOverlayViewController: NSViewController {
         self.compactProgressBottomConstraint = progBottom
 
         NSLayoutConstraint.activate([
-            hintPillContainer.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            hintPillContainer.centerXAnchor.constraint(equalTo: contentHost.centerXAnchor),
             hintPillContainer.heightAnchor.constraint(equalToConstant: 28),
-            hintPillContainer.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor, constant: 16),
-            hintPillContainer.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -16),
+            hintPillContainer.leadingAnchor.constraint(greaterThanOrEqualTo: contentHost.leadingAnchor, constant: 16),
+            hintPillContainer.trailingAnchor.constraint(lessThanOrEqualTo: contentHost.trailingAnchor, constant: -16),
 
             hintPillLabel.leadingAnchor.constraint(equalTo: hintPillContainer.leadingAnchor, constant: 14),
             hintPillLabel.trailingAnchor.constraint(equalTo: hintPillContainer.trailingAnchor, constant: -14),
             hintPillLabel.centerYAnchor.constraint(equalTo: hintPillContainer.centerYAnchor),
 
-            compactProgressContainer.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            compactProgressContainer.centerXAnchor.constraint(equalTo: contentHost.centerXAnchor),
             compactProgressContainer.heightAnchor.constraint(equalToConstant: 32),
-            compactProgressContainer.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor, constant: 20),
-            compactProgressContainer.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -20),
+            compactProgressContainer.leadingAnchor.constraint(greaterThanOrEqualTo: contentHost.leadingAnchor, constant: 20),
+            compactProgressContainer.trailingAnchor.constraint(lessThanOrEqualTo: contentHost.trailingAnchor, constant: -20),
 
             compactStack.leadingAnchor.constraint(equalTo: compactProgressContainer.leadingAnchor, constant: 10),
             compactStack.trailingAnchor.constraint(equalTo: compactProgressContainer.trailingAnchor, constant: -10),
@@ -241,7 +305,7 @@ public final class RadialWheelOverlayViewController: NSViewController {
         closeBtn.setAccessibilityRole(.button)
         closeBtn.setAccessibilityLabel("Close wheel")
         closeBtn.setAccessibilityHelp("Closes the radial wheel overlay")
-        view.addSubview(closeBtn)
+        contentHost.addSubview(closeBtn)
         self.wheelCloseButton = closeBtn
 
         DragMonitor.shared.onEscIntercepted = { [weak self] in
@@ -290,6 +354,14 @@ public final class RadialWheelOverlayViewController: NSViewController {
             compactProgressLabel.stringValue = "Error copied to clipboard ✓"
             compactProgressButton.title = "Dismiss"
         }
+    }
+
+    public func triggerQuickLook(for url: URL) {
+        cancelAutoDismiss()
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/qlmanage")
+        process.arguments = ["-p", url.path]
+        try? process.run()
     }
 
     public func updateConvertingProgress(progress: Double?, eta: Double? = nil) {
@@ -472,14 +544,14 @@ public final class RadialWheelOverlayViewController: NSViewController {
                 nodeView.frame = .zero
                 nodeView.isHidden = true
                 nodeView.alphaValue = 0.0
-                view.addSubview(nodeView)
+                contentHost.addSubview(nodeView)
                 nodeViews.append(nodeView)
             } else if !isReduceMotion {
                 // Staggered blooming animation with mass 1.0, stiffness 420.0, damping 28.0 physics
                 nodeView.layer?.transform = CATransform3DMakeScale(0.4, 0.4, 1.0)
                 nodeView.alphaValue = 0.0
 
-                view.addSubview(nodeView)
+                contentHost.addSubview(nodeView)
                 nodeViews.append(nodeView)
 
                 let delay = Double(slot.slotIndex) * 0.025
@@ -495,10 +567,32 @@ public final class RadialWheelOverlayViewController: NSViewController {
                 // Plain fade for Reduce Motion
                 nodeView.layer?.transform = CATransform3DIdentity
                 nodeView.alphaValue = 1.0
-                view.addSubview(nodeView)
+                contentHost.addSubview(nodeView)
                 nodeViews.append(nodeView)
             }
         }
+
+        // Diagnostics: record what the wheel is really showing shortly after it appears.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
+            guard let self = self else { return }
+            PastaLogger.shared.info("Wheel snapshot 0.8s after configure:\n" + self.debugSnapshot())
+        }
+    }
+
+    /// Diagnostic description of the whole wheel (files, nodes, hub, hint pill, window state).
+    public func debugSnapshot() -> String {
+        let appearanceName = view.effectiveAppearance.name.rawValue
+        let isKey = view.window?.isKeyWindow ?? false
+        let windowAlpha = view.window?.alphaValue ?? -1
+        var lines: [String] = []
+        lines.append("wheel files=\(targetFiles.count) nodes=\(nodeViews.count) advanced=\(isAdvanced) appearance=\(appearanceName) windowKey=\(isKey) windowAlpha=\(windowAlpha)")
+        lines.append("hub: " + centerDisc.debugSnapshot())
+        let hintColor = String(describing: hintPillLabel.textColor)
+        lines.append("hint: text='\(hintPillLabel.stringValue)' alpha=\(hintPillContainer.alphaValue) hidden=\(hintPillContainer.isHidden) color=\(hintColor)")
+        for (index, node) in nodeViews.enumerated() {
+            lines.append("node\(index): " + node.debugSnapshot())
+        }
+        return lines.joined(separator: "\n")
     }
 
     // MARK: - Parameter Panel Management (Phase 10 Step 2)
@@ -552,7 +646,7 @@ public final class RadialWheelOverlayViewController: NSViewController {
             self?.performConversion(action: action, params: params, formModel: model)
         }
 
-        view.addSubview(panel)
+        contentHost.addSubview(panel)
         self.parameterPanelView = panel
 
         if !isReduceMotion {
@@ -652,7 +746,18 @@ public final class RadialWheelOverlayViewController: NSViewController {
             }
             return true
 
-        case 36, 49: // Return or Space -> executes focused node
+        case 49: // Space -> Quick Look when conversion is complete, or executes focused node
+            if let output = lastOutputURL ?? hudView.currentOutputURL {
+                triggerQuickLook(for: output)
+                return true
+            }
+            if let idx = focusedSlotIndex, idx >= 0 && idx < nodeViews.count {
+                nodeViews[idx].performSelect()
+                return true
+            }
+            return false
+
+        case 36: // Return -> executes focused node
             if let idx = focusedSlotIndex, idx >= 0 && idx < nodeViews.count {
                 nodeViews[idx].performSelect()
                 return true
@@ -737,7 +842,7 @@ public final class RadialWheelOverlayViewController: NSViewController {
             self?.dismissMoreView()
         }
 
-        view.addSubview(more)
+        contentHost.addSubview(more)
         self.moreView = more
 
         if !PreferencesManager.shared.reduceMotionEnabled {
@@ -807,7 +912,7 @@ public final class RadialWheelOverlayViewController: NSViewController {
             self?.dismissCustomizeSheet()
         }
 
-        view.addSubview(sheet, positioned: .above, relativeTo: nil)
+        contentHost.addSubview(sheet, positioned: .above, relativeTo: nil)
         self.customizeSheet = sheet
 
         if !isReduceMotion {
@@ -884,7 +989,7 @@ public final class RadialWheelOverlayViewController: NSViewController {
         configure(files: targetFiles, isOptionHeld: isAdvanced)
 
         if let sheet = customizeSheet {
-            view.addSubview(sheet, positioned: .above, relativeTo: nil)
+            contentHost.addSubview(sheet, positioned: .above, relativeTo: nil)
             for node in nodeViews {
                 node.frame = .zero
                 node.isHidden = true
@@ -903,12 +1008,15 @@ public final class RadialWheelOverlayViewController: NSViewController {
 
     private func performConversion(action: ConversionAction, params: ParameterValues = [:], formModel: ParameterFormModel? = nil) {
         cancelAutoDismiss()
-        guard let file = targetFiles.first else { return }
+        guard !targetFiles.isEmpty else { return }
+        let files = self.targetFiles
+        let file = files[0]
         DragMonitor.shared.actionExecuted()
 
         let jobID = UUID()
         self.currentConversionJobID = jobID
-        self.currentConvertingFileName = file.lastPathComponent
+        let displayFilename = action.isBatch ? "\(files.count) files" : (files.count > 1 ? "\(files.count) files" : file.lastPathComponent)
+        self.currentConvertingFileName = displayFilename
 
         let keepOpen = PreferencesManager.shared.keepWheelOpenAfterRunning
 
@@ -920,7 +1028,7 @@ public final class RadialWheelOverlayViewController: NSViewController {
             compactProgressBar.isHidden = false
             compactProgressBar.isIndeterminate = true
             compactProgressBar.startAnimation(nil)
-            compactProgressLabel.stringValue = "Converting \(file.lastPathComponent)..."
+            compactProgressLabel.stringValue = "Converting \(displayFilename)..."
             if let img = NSImage(systemSymbolName: "arrow.triangle.2.circlepath", accessibilityDescription: nil) {
                 compactProgressIcon.image = img
                 compactProgressIcon.contentTintColor = ThemeManager.shared.accentColor
@@ -946,7 +1054,7 @@ public final class RadialWheelOverlayViewController: NSViewController {
                 self.hudView.alphaValue = 0.0
                 self.hudView.layer?.transform = CATransform3DMakeScale(0.9, 0.9, 1.0)
 
-                self.hudView.showConverting(action: action, filename: file.lastPathComponent)
+                self.hudView.showConverting(action: action, filename: displayFilename)
 
                 NSAnimationContext.runAnimationGroup { ctx in
                     ctx.duration = 0.22
@@ -958,37 +1066,47 @@ public final class RadialWheelOverlayViewController: NSViewController {
 
         // Execute conversion in background
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let fileParams: ParameterValues
-            if let model = formModel {
-                do {
-                    fileParams = try model.resolveParameters(for: file)
-                } catch {
-                    DispatchQueue.main.async {
-                        guard let self = self else { return }
-                        self.currentConversionJobID = nil
-                        if keepOpen {
-                            self.compactProgressBar.stopAnimation(nil)
-                            self.compactProgressBar.isHidden = true
-                            self.compactProgressContainer.isHidden = false
-                            self.compactProgressButton.isHidden = false
-                            self.compactProgressButton.title = "Copy Error"
-                            self.compactProgressLabel.stringValue = "Error: \(error.localizedDescription)"
-                            if let img = NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: nil) {
-                                self.compactProgressIcon.image = img
-                                self.compactProgressIcon.contentTintColor = .systemOrange
-                            }
-                        } else {
-                            self.hudView.showError(error.localizedDescription)
-                        }
-                    }
-                    return
-                }
-            } else {
-                fileParams = params
-            }
-
             do {
-                let output = try JobRunner.shared.run(action: action, input: file, parameters: fileParams, jobId: jobID)
+                let output: URL
+                var isMultiFileSequential = false
+                if action.isBatch {
+                    let fileParams: ParameterValues
+                    if let model = formModel {
+                        fileParams = try model.resolveParameters(for: file)
+                    } else {
+                        fileParams = params
+                    }
+                    output = try JobRunner.shared.runBatch(action: action, inputs: files, parameters: fileParams, jobId: jobID)
+                } else if files.count > 1 {
+                    isMultiFileSequential = true
+                    var lastOut: URL?
+                    for (index, f) in files.enumerated() {
+                        DispatchQueue.main.async {
+                            guard let self = self else { return }
+                            if keepOpen {
+                                self.compactProgressLabel.stringValue = "Converting (\(index + 1)/\(files.count)) \(f.lastPathComponent)..."
+                            }
+                        }
+                        let fileParams: ParameterValues
+                        if let model = formModel {
+                            fileParams = try model.resolveParameters(for: f)
+                        } else {
+                            fileParams = params
+                        }
+                        let out = try JobRunner.shared.run(action: action, input: f, parameters: fileParams, jobId: jobID)
+                        lastOut = out
+                    }
+                    output = lastOut ?? file
+                } else {
+                    let fileParams: ParameterValues
+                    if let model = formModel {
+                        fileParams = try model.resolveParameters(for: file)
+                    } else {
+                        fileParams = params
+                    }
+                    output = try JobRunner.shared.run(action: action, input: file, parameters: fileParams, jobId: jobID)
+                }
+
                 DispatchQueue.main.async {
                     guard let self = self else { return }
                     self.currentConversionJobID = nil
@@ -1001,28 +1119,41 @@ public final class RadialWheelOverlayViewController: NSViewController {
                         self.compactProgressButton.isHidden = false
                         self.compactProgressButton.title = "Reveal"
 
-                        let inSize = (try? FileManager.default.attributesOfItem(atPath: file.path)[.size] as? Int64) ?? 0
-                        let outSize = (try? FileManager.default.attributesOfItem(atPath: output.path)[.size] as? Int64) ?? 0
-                        if inSize > 0 && outSize > 0 {
-                            let inMB = String(format: "%.1f MB", Double(inSize) / 1_048_576.0)
-                            let outMB = String(format: "%.1f MB", Double(outSize) / 1_048_576.0)
-                            if outSize < inSize {
-                                let savedPct = Int(round((1.0 - Double(outSize) / Double(inSize)) * 100.0))
-                                self.compactProgressLabel.stringValue = "Done · Saved \(savedPct)% (\(inMB) → \(outMB))"
-                            } else if outSize > inSize {
-                                let incPct = Int(round((Double(outSize) / Double(inSize) - 1.0) * 100.0))
-                                self.compactProgressLabel.stringValue = "Done · (\(inMB) → \(outMB) [+\(incPct)%])"
-                            } else {
-                                self.compactProgressLabel.stringValue = "Done · \(output.lastPathComponent)"
-                            }
+                        if isMultiFileSequential {
+                            self.compactProgressLabel.stringValue = "Done · Converted \(files.count) files"
                         } else {
-                            self.compactProgressLabel.stringValue = "Done: \(output.lastPathComponent)"
+                            let inSize = files.reduce(Int64(0)) { $0 + ((try? FileManager.default.attributesOfItem(atPath: $1.path)[.size] as? Int64) ?? 0) }
+                            let outSize = (try? FileManager.default.attributesOfItem(atPath: output.path)[.size] as? Int64) ?? 0
+                            if inSize > 0 && outSize > 0 {
+                                let inStr = Self.formatByteSize(inSize)
+                                let outStr = Self.formatByteSize(outSize)
+                                if outSize < inSize {
+                                    let savedPct = Int(round((1.0 - Double(outSize) / Double(inSize)) * 100.0))
+                                    if savedPct > 0 {
+                                        self.compactProgressLabel.stringValue = "Done · Saved \(savedPct)% (\(inStr) → \(outStr))"
+                                    } else {
+                                        self.compactProgressLabel.stringValue = "Done · (\(inStr) → \(outStr))"
+                                    }
+                                } else if outSize > inSize {
+                                    let incPct = Int(round((Double(outSize) / Double(inSize) - 1.0) * 100.0))
+                                    if incPct > 0 {
+                                        self.compactProgressLabel.stringValue = "Done · (\(inStr) → \(outStr) [+\(incPct)%])"
+                                    } else {
+                                        self.compactProgressLabel.stringValue = "Done · (\(inStr) → \(outStr))"
+                                    }
+                                } else {
+                                    self.compactProgressLabel.stringValue = "Done · \(output.lastPathComponent)"
+                                }
+                            } else {
+                                self.compactProgressLabel.stringValue = "Done: \(output.lastPathComponent)"
+                            }
                         }
 
                         if let img = NSImage(systemSymbolName: "checkmark.circle.fill", accessibilityDescription: nil) {
                             self.compactProgressIcon.image = img
                             self.compactProgressIcon.contentTintColor = .systemGreen
                         }
+                        self.hintPillLabel.stringValue = "Saved next to original · Press Space to Quick Look"
 
                         // Auto-dismiss the wheel after 2.2 seconds only if autoDismissWheelAfterRunning is enabled
                         if PreferencesManager.shared.autoDismissWheelAfterRunning {
@@ -1043,7 +1174,7 @@ public final class RadialWheelOverlayViewController: NSViewController {
                         self.compactProgressBar.isHidden = true
                         self.compactProgressContainer.isHidden = false
                         self.compactProgressButton.isHidden = false
-                        self.compactProgressButton.title = "Copy Error"
+                        self.compactProgressButton.title = "Copy Details"
                         self.compactProgressLabel.stringValue = "Error: \(error.localizedDescription)"
                         if let img = NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: nil) {
                             self.compactProgressIcon.image = img
@@ -1055,5 +1186,33 @@ public final class RadialWheelOverlayViewController: NSViewController {
                 }
             }
         }
+    }
+
+    public func showStickyResultForTesting(error: String? = nil) {
+        cancelAutoDismiss()
+        compactProgressContainer.isHidden = false
+        compactProgressBar.stopAnimation(nil)
+        compactProgressBar.isHidden = true
+        compactProgressButton.isHidden = false
+        if let error {
+            lastOutputURL = nil
+            lastErrorMessage = error
+            compactProgressLabel.stringValue = "Error: \(error)"
+            compactProgressButton.title = "Copy Details"
+        } else {
+            lastErrorMessage = nil
+            lastOutputURL = URL(fileURLWithPath: "/tmp/pasta-success-output")
+            compactProgressLabel.stringValue = "Done: pasta-success-output"
+            compactProgressButton.title = "Reveal"
+        }
+    }
+
+    public static func formatByteSize(_ bytes: Int64) -> String {
+        guard bytes > 0 else { return "0 B" }
+        return ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+    }
+
+    public func formatByteSize(_ bytes: Int64) -> String {
+        return Self.formatByteSize(bytes)
     }
 }

@@ -190,10 +190,18 @@ public final class JobStatusRowView: NSView {
                     let outStr = self.formatByteSize(outSize)
                     if outSize < inSize {
                         let savedPct = Int(round((1.0 - Double(outSize) / Double(inSize)) * 100.0))
-                        self.statusLabel.stringValue = "Done · Saved \(savedPct)% (\(inStr) → \(outStr))"
+                        if savedPct > 0 {
+                            self.statusLabel.stringValue = "Done · Saved \(savedPct)% (\(inStr) → \(outStr))"
+                        } else {
+                            self.statusLabel.stringValue = "Done · (\(inStr) → \(outStr))"
+                        }
                     } else if outSize > inSize {
                         let incPct = Int(round((Double(outSize) / Double(inSize) - 1.0) * 100.0))
-                        self.statusLabel.stringValue = "Done · (\(inStr) → \(outStr) [+\(incPct)%])"
+                        if incPct > 0 {
+                            self.statusLabel.stringValue = "Done · (\(inStr) → \(outStr) [+\(incPct)%])"
+                        } else {
+                            self.statusLabel.stringValue = "Done · (\(inStr) → \(outStr))"
+                        }
                     } else {
                         self.statusLabel.stringValue = "Done · \(outStr)"
                     }
@@ -268,9 +276,11 @@ public final class JobStatusRowView: NSView {
     }
 
     public func formatByteSize(_ bytes: Int64) -> String {
+        guard bytes > 0 else { return "0 B" }
         let b = Double(bytes)
         if b < 1024 { return "\(bytes) B" }
         if b < 1024 * 1024 { return String(format: "%.1f KB", b / 1024.0) }
-        return String(format: "%.1f MB", b / 1_048_576.0)
+        if b < 1024 * 1024 * 1024 { return String(format: "%.1f MB", b / 1_048_576.0) }
+        return String(format: "%.1f GB", b / (1024.0 * 1024.0 * 1024.0))
     }
 }

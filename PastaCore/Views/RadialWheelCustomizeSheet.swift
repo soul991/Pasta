@@ -6,6 +6,7 @@ public final class RadialWheelCustomizeSheet: NSView {
     public var onCloseRequested: (() -> Void)?
 
     private let visualEffect = NSVisualEffectView()
+    private let systemGlass = SystemGlassSurfaceView(cornerRadius: 20, tintColor: NSColor(white: 0.10, alpha: 0.78), isInteractive: true)
     private let titleLabel = NSTextField(labelWithString: "Customize Wheel")
     private let closeBtn = NSButton()
     private let sectionSegment = NSSegmentedControl()
@@ -53,6 +54,14 @@ public final class RadialWheelCustomizeSheet: NSView {
         layer?.cornerRadius = 20
         layer?.masksToBounds = false
 
+        addSubview(systemGlass)
+        NSLayoutConstraint.activate([
+            systemGlass.leadingAnchor.constraint(equalTo: leadingAnchor),
+            systemGlass.trailingAnchor.constraint(equalTo: trailingAnchor),
+            systemGlass.topAnchor.constraint(equalTo: topAnchor),
+            systemGlass.bottomAnchor.constraint(equalTo: bottomAnchor)
+        ])
+
         visualEffect.translatesAutoresizingMaskIntoConstraints = false
         visualEffect.blendingMode = .behindWindow
         visualEffect.material = .hudWindow
@@ -62,6 +71,7 @@ public final class RadialWheelCustomizeSheet: NSView {
         visualEffect.layer?.masksToBounds = true
         visualEffect.layer?.borderWidth = 1.0
         visualEffect.layer?.borderColor = NSColor(white: 1.0, alpha: 0.20).cgColor
+        visualEffect.isHidden = systemGlass.usesSystemGlass
         addSubview(visualEffect)
 
         // Header Title

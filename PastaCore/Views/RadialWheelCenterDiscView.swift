@@ -11,10 +11,17 @@ public final class RadialWheelCenterDiscView: NSView {
     }
 
     private let visualEffect = NSVisualEffectView()
+    private let systemGlass = SystemGlassSurfaceView(cornerRadius: 64, tintColor: NSColor(white: 0.08, alpha: 0.85), isInteractive: true)
     private let iconImageView = NSImageView()
     private let countBadge = NSTextField(labelWithString: "")
     private let fileNameLabel = NSTextField(labelWithString: "")
     private let detailLabel = NSTextField(labelWithString: "")
+
+    /// Diagnostic description of what the hub is actually showing (used by wheel snapshot logging).
+    public func debugSnapshot() -> String {
+        let imageState = iconImageView.image == nil ? "nil" : "set"
+        return "hidden=\(isHidden) alpha=\(alphaValue) name='\(fileNameLabel.stringValue)' detail='\(detailLabel.stringValue)' image=\(imageState) glass=\(systemGlass.usesSystemGlass)"
+    }
 
     public var displayedFileName: String {
         return fileNameLabel.stringValue
@@ -46,6 +53,14 @@ public final class RadialWheelCenterDiscView: NSView {
         wantsLayer = true
         layer?.cornerRadius = 64
         layer?.masksToBounds = false
+
+        addSubview(systemGlass)
+        NSLayoutConstraint.activate([
+            systemGlass.leadingAnchor.constraint(equalTo: leadingAnchor),
+            systemGlass.trailingAnchor.constraint(equalTo: trailingAnchor),
+            systemGlass.topAnchor.constraint(equalTo: topAnchor),
+            systemGlass.bottomAnchor.constraint(equalTo: bottomAnchor)
+        ])
 
         visualEffect.translatesAutoresizingMaskIntoConstraints = false
         visualEffect.blendingMode = .behindWindow
@@ -82,7 +97,7 @@ public final class RadialWheelCenterDiscView: NSView {
 
         // Filename label (middle truncation)
         fileNameLabel.translatesAutoresizingMaskIntoConstraints = false
-        fileNameLabel.font = NSFont.systemFont(ofSize: 11, weight: .bold)
+        fileNameLabel.font = NSFont.systemFont(ofSize: 12, weight: .bold)
         fileNameLabel.textColor = .white
         fileNameLabel.alignment = .center
         fileNameLabel.lineBreakMode = .byTruncatingMiddle
@@ -90,7 +105,7 @@ public final class RadialWheelCenterDiscView: NSView {
 
         // Detail label: "type · size"
         detailLabel.translatesAutoresizingMaskIntoConstraints = false
-        detailLabel.font = NSFont.systemFont(ofSize: 9, weight: .medium)
+        detailLabel.font = NSFont.systemFont(ofSize: 11, weight: .medium)
         detailLabel.textColor = ThemeManager.shared.accentColor
         detailLabel.alignment = .center
         addSubview(detailLabel)
@@ -140,11 +155,15 @@ public final class RadialWheelCenterDiscView: NSView {
         let isIncreaseContrast = ThemeManager.shared.isIncreaseContrast
         let isReduceMotion = ThemeManager.shared.isReduceMotion
 
+        systemGlass.configure(cornerRadius: diameter / 2.0, tintColor: NSColor(white: 0.08, alpha: 0.85), isInteractive: true)
+
         if isReduceTransparency {
+            systemGlass.isHidden = true
             visualEffect.isHidden = true
             layer?.backgroundColor = ThemeManager.shared.reduceTransparencyBackground.cgColor
         } else {
-            visualEffect.isHidden = false
+            systemGlass.isHidden = false
+            visualEffect.isHidden = systemGlass.usesSystemGlass
             layer?.backgroundColor = NSColor.clear.cgColor
         }
 
@@ -224,6 +243,7 @@ public final class RadialWheelCenterDiscView: NSView {
             let sizeStr = ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file)
             let ext = firstFile.pathExtension.uppercased()
             detailLabel.stringValue = "\(ext) · \(sizeStr)"
+            baseDetailString = detailLabel.stringValue
         } else {
             countBadge.isHidden = true
             fileNameLabel.stringValue = firstFile.lastPathComponent
@@ -235,6 +255,23 @@ public final class RadialWheelCenterDiscView: NSView {
             }
             let ext = firstFile.pathExtension.uppercased()
             detailLabel.stringValue = sizeStr.isEmpty ? ext : "\(ext) · \(sizeStr)"
+            baseDetailString = detailLabel.stringValue
+        }
+    }
+
+    private var baseDetailString: String = ""
+
+    public func setHoverTarget(actionTitle: String, estSize: String? = nil) {
+        if let est = estSize {
+            detailLabel.stringValue = "→ \(actionTitle) (Est. \(est))"
+        } else {
+            detailLabel.stringValue = "→ Convert to \(actionTitle)"
+        }
+    }
+
+    public func restoreBaseDetail() {
+        if !baseDetailString.isEmpty {
+            detailLabel.stringValue = baseDetailString
         }
     }
 }

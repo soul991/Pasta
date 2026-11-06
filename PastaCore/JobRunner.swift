@@ -9,10 +9,14 @@ public final class JobRunner {
 
     public init() {}
 
-    private func isJobCancelled(_ jobId: UUID) -> Bool {
+    public func isCancelled(_ jobId: UUID) -> Bool {
         processLock.lock()
         defer { processLock.unlock() }
         return cancelledJobIds.contains(jobId)
+    }
+
+    private func isJobCancelled(_ jobId: UUID) -> Bool {
+        return isCancelled(jobId)
     }
 
     private func trackProcess(_ process: Process, for jobId: UUID) -> Bool {
@@ -67,13 +71,34 @@ public final class JobRunner {
 
     public func terminateGracefully(_ proc: Process, gracePeriod: TimeInterval = 2.0) {
         guard proc.isRunning else { return }
-        proc.terminate()
         let pid = proc.processIdentifier
+        if pid > 0 {
+            kill(pid, SIGTERM)
+        } else {
+            proc.terminate()
+        }
         DispatchQueue.global().asyncAfter(deadline: .now() + gracePeriod) {
             if proc.isRunning && pid > 0 {
                 kill(pid, SIGKILL)
             }
         }
+    }
+
+    public static func safelyMoveOrReplace(source: URL, destination: URL) throws {
+        let fm = FileManager.default
+        if fm.fileExists(atPath: destination.path) {
+            do {
+                _ = try fm.replaceItemAt(destination, withItemAt: source, backupItemName: nil, options: [])
+                return
+            } catch {
+                try? fm.removeItem(at: destination)
+            }
+        }
+        try fm.moveItem(at: source, to: destination)
+    }
+
+    public static func validateFolderJail(at rootURL: URL) throws {
+        try ArchiveGuard.validate(root: rootURL)
     }
 
     @discardableResult
@@ -88,6 +113,7 @@ public final class JobRunner {
     ) throws -> URL {
         processLock.lock()
         if cancelledJobIds.contains(jobId) {
+            cancelledJobIds.remove(jobId)
             processLock.unlock()
             throw PastaError.cancelled
         }
@@ -118,12 +144,16 @@ public final class JobRunner {
             folderSuffix = ""
         }
 
-        let finalDestinationURL: URL
+        let reservation: OutputReservation
         if isFolder {
-            finalDestinationURL = OutputPlanner.planOutputDirectory(for: input, suffix: folderSuffix, destinationDirectory: effectiveDest)
+            reservation = try OutputPlanner.reserveOutputDirectory(for: input, suffix: folderSuffix, destinationDirectory: effectiveDest)
         } else {
-            finalDestinationURL = OutputPlanner.planOutput(for: input, targetExtension: action.outputExtension, destinationDirectory: effectiveDest)
+            reservation = try OutputPlanner.reserveOutput(for: input, targetExtension: action.outputExtension, destinationDirectory: effectiveDest)
         }
+        defer {
+            reservation.cleanup()
+        }
+        let finalDestinationURL = reservation.url
 
         PastaLogger.shared.info("Starting action \(action.id) on '\(input.lastPathComponent)' -> '\(finalDestinationURL.lastPathComponent)'")
 
@@ -131,6 +161,9 @@ public final class JobRunner {
         let tempDir = try OutputPlanner.makeTempDirectory()
         let loProfileDir = URL(fileURLWithPath: "/tmp/Pasta_lo_\(jobId.uuidString)")
         defer {
+            processLock.lock()
+            cancelledJobIds.remove(jobId)
+            processLock.unlock()
             // Safe to swallow: best-effort temporary scratch directory removal on scope exit
             try? fm.removeItem(at: tempDir)
             try? fm.removeItem(at: loProfileDir)
@@ -147,6 +180,9 @@ public final class JobRunner {
 
         if let custom = action.customRunner {
             try custom(input, tempWorkingOutputURL, effectiveParams, self, jobId)
+            if isJobCancelled(jobId) {
+                throw PastaError.cancelled
+            }
         } else {
             let invocations = action.buildInvocationsWithParams(input, tempWorkingOutputURL, effectiveParams)
             guard !invocations.isEmpty else {
@@ -183,7 +219,8 @@ public final class JobRunner {
                     try fm.moveItem(at: item, to: destFile)
                 }
             }
-            try fm.moveItem(at: tempWorkingOutputURL, to: finalDestinationURL)
+            try Self.validateFolderJail(at: tempWorkingOutputURL)
+            try reservation.publish(from: tempWorkingOutputURL)
             return finalDestinationURL
         }
 
@@ -200,11 +237,8 @@ public final class JobRunner {
             throw PastaError.outputNotFound(finalDestinationURL.path)
         }
 
-        // Safe atomic move
-        if fm.fileExists(atPath: finalDestinationURL.path) {
-            try fm.removeItem(at: finalDestinationURL)
-        }
-        try fm.moveItem(at: tempWorkingOutputURL, to: finalDestinationURL)
+        // Safe atomic publish over reserved placeholder
+        try reservation.publish(from: tempWorkingOutputURL)
 
         PastaLogger.shared.info("Successfully completed \(action.id) -> '\(finalDestinationURL.path)'")
         return finalDestinationURL
@@ -222,6 +256,7 @@ public final class JobRunner {
     ) throws -> URL {
         processLock.lock()
         if cancelledJobIds.contains(jobId) {
+            cancelledJobIds.remove(jobId)
             processLock.unlock()
             throw PastaError.cancelled
         }
@@ -252,23 +287,30 @@ public final class JobRunner {
         let effectiveDest = destinationDirectory ?? PreferencesManager.shared.effectiveDestination(for: firstInput)
 
         let isCompressBatch = action.id.contains("compress") && inputs.count > 1
-        let finalDestinationURL: URL
+        let reservation: OutputReservation
         if isCompressBatch {
-            finalDestinationURL = OutputPlanner.planOutputDirectory(for: firstInput, suffix: "compressed", destinationDirectory: effectiveDest)
+            reservation = try OutputPlanner.reserveOutputDirectory(for: firstInput, suffix: "compressed", destinationDirectory: effectiveDest)
         } else {
             switch action.outputKind {
             case .folder(let suffix):
-                finalDestinationURL = OutputPlanner.planOutputDirectory(for: firstInput, suffix: suffix, destinationDirectory: effectiveDest)
+                reservation = try OutputPlanner.reserveOutputDirectory(for: firstInput, suffix: suffix, destinationDirectory: effectiveDest)
             case .file:
-                finalDestinationURL = OutputPlanner.planOutput(for: firstInput, targetExtension: action.outputExtension, destinationDirectory: effectiveDest)
+                reservation = try OutputPlanner.reserveOutput(for: firstInput, targetExtension: action.outputExtension, destinationDirectory: effectiveDest)
             }
         }
+        defer {
+            reservation.cleanup()
+        }
+        let finalDestinationURL = reservation.url
 
         PastaLogger.shared.info("Starting batch action \(action.id) on \(inputs.count) files -> '\(finalDestinationURL.lastPathComponent)'")
 
         let tempDir = try OutputPlanner.makeTempDirectory()
         let loProfileDir = URL(fileURLWithPath: "/tmp/Pasta_lo_\(jobId.uuidString)")
         defer {
+            processLock.lock()
+            cancelledJobIds.remove(jobId)
+            processLock.unlock()
             // Safe to swallow: best-effort temporary scratch directory removal on scope exit
             try? fm.removeItem(at: tempDir)
             try? fm.removeItem(at: loProfileDir)
@@ -291,10 +333,19 @@ public final class JobRunner {
 
         if let customBatch = action.customBatchRunner {
             try customBatch(inputs, tempWorkingOutputURL, effectiveParams, self, jobId)
+            if isJobCancelled(jobId) {
+                throw PastaError.cancelled
+            }
         } else if let custom = action.customRunner, isCompressBatch {
             for inp in inputs {
+                if isJobCancelled(jobId) {
+                    throw PastaError.cancelled
+                }
                 let dest = tempWorkingOutputURL.appendingPathComponent(inp.lastPathComponent)
                 try custom(inp, dest, effectiveParams, self, jobId)
+            }
+            if isJobCancelled(jobId) {
+                throw PastaError.cancelled
             }
         } else {
             let invocations = (action.buildBatchInvocationsWithParams ?? { ins, out, params in
@@ -312,7 +363,7 @@ public final class JobRunner {
         }
 
         if isCompressBatch {
-            try fm.moveItem(at: tempWorkingOutputURL, to: finalDestinationURL)
+            try reservation.publish(from: tempWorkingOutputURL)
             PastaLogger.shared.info("Successfully completed batch \(action.id) -> '\(finalDestinationURL.path)'")
             return finalDestinationURL
         }
@@ -341,7 +392,8 @@ public final class JobRunner {
                     try fm.moveItem(at: item, to: destFile)
                 }
             }
-            try fm.moveItem(at: tempWorkingOutputURL, to: finalDestinationURL)
+            try Self.validateFolderJail(at: tempWorkingOutputURL)
+            try reservation.publish(from: tempWorkingOutputURL)
             return finalDestinationURL
         case .file:
             if !fm.fileExists(atPath: tempWorkingOutputURL.path) {
@@ -355,10 +407,7 @@ public final class JobRunner {
             guard fm.fileExists(atPath: tempWorkingOutputURL.path) else {
                 throw PastaError.outputNotFound(finalDestinationURL.path)
             }
-            if fm.fileExists(atPath: finalDestinationURL.path) {
-                try fm.removeItem(at: finalDestinationURL)
-            }
-            try fm.moveItem(at: tempWorkingOutputURL, to: finalDestinationURL)
+            try reservation.publish(from: tempWorkingOutputURL)
             PastaLogger.shared.info("Successfully completed batch \(action.id) -> '\(finalDestinationURL.path)'")
             return finalDestinationURL
         }
@@ -449,10 +498,22 @@ extension JobRunner {
         let activityLock = NSLock()
         var lastActivityTime = Date().timeIntervalSinceReferenceDate
 
+        let outGroup = DispatchGroup()
+        var outDrained = false
+        let outDrainLock = NSLock()
         if redirectHandle == nil {
+            outGroup.enter()
             outPipe.fileHandleForReading.readabilityHandler = { handle in
                 let chunk = handle.availableData
-                if !chunk.isEmpty {
+                if chunk.isEmpty {
+                    handle.readabilityHandler = nil
+                    outDrainLock.lock()
+                    if !outDrained {
+                        outDrained = true
+                        outGroup.leave()
+                    }
+                    outDrainLock.unlock()
+                } else {
                     collector.appendOut(chunk)
                     activityLock.lock()
                     lastActivityTime = Date().timeIntervalSinceReferenceDate
@@ -461,9 +522,21 @@ extension JobRunner {
             }
         }
 
+        let errGroup = DispatchGroup()
+        var errDrained = false
+        let errDrainLock = NSLock()
+        errGroup.enter()
         errPipe.fileHandleForReading.readabilityHandler = { handle in
             let chunk = handle.availableData
-            if !chunk.isEmpty {
+            if chunk.isEmpty {
+                handle.readabilityHandler = nil
+                errDrainLock.lock()
+                if !errDrained {
+                    errDrained = true
+                    errGroup.leave()
+                }
+                errDrainLock.unlock()
+            } else {
                 collector.appendErr(chunk)
                 activityLock.lock()
                 lastActivityTime = Date().timeIntervalSinceReferenceDate
@@ -509,8 +582,10 @@ extension JobRunner {
             let t = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .default))
             t.schedule(deadline: .now() + timeout)
             t.setEventHandler { [weak process] in
+                activityLock.lock()
                 timedOut = true
-                process?.terminate()
+                activityLock.unlock()
+                if let p = process { JobRunner.shared.terminateGracefully(p) }
             }
             t.resume()
             timer = t
@@ -525,10 +600,12 @@ extension JobRunner {
             wt.setEventHandler { [weak process] in
                 activityLock.lock()
                 let elapsed = Date().timeIntervalSinceReferenceDate - lastActivityTime
-                activityLock.unlock()
                 if elapsed >= inact {
                     watchdogTimedOut = true
-                    process?.terminate()
+                    activityLock.unlock()
+                    if let p = process { JobRunner.shared.terminateGracefully(p) }
+                } else {
+                    activityLock.unlock()
                 }
             }
             wt.resume()
@@ -545,6 +622,8 @@ extension JobRunner {
         } catch {
             timer?.cancel()
             watchdogTimer?.cancel()
+            outPipe.fileHandleForReading.readabilityHandler = nil
+            errPipe.fileHandleForReading.readabilityHandler = nil
             throw PastaError.executionFailed(tool: invocation.toolName, exitCode: 1, output: error.localizedDescription)
         }
 
@@ -552,12 +631,14 @@ extension JobRunner {
         timer?.cancel()
         watchdogTimer?.cancel()
 
-        outPipe.fileHandleForReading.readabilityHandler = nil
-        errPipe.fileHandleForReading.readabilityHandler = nil
         if redirectHandle == nil {
+            _ = outGroup.wait(timeout: .now() + 2.0)
+            outPipe.fileHandleForReading.readabilityHandler = nil
             let remOut = outPipe.fileHandleForReading.readDataToEndOfFile()
             if !remOut.isEmpty { collector.appendOut(remOut) }
         }
+        _ = errGroup.wait(timeout: .now() + 2.0)
+        errPipe.fileHandleForReading.readabilityHandler = nil
         let remErr = errPipe.fileHandleForReading.readDataToEndOfFile()
         if !remErr.isEmpty { collector.appendErr(remErr) }
         // Safe to swallow: best-effort closing of redirected output handle
@@ -571,11 +652,16 @@ extension JobRunner {
             throw PastaError.cancelled
         }
 
-        if timedOut {
+        activityLock.lock()
+        let didTimeOut = timedOut
+        let didWatchdogTimeOut = watchdogTimedOut
+        activityLock.unlock()
+
+        if didTimeOut {
             throw PastaError.timedOut(tool: invocation.toolName)
         }
 
-        if watchdogTimedOut {
+        if didWatchdogTimeOut {
             throw PastaError.timedOut(tool: "\(invocation.toolName) (inactivity watchdog)")
         }
 
@@ -646,18 +732,25 @@ extension JobRunner {
                 folderSuffix = ""
             }
 
-            let finalDestinationURL: URL
+            let reservation: OutputReservation
             if isFolder {
-                finalDestinationURL = OutputPlanner.planOutputDirectory(for: input, suffix: folderSuffix, destinationDirectory: effectiveDest)
+                reservation = try OutputPlanner.reserveOutputDirectory(for: input, suffix: folderSuffix, destinationDirectory: effectiveDest)
             } else {
-                finalDestinationURL = OutputPlanner.planOutput(for: input, targetExtension: action.outputExtension, destinationDirectory: effectiveDest)
+                reservation = try OutputPlanner.reserveOutput(for: input, targetExtension: action.outputExtension, destinationDirectory: effectiveDest)
             }
+            defer {
+                reservation.cleanup()
+            }
+            let finalDestinationURL = reservation.url
 
             PastaLogger.shared.info("Starting async action \(action.id) on '\(input.lastPathComponent)' -> '\(finalDestinationURL.lastPathComponent)'")
 
             let tempDir = try OutputPlanner.makeTempDirectory()
             let loProfileDir = URL(fileURLWithPath: "/tmp/Pasta_lo_\(jobId.uuidString)")
             defer {
+                processLock.lock()
+                cancelledJobIds.remove(jobId)
+                processLock.unlock()
                 // Safe to swallow: best-effort temporary scratch directory removal on scope exit
                 try? fm.removeItem(at: tempDir)
                 try? fm.removeItem(at: loProfileDir)
@@ -674,6 +767,9 @@ extension JobRunner {
 
             if let custom = action.customRunner {
                 try custom(input, tempWorkingOutputURL, effectiveParams, self, jobId)
+                if self.isJobCancelled(jobId) {
+                    throw PastaError.cancelled
+                }
             } else {
                 let invocations = action.buildInvocationsWithParams(input, tempWorkingOutputURL, effectiveParams)
                 guard !invocations.isEmpty else {
@@ -713,7 +809,8 @@ extension JobRunner {
                         try fm.moveItem(at: item, to: destFile)
                     }
                 }
-                try fm.moveItem(at: tempWorkingOutputURL, to: finalDestinationURL)
+                try Self.validateFolderJail(at: tempWorkingOutputURL)
+                try reservation.publish(from: tempWorkingOutputURL)
                 return finalDestinationURL
             }
 
@@ -730,10 +827,7 @@ extension JobRunner {
                 throw PastaError.outputNotFound(finalDestinationURL.path)
             }
 
-            if fm.fileExists(atPath: finalDestinationURL.path) {
-                try fm.removeItem(at: finalDestinationURL)
-            }
-            try fm.moveItem(at: tempWorkingOutputURL, to: finalDestinationURL)
+            try reservation.publish(from: tempWorkingOutputURL)
             PastaLogger.shared.info("Successfully completed async \(action.id) -> '\(finalDestinationURL.path)'")
             return finalDestinationURL
         } onCancel: {

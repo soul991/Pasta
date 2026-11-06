@@ -1,4 +1,5 @@
 import Foundation
+import UserNotifications
 
 public struct PastaCLI {
     public static func run(arguments: [String]) {
@@ -10,13 +11,9 @@ public struct PastaCLI {
 
         switch command {
         case "doctor":
-            runDoctor()
+            runDoctor(args: Array(args.dropFirst()))
         case "list-actions":
-            guard args.count >= 2 else {
-                fputs("Error: Missing file path for list-actions.\nUsage: pasta list-actions <file>\n", stderr)
-                exit(1)
-            }
-            runListActions(filePath: args[1])
+            runListActions(args: Array(args.dropFirst()))
         case "convert":
             runConvert(args: Array(args.dropFirst()))
         case "quick-action":
@@ -71,55 +68,56 @@ public struct PastaCLI {
         print("""
         Pasta - Offline macOS File Converter
         Usage:
-          pasta convert --action <action_id> [--param key=value] <file>...
-          pasta convert <file> --to <format>
-          pasta list-actions <file>
-          pasta doctor
+          pasta convert --action <action_id> [--dest <dir>] [--param key=value] <file>...
+          pasta convert <file> --to <format> [--dest <dir>]
+          pasta list-actions <file> | --all [--markdown]
+          pasta doctor [--json]
           pasta help
         """)
     }
 
-    private static func runDoctor() {
-        let tools = [
-            "ffmpeg", "cwebp", "magick", "gs", "qpdf", "pdftoppm",
-            "pdftotext", "exiftool", "pandoc", "rsvg-convert", "unar",
-            "7zz", "sips", "ditto", "tar"
-        ]
-
-        print("Pasta Environment & Engine Doctor:")
-        print("--------------------------------------------------")
-        print("Required Engine Tools:")
-        var allOk = true
-        for tool in tools {
-            if let url = ToolLocator.shared.findTool(tool) {
-                print("  [OK]      \(tool.padding(toLength: 14, withPad: " ", startingAt: 0)) -> \(url.path)")
-            } else {
-                print("  [MISSING] \(tool.padding(toLength: 14, withPad: " ", startingAt: 0)) (NOT FOUND)")
-                allOk = false
-            }
-        }
-        print("\nOptional Engine Tools:")
-        let optionalTools = [
-            ("soffice", "LibreOffice", "Office document conversions (DOCX, PPTX, XLSX to PDF/images)"),
-            ("ebook-convert", "Calibre", "Enhanced PDF to EPUB layout preservation"),
-            ("avifenc", "libavif", "Dedicated AVIF image encoding")
-        ]
-        for (tool, appName, desc) in optionalTools {
-            if let url = ToolLocator.shared.findOptionalTool(tool) {
-                print("  [OK (OPTIONAL)]    \(tool.padding(toLength: 14, withPad: " ", startingAt: 0)) -> \(url.path) (\(appName))")
-            } else {
-                print("  [OPTIONAL MISSING] \(tool.padding(toLength: 14, withPad: " ", startingAt: 0)) (\(appName) not installed - \(desc))")
-            }
-        }
-        print("--------------------------------------------------")
-        if allOk {
-            print("All required engine binaries are available.")
+    private static func runDoctor(args: [String]) {
+        let isJson = args.contains("--json")
+        let report = ToolLocator.shared.doctorReportData(fetchVersions: true)
+        if isJson {
+            print(report.jsonString(prettyPrinted: true))
         } else {
-            print("Warning: Some tools are missing. Install missing tools via Homebrew.")
+            print(ToolLocator.shared.doctorReport(fetchVersions: true))
         }
     }
 
-    private static func runListActions(filePath: String) {
+    private static func runListActions(args: [String]) {
+        if args.contains("--all") {
+            if args.contains("--markdown") {
+                let actions = FormatRegistry.shared.allRegisteredActions()
+                print("| Category | Action ID | Display Name | Target Extension | Advanced |")
+                print("| :--- | :--- | :--- | :--- | :---: |")
+                for a in actions {
+                    let cat = a.category.displayName
+                    let id = "`\(a.id)`"
+                    let name = a.displayName
+                    let ext = a.outputExtension.isEmpty ? "(folder)" : ".\(a.outputExtension)"
+                    let adv = a.isAdvanced ? "Yes" : "No"
+                    print("| \(cat) | \(id) | \(name) | `\(ext)` | \(adv) |")
+                }
+            } else {
+                let actions = FormatRegistry.shared.allRegisteredActions()
+                print("All Registered Pasta Actions (\(actions.count) total):")
+                print("--------------------------------------------------")
+                for a in actions {
+                    let adv = a.isAdvanced ? " [Advanced]" : ""
+                    let ext = a.outputExtension.isEmpty ? "(folder)" : ".\(a.outputExtension)"
+                    print("  - \(a.id.padding(toLength: 30, withPad: " ", startingAt: 0)) (\(a.displayName) -> \(ext))\(adv)")
+                }
+            }
+            return
+        }
+
+        guard let filePath = args.first(where: { !$0.hasPrefix("-") }) else {
+            fputs("Error: Missing file path or flags for list-actions.\nUsage: pasta list-actions <file> | --all [--markdown]\n", stderr)
+            exit(1)
+        }
+
         let url = URL(fileURLWithPath: filePath)
         guard FileManager.default.fileExists(atPath: url.path) else {
             fputs("Error: File not found at '\(filePath)'\n", stderr)
@@ -153,6 +151,7 @@ public struct PastaCLI {
     private static func runConvert(args: [String]) {
         var actionId: String?
         var targetFormat: String?
+        var destinationDir: URL?
         var rawParams: [String: String] = [:]
         var files: [String] = []
 
@@ -168,6 +167,9 @@ public struct PastaCLI {
                 i += 1
             } else if arg == "--action" && i + 1 < args.count {
                 actionId = args[i + 1]
+                i += 2
+            } else if (arg == "--dest" || arg == "--destination") && i + 1 < args.count {
+                destinationDir = URL(fileURLWithPath: args[i + 1])
                 i += 2
             } else if arg == "--to" && i + 1 < args.count {
                 targetFormat = args[i + 1]
@@ -221,7 +223,7 @@ public struct PastaCLI {
                 }
             }
             do {
-                let output = try JobRunner.shared.runBatch(action: act, inputs: fileURLs, parameters: effectiveParams)
+                let output = try JobRunner.shared.runBatch(action: act, inputs: fileURLs, destinationDirectory: destinationDir, parameters: effectiveParams)
                 print("OK: \(output.path)")
                 return
             } catch {
@@ -267,7 +269,7 @@ public struct PastaCLI {
             }
 
             do {
-                let output = try JobRunner.shared.run(action: selectedAction, input: url, parameters: effectiveParams)
+                let output = try JobRunner.shared.run(action: selectedAction, input: url, destinationDirectory: destinationDir, parameters: effectiveParams)
                 print("OK: \(output.path)")
             } catch {
                 fputs("Failed to convert '\(url.lastPathComponent)': \(error.localizedDescription)\n", stderr)
@@ -290,8 +292,18 @@ public struct PastaCLI {
                 continue
             }
 
-            let actionTitles = actions.map { "\"\($0.displayName) (.\($0.outputExtension))\"" }.joined(separator: ", ")
-            let script = "choose from list {\(actionTitles)} with title \"Pasta\" with prompt \"Choose target format for \(url.lastPathComponent):\" without multiple selections allowed"
+            let safeFilename = url.lastPathComponent
+                .replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "\"", with: "\\\"")
+
+            let titleForAction: (ConversionAction) -> String = { "\($0.displayName) (.\($0.outputExtension))" }
+            let actionTitles = actions.map { act in
+                let escaped = titleForAction(act)
+                    .replacingOccurrences(of: "\\", with: "\\\\")
+                    .replacingOccurrences(of: "\"", with: "\\\"")
+                return "\"\(escaped)\""
+            }.joined(separator: ", ")
+            let script = "choose from list {\(actionTitles)} with title \"Pasta\" with prompt \"Choose target format for \(safeFilename):\" without multiple selections allowed"
 
             let proc = Process()
             proc.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
@@ -327,7 +339,7 @@ public struct PastaCLI {
             let chosen = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             guard !chosen.isEmpty && chosen != "false" else { continue }
 
-            if let matched = actions.first(where: { chosen.contains($0.displayName) }) {
+            if let matched = actions.first(where: { titleForAction($0) == chosen || $0.displayName == chosen }) {
                 do {
                     let out = try JobRunner.shared.run(action: matched, input: url)
                     showNotification(title: "Pasta Converted", message: "Successfully created \(out.lastPathComponent)")
@@ -338,23 +350,45 @@ public struct PastaCLI {
         }
     }
 
+    public static func makeNotificationRequest(title: String, message: String) -> UNNotificationRequest {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = message
+        content.sound = .default
+        return UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+    }
+
     public static func showNotification(title: String, message: String) {
-        let script = "display notification \"\(message.replacingOccurrences(of: "\"", with: "\\\""))\" with title \"\(title)\""
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        proc.arguments = ["-e", script]
-        let errPipe = Pipe()
-        proc.standardError = errPipe
-        do {
-            try proc.run()
-            proc.waitUntilExit()
-            if proc.terminationStatus != 0 {
-                let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
-                let errStr = String(data: errData, encoding: .utf8) ?? ""
-                PastaLogger.shared.error("Notification error: \(errStr.trimmingCharacters(in: .whitespacesAndNewlines))")
+        let center = UNUserNotificationCenter.current()
+        let request = makeNotificationRequest(title: title, message: message)
+
+        center.getNotificationSettings { settings in
+            switch settings.authorizationStatus {
+            case .authorized, .provisional, .ephemeral:
+                deliverNotification(request, through: center)
+            case .notDetermined:
+                center.requestAuthorization(options: [.alert, .sound]) { granted, error in
+                    if let error {
+                        PastaLogger.shared.error("Native notification authorization failed: \(error.localizedDescription)")
+                    } else if granted {
+                        deliverNotification(request, through: center)
+                    } else {
+                        PastaLogger.shared.warning("Native notifications are disabled; no notification was delivered")
+                    }
+                }
+            case .denied:
+                PastaLogger.shared.warning("Native notifications are disabled; no notification was delivered")
+            @unknown default:
+                PastaLogger.shared.warning("Native notification authorization has an unknown status; no notification was delivered")
             }
-        } catch {
-            PastaLogger.shared.error("Failed to run notification osascript: \(error.localizedDescription)")
+        }
+    }
+
+    private static func deliverNotification(_ request: UNNotificationRequest, through center: UNUserNotificationCenter) {
+        center.add(request) { error in
+            if let error {
+                PastaLogger.shared.error("Native notification delivery failed: \(error.localizedDescription)")
+            }
         }
     }
 }

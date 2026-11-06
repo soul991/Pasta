@@ -2,6 +2,36 @@
 
 *This document details all hardware, AppKit UI, OS permission, and interaction tests that cannot be fully verified in headless CI and require manual verification on a real Mac running macOS 13+.*
 
+> Audit 2026-11-02 additions: before Phase 11 proceeds, the owner must also
+> verify the sticky-wheel results remain visible for 10 seconds with auto-close
+> off after a successful conversion, a cancellation, and an error; that an
+> error's **Copy Details** button remains available; and that Settings shows
+> `pasta doctor` paths/missing optional tools plus the Shift-hold-duration
+> slider. Once Liquid Glass is implemented, capture screenshots of the wheel,
+> Customize sheet, parameter panel, and hint pill over the red-car wallpaper,
+> with Reduce Transparency and Increase Contrast both enabled separately.
+
+---
+
+## 0. Automated Local Mac Verification Script (`scripts/local_verify.sh`)
+
+To execute the complete end-to-end local hardware and binary verification on a real Mac:
+
+```bash
+./scripts/local_verify.sh
+```
+
+This single command executes and writes an unedited log to `local_verify_report.txt`, covering:
+1. **Host Environment**: Exact `sw_vers`, `xcodebuild -version`, `swift --version`.
+2. **Unit & Integration Suite (Debug)**: Full 840+ test assertions via `swift run PastaTests`.
+3. **Unit & Integration Suite (Release)**: Full 840+ test assertions via `swift run -c release PastaTests`.
+4. **Hardening Tests (Debug Binary)**: Section 8 security/path-traversal hardening suite via `PASTA_BIN=.build/debug/Pasta ./scripts/run_section8_tests.sh`.
+5. **App Bundle Build**: Clean `./scripts/build_app.sh` generation of `Pasta.app`.
+6. **Hardening Tests (Packaged App Bundle)**: Section 8 security hardening suite run directly against `Pasta.app/Contents/MacOS/Pasta`.
+7. **Codesign Integrity**: Strict deep bundle verification via `codesign --verify --deep --strict Pasta.app`.
+8. **Doctor Engine Catalog**: Full `pasta doctor --json` report from `Pasta.app`.
+9. **Retina App Icon Corner Alpha**: Mathematical verification that `assets/AppIcon-1024.png` is 1024x1024 RGBA with 4 fully transparent corner pixels (`alpha == 0`).
+
 ---
 
 ## 1. Accessibility Permission Flow (`AXIsProcessTrusted`)
@@ -189,9 +219,10 @@ CI tests verify the mathematical state machine against simulated clock timestamp
 - [ ] **Wheel Hub Brand Mark (Idle State)**:
   - Open the wheel manually via menu bar ("Show Wheel") or without files.
   - **Expected:** The center hub displays the rigatoni brand mark glyph tinted with the current theme accent color, the label "PASTA", and "Drag a file onto the wheel".
-- [ ] **Settings Window Header**:
+- [ ] **Settings Window Header & Doctor**:
   - Open Settings (via menu bar "Settings..." or <kbd>⌘</kbd> + <kbd>,</kbd>).
   - **Expected:** The window header prominently features the Pasta App Icon (48x48 pt squircle), title "Pasta" (18 pt bold), and subtitle "Preferences & Radial Wheel Settings".
+  - **Expected:** The lower panel lists each required conversion engine and its resolved path, and labels unavailable optional engines (including LibreOffice) as optional without treating them as errors.
 - [ ] **About Panel App Icon**:
   - Choose "About Pasta" from the menu bar menu.
   - **Expected:** The About alert dialog displays the high-resolution Pasta App Icon alongside version and description text.
@@ -280,3 +311,25 @@ Inspect `Pasta.app` on the macOS Dock, Launchpad, and Finder at standard resolut
 - [ ] **Active Slice Contrast**:
   - Hover over a sunset-filled active slice.
   - **Expected:** Active text label uses dark ink `#1A0F05`, ensuring > 8:1 contrast ratio against bright orange/amber fills.
+
+---
+
+## 9. Phase R0: Reliability, Hostile Archive & First Release Manual Checks
+
+- [ ] **Concurrent Conversion Collision Check**:
+  - Convert the same file twice quickly via Finder Quick Action or drop two same-named files from different folders onto the wheel into the same target directory.
+  - **Expected:** Both conversions succeed with unique numbered suffixes (e.g. `photo.jpg` and `photo 1.jpg`), both output files are completely intact, and neither file overwrites or truncates the other.
+- [ ] **Hostile Archive Wheel & Finder Rejection**:
+  - Open a hostile fixture archive (e.g. `slip_rel.zip` or `symlink_outside.tar`) via Finder Quick Action or drop onto the radial wheel.
+  - **Expected:** The job fails with a clear, readable error ("Path traversal detected" or "elevated privilege binary"). The destination directory is left untouched, and no files escape outside the scratch extraction jail into `/tmp` or the user directory.
+- [ ] **Fresh Mac / Restricted PATH Doctor & Settings**:
+  - Launch `Pasta.app` directly from Finder (where `PATH` is restricted to `/usr/bin:/bin:/usr/sbin:/sbin`).
+  - Open **Pasta Settings**.
+  - **Expected:** Settings shows the full `pasta doctor` status, detecting engines in `/opt/homebrew/bin` and `/usr/local/bin`. If any tools are missing, the "Copy Install Command" button copies the exact `brew install ...` command to the clipboard. Pasting and executing it in Terminal installs the tools, and reopening Settings updates the status to Available.
+- [ ] **First Release Clean Account Verification**:
+  - Download `Pasta-macOS.zip` from the GitHub Release (or workflow artifact) on a clean macOS test user account.
+  - Unzip and launch `Pasta.app`.
+  - Perform the Gatekeeper "Open Anyway" flow (Right click -> Open).
+  - Grant Accessibility permissions when prompted.
+  - Perform the Shift-hold drag test and verify the wheel opens, latches, and executes conversions cleanly.
+  - Capture clean screenshots and a screen recording / GIF of the wheel in action for the README.

@@ -118,6 +118,18 @@
         "hub": 64.0,
         "glow": 18.0,
         "shadow": 10.0
+      },
+      "irisAnnularDial": {
+        "sectorCount": 8,
+        "sectorAngleDegrees": 45.0,
+        "hubDeadZoneRadius": 59.0,
+        "annulusOuterRadius": 180.0,
+        "sectorDividerAlpha": 0.08,
+        "activeWedgeAlpha": 0.18,
+        "specCardWidth": 420.0,
+        "specCardOuterRadius": 24.0,
+        "specCardInnerSwatchRadius": 6.0,
+        "typographyFloorPt": 11.5
       }
     },
     "springs": {

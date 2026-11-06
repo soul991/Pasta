@@ -21,13 +21,19 @@ public final class FormatRegistry {
     }
 
     public static func formatFfmpegTimestamp(_ seconds: Double) -> String {
-        let totalSecs = Int(seconds)
+        guard seconds > 0 else { return "00:00:00" }
+        var totalSecs = Int(seconds)
+        let frac = seconds - Double(totalSecs)
+        var ms = Int(round(frac * 1000))
+        if ms >= 1000 {
+            totalSecs += 1
+            ms = 0
+        }
         let hours = totalSecs / 3600
         let mins = (totalSecs % 3600) / 60
         let secs = totalSecs % 60
-        let frac = seconds - Double(totalSecs)
-        if frac > 0.0001 {
-            return String(format: "%02d:%02d:%02d.%03d", hours, mins, secs, Int(round(frac * 1000)))
+        if ms > 0 {
+            return String(format: "%02d:%02d:%02d.%03d", hours, mins, secs, ms)
         } else {
             return String(format: "%02d:%02d:%02d", hours, mins, secs)
         }
@@ -355,7 +361,7 @@ public final class FormatRegistry {
                 iconName: FormatRegistry.icon(forFormat: "jpeg")
             ) { input, output in
                 let currentExt = input.pathExtension.lowercased()
-                if currentExt == "svg" {
+                if currentExt == "svg" || currentExt == "webp" || currentExt == "avif" {
                     return [
                         Invocation(toolName: "magick", arguments: [input.path, output.path])
                     ]
@@ -380,6 +386,10 @@ public final class FormatRegistry {
                 if currentExt == "svg" {
                     return [
                         Invocation(toolName: "rsvg-convert", arguments: ["-o", output.path, input.path])
+                    ]
+                } else if currentExt == "webp" || currentExt == "avif" {
+                    return [
+                        Invocation(toolName: "magick", arguments: [input.path, output.path])
                     ]
                 } else {
                     return [
@@ -420,7 +430,12 @@ public final class FormatRegistry {
                 category: .image,
                 iconName: FormatRegistry.icon(forFormat: "heic")
             ) { input, output in
-                [Invocation(toolName: "sips", arguments: ["-s", "format", "heic", input.path, "--out", output.path])]
+                let currentExt = input.pathExtension.lowercased()
+                if currentExt == "webp" || currentExt == "avif" {
+                    return [Invocation(toolName: "magick", arguments: [input.path, output.path])]
+                } else {
+                    return [Invocation(toolName: "sips", arguments: ["-s", "format", "heic", input.path, "--out", output.path])]
+                }
             })
         }
 
@@ -433,7 +448,12 @@ public final class FormatRegistry {
                 category: .image,
                 iconName: FormatRegistry.icon(forFormat: "tiff")
             ) { input, output in
-                [Invocation(toolName: "sips", arguments: ["-s", "format", "tiff", input.path, "--out", output.path])]
+                let currentExt = input.pathExtension.lowercased()
+                if currentExt == "webp" || currentExt == "avif" {
+                    return [Invocation(toolName: "magick", arguments: [input.path, output.path])]
+                } else {
+                    return [Invocation(toolName: "sips", arguments: ["-s", "format", "tiff", input.path, "--out", output.path])]
+                }
             })
         }
 
@@ -498,7 +518,7 @@ public final class FormatRegistry {
             id: "image.compress",
             displayName: "Compress Image",
             outputExtension: inputExt == "svg" ? "png" : inputExt,
-            isAdvanced: true,
+            isAdvanced: false,
             category: .image,
             iconName: "arrow.down.circle",
             parameters: Self.compressionParameters,
@@ -549,13 +569,33 @@ public final class FormatRegistry {
             )
         ]
         let resizeBuilder: (URL, URL, ParameterValues) -> [Invocation] = { input, output, params in
-            if let pctVal = params["percent"], pctVal != .number(50.0) {
-                let pct = pctVal.asDouble ?? 50.0
+            let currentExt = input.pathExtension.lowercased()
+            let hasPercent = params["percent"] != nil
+            let hasMaxDim = params["maxDimension"] != nil
+            let isPercentMode: Bool
+            if hasPercent && !hasMaxDim {
+                isPercentMode = true
+            } else if hasMaxDim && !hasPercent {
+                isPercentMode = false
+            } else if let pct = params["percent"]?.asDouble, pct != 50.0 {
+                isPercentMode = true
+            } else if let dim = params["maxDimension"]?.asDouble, dim != 1200.0 {
+                isPercentMode = false
+            } else {
+                isPercentMode = false
+            }
+
+            if isPercentMode {
+                let pct = params["percent"]?.asDouble ?? 50.0
                 let pctStr = (pct.rounded() == pct) ? "\(Int(pct))%" : "\(pct)%"
                 return [Invocation(toolName: "magick", arguments: [input.path, "-resize", pctStr, output.path])]
             } else {
                 let maxDim = params["maxDimension"]?.asInt ?? 1200
-                return [Invocation(toolName: "sips", arguments: ["-Z", "\(maxDim)", input.path, "--out", output.path])]
+                if currentExt == "webp" || currentExt == "avif" || currentExt == "svg" {
+                    return [Invocation(toolName: "magick", arguments: [input.path, "-resize", "\(maxDim)x\(maxDim)>", output.path])]
+                } else {
+                    return [Invocation(toolName: "sips", arguments: ["-Z", "\(maxDim)", input.path, "--out", output.path])]
+                }
             }
         }
 
@@ -563,7 +603,7 @@ public final class FormatRegistry {
             id: "image.resize",
             displayName: "Resize Image",
             outputExtension: inputExt == "svg" ? "png" : inputExt,
-            isAdvanced: true,
+            isAdvanced: false,
             category: .image,
             iconName: "arrow.up.left.and.arrow.down.right",
             parameters: resizeParams,
@@ -859,10 +899,14 @@ public final class FormatRegistry {
         ]
         let trimBuilder: (URL, URL, ParameterValues) -> [Invocation] = { input, output, params in
             let start = params["start"]?.asDouble ?? 0.0
-            let end = params["end"]?.asDouble ?? 10.0
             let startStr = FormatRegistry.formatFfmpegTimestamp(start)
-            let endStr = FormatRegistry.formatFfmpegTimestamp(end)
-            return [Invocation(toolName: "ffmpeg", arguments: ["-nostdin", "-n", "-i", input.path, "-ss", startStr, "-to", endStr, "-c", "copy", output.path])]
+            var args = ["-nostdin", "-n", "-ss", startStr]
+            if let end = params["end"]?.asDouble, end > start {
+                let endStr = FormatRegistry.formatFfmpegTimestamp(end)
+                args.append(contentsOf: ["-to", endStr])
+            }
+            args.append(contentsOf: ["-i", input.path, "-c", "copy", "-avoid_negative_ts", "make_zero", output.path])
+            return [Invocation(toolName: "ffmpeg", arguments: args)]
         }
 
         list.append(ConversionAction(
@@ -918,14 +962,17 @@ public final class FormatRegistry {
             ],
             buildInvocations: { input, output, params in
                 let factor = params["factor"]?.asDouble ?? 2.0
-                let atempo = MediaTools.atempoFilter(factor: factor)
                 let pts = 1.0 / factor
-                return [Invocation(toolName: "ffmpeg", arguments: [
+                var args = [
                     "-nostdin", "-n", "-i", input.path,
-                    "-vf", "setpts=\(pts)*PTS",
-                    "-af", atempo,
-                    output.path
-                ])]
+                    "-vf", "setpts=\(pts)*PTS"
+                ]
+                if MediaTools.shared.hasAudioStream(url: input) {
+                    let atempo = MediaTools.atempoFilter(factor: factor)
+                    args.append(contentsOf: ["-af", atempo])
+                }
+                args.append(output.path)
+                return [Invocation(toolName: "ffmpeg", arguments: args)]
             }
         ))
 
@@ -1152,10 +1199,21 @@ public final class FormatRegistry {
                 outputExtension: "ogg",
                 isAdvanced: false,
                 category: .audio,
-                iconName: FormatRegistry.icon(forFormat: "ogg")
-            ) { input, output in
-                [Invocation(toolName: "ffmpeg", arguments: ["-nostdin", "-n", "-i", input.path, "-vn", "-c:a", "vorbis", "-strict", "-2", "-ac", "2", "-b:a", "128k", output.path])]
-            })
+                iconName: FormatRegistry.icon(forFormat: "ogg"),
+                buildInvocations: { input, output, _ in
+                    [Invocation(toolName: "ffmpeg", arguments: ["-nostdin", "-n", "-i", input.path, "-vn", "-c:a", "libvorbis", "-ac", "2", "-b:a", "128k", output.path])]
+                },
+                customRunner: { input, output, params, runner, jobId in
+                    let libvorbisInv = Invocation(toolName: "ffmpeg", arguments: ["-nostdin", "-y", "-i", input.path, "-vn", "-c:a", "libvorbis", "-ac", "2", "-b:a", "128k", output.path])
+                    do {
+                        try runner.execute(invocation: libvorbisInv, jobId: jobId)
+                    } catch {
+                        if case PastaError.cancelled = error { throw error }
+                        let nativeInv = Invocation(toolName: "ffmpeg", arguments: ["-nostdin", "-y", "-i", input.path, "-vn", "-c:a", "vorbis", "-strict", "-2", "-ac", "2", "-b:a", "128k", output.path])
+                        try runner.execute(invocation: nativeInv, jobId: jobId)
+                    }
+                }
+            ))
         }
 
         if inputExt != "aiff" && inputExt != "aif" {
@@ -1275,11 +1333,21 @@ public final class FormatRegistry {
             buildInvocations: { input, output, params in
                 let raw = params["ranges"]?.asString ?? "0.5-1.0"
                 let rangeParts = raw.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+                func parseEndpoint(_ str: String) -> Double? {
+                    let trimmed = str.trimmingCharacters(in: .whitespaces)
+                    if let d = Double(trimmed) { return d }
+                    let parts = trimmed.split(separator: ":").map(String.init)
+                    if parts.count == 2, let m = Double(parts[0]), let s = Double(parts[1]) {
+                        return m * 60.0 + s
+                    } else if parts.count == 3, let h = Double(parts[0]), let m = Double(parts[1]), let s = Double(parts[2]) {
+                        return h * 3600.0 + m * 60.0 + s
+                    }
+                    return nil
+                }
                 var conds: [String] = []
                 for rp in rangeParts {
-                    let sep: Character = rp.contains(":") ? ":" : "-"
-                    let sub = rp.split(separator: sep).map(String.init)
-                    if sub.count == 2, let s = Double(sub[0]), let e = Double(sub[1]) {
+                    let sub = rp.split(separator: "-").map(String.init)
+                    if sub.count == 2, let s = parseEndpoint(sub[0]), let e = parseEndpoint(sub[1]) {
                         conds.append("between(t,\(s),\(e))")
                     }
                 }
@@ -1321,16 +1389,14 @@ public final class FormatRegistry {
             parameters: audioTrimParams,
             buildInvocations: { input, output, params in
                 let start = params["start"]?.asDouble ?? 0.0
-                let end = params["end"]?.asDouble ?? 10.0
                 let startStr = FormatRegistry.formatFfmpegTimestamp(start)
-                let endStr = FormatRegistry.formatFfmpegTimestamp(end)
-                return [Invocation(toolName: "ffmpeg", arguments: [
-                    "-nostdin", "-n", "-i", input.path,
-                    "-ss", startStr,
-                    "-to", endStr,
-                    "-c", "copy",
-                    output.path
-                ])]
+                var args = ["-nostdin", "-n", "-ss", startStr]
+                if let end = params["end"]?.asDouble, end > start {
+                    let endStr = FormatRegistry.formatFfmpegTimestamp(end)
+                    args.append(contentsOf: ["-to", endStr])
+                }
+                args.append(contentsOf: ["-i", input.path, "-c", "copy", "-avoid_negative_ts", "make_zero", output.path])
+                return [Invocation(toolName: "ffmpeg", arguments: args)]
             }
         ))
 
@@ -1992,20 +2058,52 @@ public final class FormatRegistry {
                 isAdvanced: false,
                 category: .archive,
                 iconName: "archivebox",
-                outputKind: .folder(suffix: "extracted")
-            ) { input, output in
-                if inputExt == "zip" {
-                    return [Invocation(toolName: "ditto", arguments: ["-x", "-k", input.path, output.path])]
-                } else if inputExt == "gz" {
-                    return [Invocation(toolName: "7zz", arguments: ["x", "-y", input.path, "-o\(output.path)"])]
-                } else if ["tar", "tgz"].contains(inputExt) {
-                    return [Invocation(toolName: "tar", arguments: ["-xf", input.path, "-C", output.path])]
-                } else if inputExt == "rar" {
-                    return [Invocation(toolName: "unar", arguments: ["-o", output.path, input.path])]
-                } else {
-                    return [Invocation(toolName: "7zz", arguments: ["x", "-y", input.path, "-o\(output.path)"])]
+                outputKind: .folder(suffix: "extracted"),
+                customRunner: { input, output, params, runner, jobId in
+                    let toolName: String
+                    if inputExt == "zip" {
+                        toolName = "ditto"
+                    } else if inputExt == "gz" {
+                        toolName = "7zz"
+                    } else if ["tar", "tgz"].contains(inputExt) {
+                        toolName = "tar"
+                    } else if inputExt == "rar" {
+                        toolName = "unar"
+                    } else {
+                        toolName = "7zz"
+                    }
+
+                    // 1. Preflight inspection where tool supports safe catalog listing
+                    try ArchiveGuard.preflightInspect(archiveURL: input, toolName: toolName, limits: .standard)
+
+                    // 2. Extract into scratch output directory with running cap
+                    let invocations: [Invocation]
+                    if inputExt == "zip" {
+                        invocations = [Invocation(toolName: "ditto", arguments: ["-x", "-k", input.path, output.path])]
+                    } else if inputExt == "gz" {
+                        invocations = [Invocation(toolName: "7zz", arguments: ["x", "-y", input.path, "-o\(output.path)"])]
+                    } else if ["tar", "tgz"].contains(inputExt) {
+                        invocations = [Invocation(toolName: "tar", arguments: ["-xf", input.path, "-C", output.path])]
+                    } else if inputExt == "rar" {
+                        invocations = [Invocation(toolName: "unar", arguments: ["-o", output.path, input.path])]
+                    } else {
+                        invocations = [Invocation(toolName: "7zz", arguments: ["x", "-y", input.path, "-o\(output.path)"])]
+                    }
+
+                    for inv in invocations {
+                        try ArchiveGuard.executeWithRunningCap(
+                            runner: runner,
+                            invocation: inv,
+                            scratchURL: output,
+                            jobId: jobId,
+                            limits: .standard
+                        )
+                    }
+
+                    // 3. Post-extraction validation
+                    try ArchiveGuard.validate(root: output, limits: .standard)
                 }
-            }
+            )
         ]
     }
 
@@ -2104,10 +2202,21 @@ public final class FormatRegistry {
                 outputExtension: "txt",
                 isAdvanced: false,
                 category: .document,
-                iconName: "doc.text"
-            ) { input, output in
-                [Invocation(toolName: "ditto", arguments: [input.path, output.path])]
-            },
+                iconName: "doc.text",
+                buildInvocations: { input, output, _ in
+                    [Invocation(toolName: "ditto", arguments: [input.path, output.path])]
+                },
+                customRunner: { input, output, params, runner, jobId in
+                    let handle = try? FileHandle(forReadingFrom: input)
+                    let headerData = handle?.readData(ofLength: 8192) ?? Data()
+                    try? handle?.close()
+                    if headerData.contains(0) {
+                        throw PastaError.invalidInput("Cannot convert binary file to plain text")
+                    }
+                    let inv = Invocation(toolName: "ditto", arguments: [input.path, output.path])
+                    try runner.execute(invocation: inv, jobId: jobId)
+                }
+            ),
             ConversionAction(
                 id: "generic.to.pdf",
                 displayName: "Convert to PDF",

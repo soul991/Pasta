@@ -2,39 +2,74 @@ name: macOS CI
 
 on:
   push:
-    branches: [ "**" ]
+    branches: [ main, codex/r0 ]
   pull_request:
-    branches: [ "**" ]
+    branches: [ main, codex/r0 ]
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  macos-build-and-test:
-    name: Build & Verify on macOS
-    runs-on: macos-latest
+  xcode-27:
+    name: Build & Verify (Xcode 27 arm64)
+    runs-on: xcode-27
+    timeout-minutes: 30
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Install dependencies via Homebrew
-        run: |
-          brew update --quiet
-          brew install ffmpeg imagemagick qpdf ghostscript poppler pandoc exiftool webp unar sevenzip librsvg
-          brew install --cask libreoffice
+        uses: actions/checkout@v6
 
       - name: Environment Diagnostics
         run: |
-          swift --version
           sw_vers
+          xcodebuild -version
+          swift --version
+
+      - name: Install dependencies via Homebrew
+        uses: ./.github/actions/install-dependencies
 
       - name: Swift Build
-        run: swift build
+        run: |
+          swift build
+          swift build -c release
 
       - name: Run PastaTests
-        run: swift run PastaTests
+        run: |
+          swift run PastaTests
+          swift run -c release PastaTests
 
       - name: Run Section 8 Hardening Tests
-        run: ./scripts/run_section8_tests.sh
+        run: PASTA_BIN=.build/debug/Pasta ./scripts/run_section8_tests.sh
+
+      - name: Verify Archive Fixture Coverage
+        run: ./scripts/check_archive_fixture_coverage.sh
+
+      - name: Run Section 33.7 Real-Timer Smoke Test (50x Loop)
+        run: ./scripts/run_real_timer_smoke_test.sh
+
+      - name: Verify App Icon & Corners (RED and GREEN proof)
+        run: |
+          python3 -c "
+          import struct, zlib, subprocess
+          w, h = 1024, 1024
+          raw = bytearray()
+          for y in range(h):
+              raw.append(0)
+              for x in range(w):
+                  raw.extend([255, 0, 0, 255] if (x, y) == (0, 0) else [0, 0, 0, 0])
+          def chunk(tag, data):
+              crc = zlib.crc32(tag + data) & 0xffffffff
+              return struct.pack('>I', len(data)) + tag + data + struct.pack('>I', crc)
+          png = b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 6, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(bytes(raw))) + chunk(b'IEND', b'')
+          with open('/tmp/opaque_test.png', 'wb') as f: f.write(png)
+          res = subprocess.run(['python3', 'scripts/verify_app_icon.py', '/tmp/opaque_test.png'], capture_output=True)
+          assert res.returncode != 0, 'RED test failed: verify_app_icon.py did not reject opaque corner'
+          print('✓ RED Gate Verified: Opaque corners rejected')
+          "
+          python3 scripts/verify_app_icon.py assets/AppIcon-1024.png
+          python3 scripts/generate_app_icon.py
 
       - name: Build and Sign Pasta.app
         run: |
@@ -42,7 +77,7 @@ jobs:
           codesign --verify --deep --strict Pasta.app
 
       - name: Run Section 8 Hardening Tests against Pasta.app
-        run: ./scripts/run_section8_tests.sh
+        run: PASTA_BIN=./Pasta.app/Contents/MacOS/Pasta ./scripts/run_section8_tests.sh
 
       - name: Verify Bundle Contents
         run: |
@@ -51,5 +86,72 @@ jobs:
           echo "=== Pasta.app Resources ==="
           ls -la Pasta.app/Contents/Resources
           test -f Pasta.app/Contents/Resources/AppIcon.icns && echo "✓ Found AppIcon.icns in bundle"
+          grep -q "<string>AppIcon</string>" Pasta.app/Contents/Info.plist && echo "✓ Found AppIcon declared in Info.plist"
           test -f Pasta.app/Contents/Resources/MenuBarIcon.pdf && echo "✓ Found MenuBarIcon.pdf in bundle"
           test -f Pasta.app/Contents/Resources/theme_tokens.json && echo "✓ Found theme_tokens.json in bundle"
+
+      - name: Package Release Archive & Checksum (Dry Run)
+        run: |
+          ditto -c -k --keepParent Pasta.app Pasta-macOS.zip
+          shasum -a 256 Pasta-macOS.zip > Pasta-macOS.zip.sha256
+          echo "SHA-256 Checksum:"
+          cat Pasta-macOS.zip.sha256
+
+      - name: Upload Release Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Pasta-macOS-Release
+          path: |
+            Pasta-macOS.zip
+            Pasta-macOS.zip.sha256
+
+  fallback:
+    name: Compatibility fallback (macos-latest)
+    needs: xcode-27
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Environment Diagnostics
+        run: |
+          sw_vers
+          xcodebuild -version
+          swift --version
+
+      - name: Install dependencies via Homebrew
+        uses: ./.github/actions/install-dependencies
+
+      - name: Verify App Icon & Corners (RED and GREEN proof)
+        run: |
+          python3 -c "
+          import struct, zlib, subprocess
+          w, h = 1024, 1024
+          raw = bytearray()
+          for y in range(h):
+              raw.append(0)
+              for x in range(w):
+                  raw.extend([255, 0, 0, 255] if (x, y) == (0, 0) else [0, 0, 0, 0])
+          def chunk(tag, data):
+              crc = zlib.crc32(tag + data) & 0xffffffff
+              return struct.pack('>I', len(data)) + tag + data + struct.pack('>I', crc)
+          png = b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 6, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(bytes(raw))) + chunk(b'IEND', b'')
+          with open('/tmp/opaque_test.png', 'wb') as f: f.write(png)
+          res = subprocess.run(['python3', 'scripts/verify_app_icon.py', '/tmp/opaque_test.png'], capture_output=True)
+          assert res.returncode != 0, 'RED test failed: verify_app_icon.py did not reject opaque corner'
+          print('✓ RED Gate Verified: Opaque corners rejected')
+          "
+          python3 scripts/verify_app_icon.py assets/AppIcon-1024.png
+
+      - name: Build and test pre-27 path
+        run: |
+          swift build
+          swift run PastaTests
+
+      - name: Verify Archive Fixture Coverage
+        run: ./scripts/check_archive_fixture_coverage.sh
+
+      - name: Run Section 33.7 Real-Timer Smoke Test (50x Loop)
+        run: ./scripts/run_real_timer_smoke_test.sh

@@ -12,7 +12,12 @@ Master icon is provided externally (e.g. Figma export).
 import os
 import struct
 import subprocess
-from PIL import Image
+
+try:
+    from PIL import Image
+    HAVE_PIL = True
+except ImportError:
+    HAVE_PIL = False
 
 def build_icns_file(iconset_png_map, output_icns_path):
     """
@@ -136,26 +141,32 @@ def main():
         return
         
     print(f"Loading master icon from {master_path}...")
-    master = Image.open(master_path).convert('RGBA')
+    master = Image.open(master_path).convert('RGBA') if HAVE_PIL else None
     
-    # Generate all standard macOS sizes from master PNG with high-quality LANCZOS downscaling
+    # Generate all standard macOS sizes from master PNG
     sizes = [16, 32, 64, 128, 256, 512, 1024]
     iconset_map = {}
     
     for s in sizes:
         # 1x
-        resized = master.resize((s, s), Image.Resampling.LANCZOS)
         out_name = f'assets/AppIcon.iconset/icon_{s}x{s}.png'
-        resized.save(out_name, 'PNG', optimize=True)
+        if HAVE_PIL:
+            resized = master.resize((s, s), Image.Resampling.LANCZOS)
+            resized.save(out_name, 'PNG', optimize=True)
+        else:
+            subprocess.run(['sips', '-z', str(s), str(s), master_path, '--out', out_name], check=True, stdout=subprocess.DEVNULL)
         with open(out_name, 'rb') as f:
             iconset_map[s] = f.read()
             
         # 2x (@2x)
         if s <= 512:
             s2 = s * 2
-            resized2 = master.resize((s2, s2), Image.Resampling.LANCZOS)
             out_name2 = f'assets/AppIcon.iconset/icon_{s}x{s}@2x.png'
-            resized2.save(out_name2, 'PNG', optimize=True)
+            if HAVE_PIL:
+                resized2 = master.resize((s2, s2), Image.Resampling.LANCZOS)
+                resized2.save(out_name2, 'PNG', optimize=True)
+            else:
+                subprocess.run(['sips', '-z', str(s2), str(s2), master_path, '--out', out_name2], check=True, stdout=subprocess.DEVNULL)
             
     print("Building standard macOS AppIcon.icns...")
     build_icns_file(iconset_map, 'assets/AppIcon.icns')
