@@ -250,7 +250,11 @@
 | Per-engine concurrency limit table (`BatchJobQueue.perEngineLimits`) with default caps (gs/ghostscript: 1, ffmpeg: 2, others unconstrained) | Step C1 | Concurrency | **DONE** | `42.1 Default per-engine limits table specifies cap 2 for ffmpeg and 1 for ghostscript` |
 | Queue-level and global slot acquisition limiting concurrent ffmpeg jobs to at most 2 | Step C1 | Concurrency | **DONE** | `42.2 All 6 queued ffmpeg jobs complete successfully` & `42.3 Peak concurrency for 6 queued ffmpeg jobs never exceeds cap 2` |
 | Queue-level and global slot acquisition limiting concurrent ghostscript jobs to at most 1 | Step C1 | Concurrency | **DONE** | `42.4 All 4 queued ghostscript jobs complete successfully` & `42.5 Peak concurrency for 4 queued ghostscript jobs never exceeds cap 1` |
-| Recent conversions list (App Support store, privacy toggle, Reveal in Finder) | Step C2 | Features | Pending | Scheduled for Step C2 |
+| Recent conversions local persistent store in Application Support (`recent_conversions.json`) | Step C2 | Storage | **DONE** | `43.2 Initial fresh store has empty items list`, `43.3 RecentConversionsStore records conversion item`, `43.4 Recorded item contains actionId, fileName, and fullPath`, `43.5 Recent conversions persist across store instances reading from disk` |
+| History privacy controls: master toggle and path suppression | Step C2 | Privacy | **DONE** | `43.1 Default preferences for recent conversions (enabled == true, storeFullPath == true)`, `43.6 Privacy off switch prevents recording new conversion items`, `43.7 Disabling storeFullPath records fileName but omits fullPath` |
+| History clearing (in-memory wipe & disk removal) | Step C2 | Storage | **DONE** | `43.8 Clear wipes in-memory items and removes or empties disk file` |
+| Malformed / corrupt store JSON resilience | Step C2 | Resilience | **DONE** | `43.9 Corrupt JSON store file recovers gracefully without crashing` |
+| Reveal in Finder integration with missing file handling | Step C2 | Finder | **DONE** | `43.10 Reveal in Finder on nonexistent file safely returns false without crashing`, `43.11 Reveal in Finder on item without fullPath safely returns false`, `43.12 Reveal in Finder on existing file returns true` |
 | Per-file-type wheel profiles & Tab flip side | Step C3 | UI / Wheel | Pending | Scheduled for Step C3 |
 
 

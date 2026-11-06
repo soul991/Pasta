@@ -239,6 +239,7 @@ public final class JobRunner {
 
         // Safe atomic publish over reserved placeholder
         try reservation.publish(from: tempWorkingOutputURL)
+        RecentConversionsStore.shared.record(actionId: action.id, outputURL: finalDestinationURL)
 
         PastaLogger.shared.info("Successfully completed \(action.id) -> '\(finalDestinationURL.path)'")
         return finalDestinationURL
@@ -364,6 +365,7 @@ public final class JobRunner {
 
         if isCompressBatch {
             try reservation.publish(from: tempWorkingOutputURL)
+            RecentConversionsStore.shared.record(actionId: action.id, outputURL: finalDestinationURL)
             PastaLogger.shared.info("Successfully completed batch \(action.id) -> '\(finalDestinationURL.path)'")
             return finalDestinationURL
         }
@@ -394,6 +396,7 @@ public final class JobRunner {
             }
             try Self.validateFolderJail(at: tempWorkingOutputURL)
             try reservation.publish(from: tempWorkingOutputURL)
+            RecentConversionsStore.shared.record(actionId: action.id, outputURL: finalDestinationURL)
             return finalDestinationURL
         case .file:
             if !fm.fileExists(atPath: tempWorkingOutputURL.path) {
@@ -408,6 +411,7 @@ public final class JobRunner {
                 throw PastaError.outputNotFound(finalDestinationURL.path)
             }
             try reservation.publish(from: tempWorkingOutputURL)
+            RecentConversionsStore.shared.record(actionId: action.id, outputURL: finalDestinationURL)
             PastaLogger.shared.info("Successfully completed batch \(action.id) -> '\(finalDestinationURL.path)'")
             return finalDestinationURL
         }

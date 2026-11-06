@@ -183,14 +183,28 @@ public final class PreferencesManager {
 
     /// Whether recent conversions are tracked in local history (default: true)
     public var recentConversionsEnabled: Bool {
-        get { return false } // Stub for RED baseline
-        set {}
+        get {
+            if UserDefaults.standard.object(forKey: recentConversionsEnabledKey) == nil {
+                return true
+            }
+            return UserDefaults.standard.bool(forKey: recentConversionsEnabledKey)
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: recentConversionsEnabledKey)
+        }
     }
 
     /// Whether recent conversions store full file paths or only filenames for privacy (default: true)
     public var recentConversionsStoreFullPath: Bool {
-        get { return false } // Stub for RED baseline
-        set {}
+        get {
+            if UserDefaults.standard.object(forKey: recentConversionsStoreFullPathKey) == nil {
+                return true
+            }
+            return UserDefaults.standard.bool(forKey: recentConversionsStoreFullPathKey)
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: recentConversionsStoreFullPathKey)
+        }
     }
 
     // MARK: - Last-Used Parameters Per Action
