@@ -25,6 +25,9 @@ public final class PreferencesManager {
     private let recentConversionsStoreFullPathKey = "pasta_recent_conversions_store_full_path"
     private let deleteOriginalKey = "pasta_delete_original_enabled"
     private let deleteOriginalConfirmationKey = "pasta_delete_original_confirmation_record"
+    private let wheelEnabledKey = "pasta_wheel_enabled"
+    private let launchAtLoginKey = "pasta_launch_at_login"
+    private let hasEverGrantedAccessibilityKey = "pasta_has_ever_granted_accessibility"
 
     public init() {}
 
@@ -259,6 +262,41 @@ public final class PreferencesManager {
     public func disableDeleteOriginal() {
         UserDefaults.standard.set(false, forKey: deleteOriginalKey)
         UserDefaults.standard.removeObject(forKey: deleteOriginalConfirmationKey)
+    }
+
+    // MARK: - Wheel Trigger & Permission State Preferences
+
+    /// Whether the Shift-drag wheel trigger is enabled or paused by the user (default: true)
+    public var wheelEnabled: Bool {
+        get {
+            if UserDefaults.standard.object(forKey: wheelEnabledKey) == nil {
+                return true
+            }
+            return UserDefaults.standard.bool(forKey: wheelEnabledKey)
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: wheelEnabledKey)
+        }
+    }
+
+    /// Whether launch-at-login preference is toggled on (default: false)
+    public var launchAtLoginEnabled: Bool {
+        get {
+            return UserDefaults.standard.bool(forKey: launchAtLoginKey)
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: launchAtLoginKey)
+        }
+    }
+
+    /// Tracks whether Accessibility permission was ever granted previously (to distinguish missing vs revoked)
+    public var hasEverGrantedAccessibility: Bool {
+        get {
+            return UserDefaults.standard.bool(forKey: hasEverGrantedAccessibilityKey)
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: hasEverGrantedAccessibilityKey)
+        }
     }
 
     // MARK: - Last-Used Parameters Per Action

@@ -1043,3 +1043,10 @@ public final class DragMonitor {
         if let lkd = localKeyDownMonitor { NSEvent.removeMonitor(lkd); localKeyDownMonitor = nil }
     }
 }
+
+extension DragMonitor: DragMonitorLifecycleController {
+    public var isMonitoring: Bool {
+        return globalDragMonitor != nil || localDragMonitor != nil
+    }
+}
+

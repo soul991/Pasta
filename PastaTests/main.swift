@@ -7609,6 +7609,227 @@ do {
     DeleteOriginalGuard.sharedTrashProvider = SystemTrashProvider.shared
 }
 
+// --- 51. Trigger & Permission State Machine Verification Gate (Step E7) ---
+do {
+    print("\n--- 51. Trigger & Permission State Machine Verification Gate (Step E7) ---")
+
+    let prefs = PreferencesManager.shared
+    let savedWheel = prefs.wheelEnabled
+    let savedLaunch = prefs.launchAtLoginEnabled
+    let savedEverGranted = prefs.hasEverGrantedAccessibility
+
+    defer {
+        prefs.wheelEnabled = savedWheel
+        prefs.launchAtLoginEnabled = savedLaunch
+        prefs.hasEverGrantedAccessibility = savedEverGranted
+    }
+
+    // 51.1 Cold launch: never granted before, permission missing
+    prefs.wheelEnabled = true
+    prefs.hasEverGrantedAccessibility = false
+    let mockPerm1 = MockAccessibilityPermissionProvider(trusted: false)
+    let mockLogin1 = MockLaunchAtLoginProvider(enabled: false)
+    let mockMonitor1 = MockDragMonitorLifecycleController(isMonitoring: false)
+
+    let sm1 = TriggerPermissionStateMachine(
+        permissionProvider: mockPerm1,
+        launchAtLoginProvider: mockLogin1,
+        monitorController: mockMonitor1,
+        preferences: prefs
+    )
+    assertTest(sm1.accessibilityState == .missing, "51.1 Cold launch without prior grant sets accessibilityState to .missing")
+    assertTest(sm1.wheelState == .enabled, "51.1 Cold launch reads wheelEnabled preference as .enabled")
+    assertTest(sm1.effectiveStatus == .waitingForAccessibility, "51.1 Effective status is .waitingForAccessibility when permission is missing")
+    assertTest(mockMonitor1.isMonitoring == false, "51.1 Monitoring remains stopped when permission missing")
+    assertTest(mockMonitor1.startMonitoringCallCount == 0, "51.1 startMonitoring was never called")
+
+    // 51.2 Cold launch: previously granted, but now untrusted -> .revoked
+    prefs.wheelEnabled = true
+    prefs.hasEverGrantedAccessibility = true
+    let mockPerm2 = MockAccessibilityPermissionProvider(trusted: false)
+    let mockLogin2 = MockLaunchAtLoginProvider(enabled: false)
+    let mockMonitor2 = MockDragMonitorLifecycleController(isMonitoring: false)
+
+    let sm2 = TriggerPermissionStateMachine(
+        permissionProvider: mockPerm2,
+        launchAtLoginProvider: mockLogin2,
+        monitorController: mockMonitor2,
+        preferences: prefs
+    )
+    assertTest(sm2.accessibilityState == .revoked, "51.2 Cold launch with prior grant sets accessibilityState to .revoked when untrusted")
+    assertTest(sm2.effectiveStatus == .accessibilityRevoked, "51.2 Effective status is .accessibilityRevoked when previously granted but revoked")
+    assertTest(mockMonitor2.isMonitoring == false, "51.2 Monitoring remains stopped when revoked")
+
+    // 51.3 Cold launch: trusted -> .granted, auto-starts monitor
+    prefs.wheelEnabled = true
+    prefs.hasEverGrantedAccessibility = false
+    let mockPerm3 = MockAccessibilityPermissionProvider(trusted: true)
+    let mockLogin3 = MockLaunchAtLoginProvider(enabled: false)
+    let mockMonitor3 = MockDragMonitorLifecycleController(isMonitoring: false)
+
+    let sm3 = TriggerPermissionStateMachine(
+        permissionProvider: mockPerm3,
+        launchAtLoginProvider: mockLogin3,
+        monitorController: mockMonitor3,
+        preferences: prefs
+    )
+    assertTest(sm3.accessibilityState == .granted, "51.3 Cold launch with trusted permission sets accessibilityState to .granted")
+    assertTest(prefs.hasEverGrantedAccessibility == true, "51.3 hasEverGrantedAccessibility preference recorded as true")
+    assertTest(sm3.effectiveStatus == .active, "51.3 Effective status is .active when trusted and wheel enabled")
+    assertTest(mockMonitor3.isMonitoring == true, "51.3 Monitor is automatically started on launch when trusted and enabled")
+    assertTest(mockMonitor3.startMonitoringCallCount == 1, "51.3 startMonitoring called once on launch")
+
+    // 51.4 Auto-start on permission appearance without restart (poll/check)
+    prefs.wheelEnabled = true
+    prefs.hasEverGrantedAccessibility = false
+    let mockPerm4 = MockAccessibilityPermissionProvider(trusted: false)
+    let mockLogin4 = MockLaunchAtLoginProvider(enabled: false)
+    let mockMonitor4 = MockDragMonitorLifecycleController(isMonitoring: false)
+
+    let sm4 = TriggerPermissionStateMachine(
+        permissionProvider: mockPerm4,
+        launchAtLoginProvider: mockLogin4,
+        monitorController: mockMonitor4,
+        preferences: prefs
+    )
+    assertTest(sm4.accessibilityState == .missing, "51.4 Initial state is .missing")
+    assertTest(mockMonitor4.isMonitoring == false, "51.4 Initial monitoring is false")
+
+    var statusUpdates4: [EffectiveTriggerStatus] = []
+    sm4.onStateChange = { statusUpdates4.append($0) }
+
+    // User grants permission in System Settings -> pollTick() runs
+    mockPerm4.trusted = true
+    sm4.pollTick()
+
+    assertTest(sm4.accessibilityState == .granted, "51.4 accessibilityState transitions to .granted upon pollTick")
+    assertTest(sm4.effectiveStatus == .active, "51.4 Effective status transitions to .active")
+    assertTest(mockMonitor4.isMonitoring == true, "51.4 Monitor automatically started without app restart")
+    assertTest(mockMonitor4.startMonitoringCallCount == 1, "51.4 startMonitoring invoked on grant transition")
+    assertTest(statusUpdates4 == [.active], "51.4 onStateChange notified with .active")
+    assertTest(prefs.hasEverGrantedAccessibility == true, "51.4 hasEverGrantedAccessibility persisted")
+
+    // 51.5 Immediate stop on permission revocation
+    mockPerm4.trusted = false
+    sm4.pollTick()
+
+    assertTest(sm4.accessibilityState == .revoked, "51.5 accessibilityState transitions to .revoked when permission lost")
+    assertTest(sm4.effectiveStatus == .accessibilityRevoked, "51.5 Effective status transitions to .accessibilityRevoked")
+    assertTest(mockMonitor4.isMonitoring == false, "51.5 Monitor stopped immediately upon revocation")
+    assertTest(mockMonitor4.stopMonitoringCallCount == 1, "51.5 stopMonitoring invoked on revoke")
+    assertTest(statusUpdates4.last == .accessibilityRevoked, "51.5 onStateChange notified with .accessibilityRevoked")
+
+    // 51.6 Re-grant after revocation
+    mockPerm4.trusted = true
+    sm4.pollTick()
+
+    assertTest(sm4.accessibilityState == .granted, "51.6 accessibilityState re-transitions to .granted")
+    assertTest(sm4.effectiveStatus == .active, "51.6 Effective status returns to .active")
+    assertTest(mockMonitor4.isMonitoring == true, "51.6 Monitor resumed automatically upon re-grant")
+    assertTest(mockMonitor4.startMonitoringCallCount == 2, "51.6 startMonitoring invoked second time")
+    assertTest(statusUpdates4.last == .active, "51.6 onStateChange notified with .active")
+
+    // 51.7 User pauses wheel
+    sm4.setWheelState(.paused)
+    assertTest(sm4.wheelState == .paused, "51.7 Wheel state set to .paused")
+    assertTest(prefs.wheelEnabled == false, "51.7 Preference wheelEnabled updated to false")
+    assertTest(sm4.effectiveStatus == .pausedByUser, "51.7 Effective status is .pausedByUser")
+    assertTest(mockMonitor4.isMonitoring == false, "51.7 Monitor stopped immediately when paused by user")
+    assertTest(mockMonitor4.stopMonitoringCallCount == 2, "51.7 stopMonitoring called on user pause")
+    assertTest(statusUpdates4.last == .pausedByUser, "51.7 onStateChange notified with .pausedByUser")
+
+    // 51.8 User unpauses wheel
+    // Case A: Permission is granted -> becomes .active & starts monitor
+    sm4.setWheelState(.enabled)
+    assertTest(sm4.wheelState == .enabled, "51.8a Wheel state set to .enabled")
+    assertTest(prefs.wheelEnabled == true, "51.8a Preference wheelEnabled updated to true")
+    assertTest(sm4.effectiveStatus == .active, "51.8a Effective status is .active")
+    assertTest(mockMonitor4.isMonitoring == true, "51.8a Monitor started when unpaused with granted permission")
+    assertTest(statusUpdates4.last == .active, "51.8a onStateChange notified with .active")
+
+    // Case B: Permission is revoked -> setting wheel enabled gives .accessibilityRevoked, monitor stays stopped
+    mockPerm4.trusted = false
+    sm4.pollTick()
+    sm4.setWheelState(.paused)
+    assertTest(sm4.effectiveStatus == .pausedByUser, "51.8b Paused by user")
+    sm4.setWheelState(.enabled)
+    assertTest(sm4.effectiveStatus == .accessibilityRevoked, "51.8b Effective status is .accessibilityRevoked when unpaused without permission")
+    assertTest(mockMonitor4.isMonitoring == false, "51.8b Monitor not started when unpaused with revoked permission")
+
+    // Case C: Permission is missing -> setting wheel enabled gives .waitingForAccessibility
+    prefs.hasEverGrantedAccessibility = false
+    let mockPerm5 = MockAccessibilityPermissionProvider(trusted: false)
+    let mockLogin5 = MockLaunchAtLoginProvider(enabled: false)
+    let mockMonitor5 = MockDragMonitorLifecycleController(isMonitoring: false)
+    let sm5 = TriggerPermissionStateMachine(
+        permissionProvider: mockPerm5,
+        launchAtLoginProvider: mockLogin5,
+        monitorController: mockMonitor5,
+        preferences: prefs
+    )
+    sm5.setWheelState(.paused)
+    sm5.setWheelState(.enabled)
+    assertTest(sm5.effectiveStatus == .waitingForAccessibility, "51.8c Effective status is .waitingForAccessibility when unpaused with missing permission")
+    assertTest(mockMonitor5.isMonitoring == false, "51.8c Monitor not started when permission missing")
+
+    // 51.9 Launch-at-login state transitions
+    let mockLogin6 = MockLaunchAtLoginProvider(enabled: false)
+    let sm6 = TriggerPermissionStateMachine(
+        permissionProvider: MockAccessibilityPermissionProvider(trusted: true),
+        launchAtLoginProvider: mockLogin6,
+        monitorController: MockDragMonitorLifecycleController(),
+        preferences: prefs
+    )
+    assertTest(sm6.launchAtLoginState == .disabled, "51.9 Initial launch-at-login state is .disabled")
+
+    try sm6.setLaunchAtLogin(enabled: true)
+    assertTest(sm6.launchAtLoginState == .enabled, "51.9 launchAtLoginState updated to .enabled")
+    assertTest(mockLogin6.isEnabled == true, "51.9 Mock provider isEnabled updated to true")
+    assertTest(prefs.launchAtLoginEnabled == true, "51.9 Preference launchAtLoginEnabled set to true")
+
+    try sm6.setLaunchAtLogin(enabled: false)
+    assertTest(sm6.launchAtLoginState == .disabled, "51.9 launchAtLoginState updated to .disabled")
+    assertTest(mockLogin6.isEnabled == false, "51.9 Mock provider isEnabled updated to false")
+    assertTest(prefs.launchAtLoginEnabled == false, "51.9 Preference launchAtLoginEnabled set to false")
+
+    struct SimulatedLoginError: Error {}
+    mockLogin6.simulateError = SimulatedLoginError()
+    var caughtLoginError = false
+    do {
+        try sm6.setLaunchAtLogin(enabled: true)
+    } catch {
+        caughtLoginError = true
+    }
+    assertTest(caughtLoginError, "51.9 setLaunchAtLogin propagates provider errors")
+    assertTest(sm6.launchAtLoginState == .disabled, "51.9 launchAtLoginState remains .disabled after provider failure")
+    assertTest(prefs.launchAtLoginEnabled == false, "51.9 Preference launchAtLoginEnabled remains false after failure")
+
+    // 51.10 Auto-polling timer operation
+    let mockPerm7 = MockAccessibilityPermissionProvider(trusted: false)
+    let mockMonitor7 = MockDragMonitorLifecycleController()
+    let sm7 = TriggerPermissionStateMachine(
+        permissionProvider: mockPerm7,
+        launchAtLoginProvider: MockLaunchAtLoginProvider(),
+        monitorController: mockMonitor7,
+        preferences: prefs
+    )
+    sm7.startAutoPolling(interval: 0.05)
+    assertTest(sm7.isAutoPollingActive == true, "51.10 Auto polling timer is active")
+    mockPerm7.trusted = true
+
+    // Wait for timer tick on RunLoop
+    let pollExpectationDate = Date(timeIntervalSinceNow: 0.25)
+    while Date() < pollExpectationDate {
+        RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.05))
+    }
+
+    assertTest(sm7.accessibilityState == .granted, "51.10 Auto-polling detected permission change and updated state to .granted")
+    assertTest(mockMonitor7.isMonitoring == true, "51.10 Auto-polling started monitor automatically")
+    sm7.stopAutoPolling()
+    assertTest(sm7.isAutoPollingActive == false, "51.10 Auto polling stopped successfully")
+}
+
+
 
 
 print("\n==================================================")

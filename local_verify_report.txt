@@ -1,6 +1,6 @@
 ==================================================
 Pasta Local Mac Verification Report
-Generated at: 2026-11-07T07:06:07Z
+Generated at: 2026-11-07T07:43:19Z
 ==================================================
 
 --- 1. Environment Diagnostics ---
@@ -18,10 +18,10 @@ swift-driver version: 1.168.6 Apple Swift version 6.4.2 (swiftlang-6.4.2.1.9 cla
 Target: arm64-apple-macosx27.2.0
 
 --- 2. PastaTests (Debug) ---
-Test Suite Summary: 1361/1361 Passed, 0 Failed
+Test Suite Summary: 1422/1422 Passed, 0 Failed
 
 --- 3. PastaTests (Release) ---
-Test Suite Summary: 1361/1361 Passed, 0 Failed
+Test Suite Summary: 1422/1422 Passed, 0 Failed
 
 --- 4. Section 8 Hardening Tests (Debug Binary) ---
 Section 8 Test Results: 47/47 Passed, 0 Failed
@@ -35,7 +35,7 @@ Building for production...
 [5 / 8] Pasta-product
 [7 / 8] Pasta-product
 [8 / 8] Pasta-product
-Build complete! (1.62 sec)
+Build complete! (1.68 sec)
 Creating application bundle structure at Pasta.app...
 Copying AppIcon.icns to Resources...
 Copying MenuBarIcon to Resources...
@@ -111,7 +111,7 @@ tar             3.5.3              412.0        bin/tar
 unar            1.10.7             2274.9       bin/unar
 -----------------------------------------------------------------
 Total Engines Directory Size: 442.85 MB
-Total Pasta.app Bundle Size:  446.23 MB
+Total Pasta.app Bundle Size:  446.30 MB
 ==================================================
 
 Generating Info.plist...
