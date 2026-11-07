@@ -90,15 +90,16 @@ public struct PastaCLI {
         if args.contains("--all") {
             if args.contains("--markdown") {
                 let actions = FormatRegistry.shared.allRegisteredActions()
-                print("| Category | Action ID | Display Name | Target Extension | Advanced |")
-                print("| :--- | :--- | :--- | :--- | :---: |")
+                print("| Category | Action ID | Display Name | Target Extension | Advanced | Quality Class |")
+                print("| :--- | :--- | :--- | :--- | :---: | :--- |")
                 for a in actions {
                     let cat = a.category.displayName
                     let id = "`\(a.id)`"
                     let name = a.displayName
                     let ext = a.outputExtension.isEmpty ? "(folder)" : ".\(a.outputExtension)"
                     let adv = a.isAdvanced ? "Yes" : "No"
-                    print("| \(cat) | \(id) | \(name) | `\(ext)` | \(adv) |")
+                    let quality = a.qualityClass.displayName
+                    print("| \(cat) | \(id) | \(name) | `\(ext)` | \(adv) | \(quality) |")
                 }
             } else {
                 let actions = FormatRegistry.shared.allRegisteredActions()
@@ -107,7 +108,7 @@ public struct PastaCLI {
                 for a in actions {
                     let adv = a.isAdvanced ? " [Advanced]" : ""
                     let ext = a.outputExtension.isEmpty ? "(folder)" : ".\(a.outputExtension)"
-                    print("  - \(a.id.padding(toLength: 30, withPad: " ", startingAt: 0)) (\(a.displayName) -> \(ext))\(adv)")
+                    print("  - \(a.id.padding(toLength: 30, withPad: " ", startingAt: 0)) (\(a.displayName) -> \(ext)) [\(a.qualityClass.displayName)]\(adv)")
                 }
             }
             return
@@ -130,7 +131,7 @@ public struct PastaCLI {
         print("Actions for: \(url.lastPathComponent)")
         print("Standard Actions:")
         for a in standard {
-            var line = "  - \(a.id.padding(toLength: 30, withPad: " ", startingAt: 0)) (\(a.displayName) -> .\(a.outputExtension))"
+            var line = "  - \(a.id.padding(toLength: 30, withPad: " ", startingAt: 0)) (\(a.displayName) -> .\(a.outputExtension)) [\(a.qualityClass.displayName)]"
             if !a.parameters.isEmpty {
                 let pList = a.parameters.map { "\($0.id)=\($0.defaultValue.asString)" }.joined(separator: ", ")
                 line += " [params: \(pList)]"
@@ -139,7 +140,7 @@ public struct PastaCLI {
         }
         print("\nAdvanced Actions:")
         for a in advanced {
-            var line = "  - \(a.id.padding(toLength: 30, withPad: " ", startingAt: 0)) (\(a.displayName) -> .\(a.outputExtension))"
+            var line = "  - \(a.id.padding(toLength: 30, withPad: " ", startingAt: 0)) (\(a.displayName) -> .\(a.outputExtension)) [\(a.qualityClass.displayName)]"
             if !a.parameters.isEmpty {
                 let pList = a.parameters.map { "\($0.id)=\($0.defaultValue.asString)" }.joined(separator: ", ")
                 line += " [params: \(pList)]"
