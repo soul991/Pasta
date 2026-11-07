@@ -7960,8 +7960,8 @@ do {
     let isExec = (try? FileManager.default.attributesOfItem(atPath: measureScriptURL.path)[.posixPermissions] as? NSNumber)?.intValue ?? 0 & 0o111 != 0
     assertTest(scriptExists && isExec, "52.14 scripts/measure_bundle_size.sh exists and is executable")
 
-    // 52.15 scripts/measure_bundle_size.sh reports bundle within 500 MB budget
-    var sizeUnderBudget = false
+    // 52.15 scripts/measure_bundle_size.sh reports bundle size metrics (report-only per owner decision, no size limit)
+    var sizeReportValid = false
     var reportedSizeMB: Double = 0
     if scriptExists {
         let proc = Process()
@@ -7977,14 +7977,17 @@ do {
                 let outData = pipe.fileHandleForReading.readDataToEndOfFile()
                 if let json = try? JSONSerialization.jsonObject(with: outData) as? [String: Any],
                    let totalMB = json["total_bundle_size_mb"] as? Double,
-                   let withinBudget = json["within_budget"] as? Bool {
+                   let totalBytes = json["total_bundle_size_bytes"] as? Int,
+                   let enginesMB = json["engines_size_mb"] as? Double,
+                   let engines = json["engines"] as? [[String: Any]],
+                   !engines.isEmpty {
                     reportedSizeMB = totalMB
-                    sizeUnderBudget = withinBudget && totalMB <= 500.0
+                    sizeReportValid = totalMB > 0 && totalBytes > 0 && enginesMB > 0
                 }
             }
         }
     }
-    assertTest(sizeUnderBudget, "52.15 Bundle size is within 500 MB budget (reported: \(reportedSizeMB) MB)")
+    assertTest(sizeReportValid, "52.15 scripts/measure_bundle_size.sh reports valid bundle metrics (reported: \(reportedSizeMB) MB)")
 
     // --- Stage 1 Gate: 5 Random Actions End-to-End Spot-Check on macOS ---
     let spotCheckDir = FileManager.default.temporaryDirectory.appendingPathComponent("pasta_stage1_spotcheck_\(UUID().uuidString)")
