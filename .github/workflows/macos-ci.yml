@@ -76,6 +76,9 @@ jobs:
           ./scripts/build_app.sh
           codesign --verify --deep --strict Pasta.app
 
+      - name: Run Step E2 Clean-Machine & Isolation Tests
+        run: ./scripts/test_isolation.sh
+
       - name: Run Section 8 Hardening Tests against Pasta.app
         run: PASTA_BIN=./Pasta.app/Contents/MacOS/Pasta ./scripts/run_section8_tests.sh
 

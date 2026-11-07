@@ -464,6 +464,12 @@ extension JobRunner {
         let toolURL = try ToolLocator.shared.requireTool(invocation.toolName)
 
         var processArgs = invocation.arguments
+        let loProfilePath: String? = (invocation.toolName == "soffice") ? "/tmp/Pasta_lo_\(jobId.uuidString)" : nil
+        defer {
+            if let path = loProfilePath {
+                try? FileManager.default.removeItem(atPath: path)
+            }
+        }
         if invocation.toolName == "soffice" {
             let loProfile = "file:///tmp/Pasta_lo_\(jobId.uuidString)"
             if !processArgs.contains(where: { $0.hasPrefix("-env:UserInstallation=") }) {
@@ -853,6 +859,12 @@ extension JobRunner {
         let toolURL = try ToolLocator.shared.requireTool(invocation.toolName)
 
         var processArgs = invocation.arguments
+        let loProfilePath: String? = (invocation.toolName == "soffice") ? "/tmp/Pasta_lo_\(jobId.uuidString)" : nil
+        defer {
+            if let path = loProfilePath {
+                try? FileManager.default.removeItem(atPath: path)
+            }
+        }
         if invocation.toolName == "soffice" {
             let loProfile = "file:///tmp/Pasta_lo_\(jobId.uuidString)"
             if !processArgs.contains(where: { $0.hasPrefix("-env:UserInstallation=") }) {

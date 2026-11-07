@@ -1,6 +1,6 @@
 ==================================================
 Pasta Local Mac Verification Report
-Generated at: 2026-11-06T23:51:39Z
+Generated at: 2026-11-07T00:43:33Z
 ==================================================
 
 --- 1. Environment Diagnostics ---
@@ -18,10 +18,10 @@ swift-driver version: 1.168.6 Apple Swift version 6.4.2 (swiftlang-6.4.2.1.9 cla
 Target: arm64-apple-macosx27.2.0
 
 --- 2. PastaTests (Debug) ---
-Test Suite Summary: 945/945 Passed, 0 Failed
+Test Suite Summary: 954/954 Passed, 0 Failed
 
 --- 3. PastaTests (Release) ---
-Test Suite Summary: 945/945 Passed, 0 Failed
+Test Suite Summary: 954/954 Passed, 0 Failed
 
 --- 4. Section 8 Hardening Tests (Debug Binary) ---
 Section 8 Test Results: 47/47 Passed, 0 Failed
@@ -29,7 +29,10 @@ Section 8 Test Results: 47/47 Passed, 0 Failed
 --- 5. Build Application Bundle (./scripts/build_app.sh) ---
 Building Pasta in release configuration...
 Building for production...
-Build complete! (0.19 sec)
+[2 / 4] PastaTests-product
+[4 / 5] Pasta-product
+[5 / 5] Pasta-product
+Build complete! (0.71 sec)
 Creating application bundle structure at Pasta.app...
 Copying AppIcon.icns to Resources...
 Copying MenuBarIcon to Resources...
@@ -416,6 +419,57 @@ Corner Pixel Values for assets/AppIcon-1024.png:
   Bottom-Right (1023, 1023): RGBA(0, 0, 0, 0)
 [PASS] All 4 corner pixels are 100% transparent (alpha == 0).
 [SUCCESS] App icon verification PASSED for assets/AppIcon-1024.png
+
+--- 10. Step E2 Clean-Machine & Isolation Test (./scripts/test_isolation.sh) ---
+Checked 233 Mach-O binaries and dylibs.
+✓ PASS: 100% of bundled Mach-O files reference only relative @loader_path or system frameworks.
+  ✓ PASS: Nasty filename converted safely: sample with spaces.png
+  ✓ PASS: Nasty filename converted safely: user's document.jpg
+  ✓ PASS: Nasty filename converted safely: -weird.mp4
+  ✓ PASS: Nasty filename converted safely: SAMPLE_PHOTO.JPG
+  ✓ PASS: Nasty filename converted safely: サンプル_নমুনা.png
+  ✓ PASS: Nasty filename converted safely: photo_🎉_cool.jpg
+  ✓ PASS: Nasty filename converted safely: very_long_file_name_that_exceeds_normal_lengths_for_boundary_testing_in_peel_converter_1234567890_abcdefghijklmnopqrstuvwxyz.png
+  ✓ PASS: Corrupt image reports human-readable error gracefully
+  ✓ PASS: 0-byte file rejected with clear error
+  ✓ PASS: Collision handled correctly: created 'item 1.jpg'
+  ✓ PASS: Zero leftover temp directories in /tmp/Pasta_*
+  ✓ PASS: Zero orphan ffmpeg background processes
+  ✓ PASS: video.speed handled hostile filename '-speedy clip.mp4' safely
+  ✓ PASS: video.crop handled hostile filename "crop's -test.mp4" safely
+  ✓ PASS: video.snapshot handled hostile filename 'snap shot -clip.mp4' safely
+  ✓ PASS: video.split handled hostile filename 'split -clip.mp4' safely into folder
+  ✓ PASS: video.compress handled hostile filename '-compress video.mp4' safely
+  ✓ PASS: audio.normalize handled hostile filename "audio with spaces & 'quotes'.wav" safely
+  ✓ PASS: audio.channels handled hostile filename '-weird audio.mp3' safely
+  ✓ PASS: audio.trim handled hostile filename "user's trim -song.mp3" safely
+  ✓ PASS: audio.compress handled hostile filename '-compress audio.mp3' safely
+  ✓ PASS: metadata.read extracted JSON safely from hostile "user's document.jpg"
+  ✓ PASS: metadata.edit handled hostile filename "photo with 'quotes' & spaces.png" safely
+  ✓ PASS: image.qr.read decoded hostile filename QR correctly: 'Hello Pasta QR'
+  ✓ PASS: pdf.reorganize handled hostile filename "user's 3-page doc.pdf" safely
+  ✓ PASS: pdf.compress handled hostile filename '-weird pdf.pdf' safely
+  ✓ PASS: pdf.merge combined multiple hostile filename PDFs safely
+  ✓ PASS: image.collage combined multiple hostile filename images safely
+  ✓ PASS: image.compress handled hostile filename 'sample with spaces copy.png' safely
+  ✓ PASS: video.snapshot.jpg extracted hostile filename frame as JPG safely
+  ✓ PASS: audio.bleep handled hostile filename and time range safely
+  ✓ PASS: pdf.reorganize handled hostile filename with single/reverse page safely
+  ✓ PASS: image.ocr.text handled hostile filename safely
+  ✓ PASS: pdf.watermark handled hostile filename safely
+  ✓ PASS: image.to.bmp handled hostile filename safely
+  ✓ PASS: image.to.avif handled hostile filename safely
+  ✓ PASS: pdf.to.pdfa handled hostile filename safely
+  ✓ PASS: pdf.security lock and unlock handled hostile filename safely
+  ✓ PASS: Concurrent same-name CLI conversions produced unique outputs without modifying existing file
+  ✓ PASS: Failed conversion leaves zero leftover 0-byte placeholders in destination
+  ✓ PASS: Hostile slip_rel.zip prevented from writing outside extraction root
+  ✓ PASS: Hostile slip_abs.tar prevented from writing to /tmp/pasta_abs_escape.txt
+  ✓ PASS: Hostile symlink_outside.tar was rejected and published nothing to destination
+  ✓ PASS: Benign archive extracts all files cleanly without false positives (4 files)
+  ✓ PASS: pasta doctor --json produces valid JSON schema with tools and availability
+  ✓ PASS: pasta list-actions --all --markdown generates valid markdown action table
+  ✓ PASS: Binary contains zero network requests, tracking, or telemetry
 
 ==================================================
 Local Verification Completed Successfully

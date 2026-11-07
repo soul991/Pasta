@@ -61,6 +61,10 @@ log "--- 9. Icon Corner Alpha Verification ---"
 python3 scripts/verify_app_icon.py assets/AppIcon-1024.png 2>&1 | tee -a "$REPORT"
 
 log ""
+log "--- 10. Step E2 Clean-Machine & Isolation Test (./scripts/test_isolation.sh) ---"
+./scripts/test_isolation.sh 2>&1 | grep -E 'PASS:|Checked |FAILED' | tee -a "$REPORT" || true
+
+log ""
 log "=================================================="
 log "Local Verification Completed Successfully"
 log "=================================================="
