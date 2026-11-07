@@ -5,8 +5,41 @@ public final class OfficeTools {
 
     public init() {}
 
+    /// Validates format signature and integrity of office and markup inputs before invoking conversion tools
+    public func validateOfficeDocumentIntegrity(_ url: URL) throws {
+        let handle = try? FileHandle(forReadingFrom: url)
+        let headerData = handle?.readData(ofLength: 8) ?? Data()
+        try? handle?.close()
+        guard headerData.count >= 4 else {
+            throw PastaError.invalidInput("File is too small to be a valid office document: '\(url.lastPathComponent)'")
+        }
+        let ext = url.pathExtension.lowercased()
+        if ["docx", "pptx", "xlsx", "odt"].contains(ext) {
+            let zipSig = Data([0x50, 0x4B, 0x03, 0x04])
+            if !headerData.starts(with: zipSig) {
+                throw PastaError.invalidInput("Corrupted office document: missing ZIP header signature for .\(ext)")
+            }
+        } else if ["doc", "ppt", "xls"].contains(ext) {
+            let oleSig = Data([0xD0, 0xCF, 0x11, 0xE0])
+            if !headerData.starts(with: oleSig) {
+                throw PastaError.invalidInput("Corrupted legacy office document: missing OLE2 header signature for .\(ext)")
+            }
+        } else if ext == "rtf" {
+            let rtfSig = Data([0x7B, 0x5C, 0x72, 0x74, 0x66])
+            if !headerData.starts(with: rtfSig) {
+                throw PastaError.invalidInput("Corrupted RTF document: missing RTF header signature")
+            }
+        } else if ["csv", "html", "htm", "md", "txt"].contains(ext) {
+            let fullHeader = (try? Data(contentsOf: url).prefix(4096)) ?? headerData
+            if fullHeader.contains(0) {
+                throw PastaError.invalidInput("Corrupted text/office input: binary null bytes detected in .\(ext)")
+            }
+        }
+    }
+
     /// Converts an office document (DOCX, DOC, RTF, ODT, PPTX, PPT, XLSX, XLS) to PDF using LibreOffice
     public func convertOfficeToPDF(input: URL, output: URL, runner: JobRunner, jobId: UUID) throws {
+        try validateOfficeDocumentIntegrity(input)
         _ = try ToolLocator.shared.requireTool("soffice")
         let scratchDir = try OutputPlanner.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: scratchDir) }
@@ -31,6 +64,7 @@ public final class OfficeTools {
 
     /// Converts Markdown to PDF through pandoc to HTML then LibreOffice to PDF
     public func convertMarkdownToPDF(input: URL, output: URL, runner: JobRunner, jobId: UUID) throws {
+        try validateOfficeDocumentIntegrity(input)
         _ = try ToolLocator.shared.requireTool("pandoc")
         _ = try ToolLocator.shared.requireTool("soffice")
 
@@ -61,6 +95,7 @@ public final class OfficeTools {
 
     /// Converts HTML to PDF using LibreOffice
     public func convertHTMLToPDF(input: URL, output: URL, runner: JobRunner, jobId: UUID) throws {
+        try validateOfficeDocumentIntegrity(input)
         _ = try ToolLocator.shared.requireTool("soffice")
         let scratchDir = try OutputPlanner.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: scratchDir) }
@@ -85,6 +120,7 @@ public final class OfficeTools {
 
     /// Converts an office document to individual page/slide PNG images in a folder
     public func convertOfficeToImages(input: URL, outputDir: URL, isSlide: Bool = false, runner: JobRunner, jobId: UUID) throws {
+        try validateOfficeDocumentIntegrity(input)
         _ = try ToolLocator.shared.requireTool("soffice")
         _ = try ToolLocator.shared.requireTool("pdftoppm")
 
@@ -125,6 +161,7 @@ public final class OfficeTools {
 
     /// Converts XLSX to separate CSV files (one CSV per sheet) in outputDir
     public func convertXLSXToCSVs(input: URL, outputDir: URL, runner: JobRunner, jobId: UUID) throws {
+        try validateOfficeDocumentIntegrity(input)
         let fm = FileManager.default
         try fm.createDirectory(at: outputDir, withIntermediateDirectories: true)
 
@@ -172,6 +209,7 @@ public final class OfficeTools {
 
     /// Converts CSV to XLSX via LibreOffice
     public func convertCSVToXLSX(input: URL, output: URL, runner: JobRunner, jobId: UUID) throws {
+        try validateOfficeDocumentIntegrity(input)
         _ = try ToolLocator.shared.requireTool("soffice")
         let scratchDir = try OutputPlanner.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: scratchDir) }

@@ -65,6 +65,10 @@ log "--- 10. Step E2 Clean-Machine & Isolation Test (./scripts/test_isolation.sh
 ./scripts/test_isolation.sh 2>&1 | grep -E 'PASS:|Checked |FAILED' | tee -a "$REPORT" || true
 
 log ""
+log "--- 11. Step E4 Behavioral Completeness Gate (./scripts/verify_catalog_behavioral_coverage.py) ---"
+PASTA_BIN=.build/debug/Pasta python3 scripts/verify_catalog_behavioral_coverage.py 2>&1 | tee -a "$REPORT"
+
+log ""
 log "=================================================="
 log "Local Verification Completed Successfully"
 log "=================================================="
