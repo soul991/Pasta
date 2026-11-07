@@ -64,3 +64,21 @@ log ""
 log "=================================================="
 log "Local Verification Completed Successfully"
 log "=================================================="
+
+# Sanitize local paths for repo hygiene and reproducibility
+python3 -c '
+import os, sys
+report_path = "local_verify_report.txt"
+if os.path.exists(report_path):
+    with open(report_path, "r") as f:
+        c = f.read()
+    pwd = os.getcwd()
+    home = os.path.expanduser("~")
+    c = c.replace(pwd.replace("/", "\\/"), "<REPO_ROOT>")
+    c = c.replace(pwd, "<REPO_ROOT>")
+    c = c.replace(home.replace("/", "\\/"), "<HOME>")
+    c = c.replace(home, "<HOME>")
+    with open(report_path, "w") as f:
+        f.write(c)
+'
+

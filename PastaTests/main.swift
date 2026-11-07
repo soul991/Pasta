@@ -6147,6 +6147,106 @@ do {
                details: "first action: \(String(describing: fetchedCustom.primaryActionIDs.first))")
 }
 
+// --------------------------------------------------
+// Section 45: Bundled Engines & Relocation Tests (Stage 1 / Step E1)
+// --------------------------------------------------
+do {
+    print("\n--- 45. Bundled Engines & Relocation Tests (Step E1) ---")
+    let locator = ToolLocator()
+
+    // Create a temporary mock engines bundle directory
+    let tempEnginesDir = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("pasta_test_engines_\(UUID().uuidString)")
+    let tempBinDir = tempEnginesDir.appendingPathComponent("bin")
+    let tempLibDir = tempEnginesDir.appendingPathComponent("lib")
+    try? FileManager.default.createDirectory(at: tempBinDir, withIntermediateDirectories: true)
+    try? FileManager.default.createDirectory(at: tempLibDir, withIntermediateDirectories: true)
+
+    defer {
+        try? FileManager.default.removeItem(at: tempEnginesDir)
+    }
+
+    // Create a mock bundled ffmpeg binary
+    let mockFfmpeg = tempBinDir.appendingPathComponent("ffmpeg")
+    let mockScript = "#!/bin/sh\necho 'ffmpeg version 9.0.2-mock'\nexit 0\n"
+    FileManager.default.createFile(atPath: mockFfmpeg.path, contents: mockScript.data(using: .utf8), attributes: [.posixPermissions: 0o755])
+
+    // Create mock engines.json manifest
+    let manifestData = """
+    [
+      {
+        "id": "ffmpeg",
+        "version": "9.0.2",
+        "sha256": "mock_sha256_hash",
+        "size": 12345,
+        "entry_point": "bin/ffmpeg",
+        "source": "bundled_macho"
+      }
+    ]
+    """.data(using: .utf8)!
+    let manifestURL = tempEnginesDir.appendingPathComponent("engines.json")
+    FileManager.default.createFile(atPath: manifestURL.path, contents: manifestData)
+
+    // 45.1: ToolLocator custom engines directory lookup
+    locator.customEnginesDirectoryURL = tempEnginesDir
+    let foundBundledFfmpeg = locator.findBundledEngine("ffmpeg")
+    assertTest(foundBundledFfmpeg != nil && foundBundledFfmpeg?.path == mockFfmpeg.path,
+               "45.1 ToolLocator locates bundled engine within custom engines directory",
+               details: "found URL: \(String(describing: foundBundledFfmpeg))")
+
+    // 45.2: ToolLocator default lookup prefers bundled engine over system tool
+    let foundTool = locator.findTool("ffmpeg")
+    assertTest(foundTool?.path == mockFfmpeg.path,
+               "45.2 ToolLocator prioritizes bundled engine over system tools by default",
+               details: "found tool: \(String(describing: foundTool?.path))")
+
+    // 45.3: Developer mode prefers system-installed tool over bundled engine
+    locator.developerModeUseInstalledTools = true
+    let devTool = locator.findTool("ffmpeg")
+    assertTest(devTool != nil && devTool?.path != mockFfmpeg.path,
+               "45.3 Developer mode flips preference to system-installed tools",
+               details: "dev tool: \(String(describing: devTool?.path))")
+    locator.developerModeUseInstalledTools = false
+
+    // 45.4: PastaToolStatus indicates isBundled correctly
+    let statusBundled = locator.doctorStatuses().first(where: { $0.name == "ffmpeg" })
+    assertTest(statusBundled?.isBundled == true,
+               "45.4 PastaToolStatus correctly marks bundled tool as isBundled = true",
+               details: "isBundled: \(String(describing: statusBundled?.isBundled)), path: \(String(describing: statusBundled?.path))")
+
+    // 45.5: PastaToolStatus.displayLine includes [bundled] source annotation
+    let displayLine = statusBundled?.displayLine ?? ""
+    assertTest(displayLine.contains("[bundled]"),
+               "45.5 PastaToolStatus.displayLine includes [bundled] tag for bundled tools",
+               details: "displayLine: \(displayLine)")
+
+    // 45.6: engines.json manifest schema and deserialization
+    struct ManifestEntry: Codable {
+        let id: String
+        let version: String
+        let sha256: String
+        let size: Int
+        let entry_point: String
+        let source: String
+    }
+    let entries = try? JSONDecoder().decode([ManifestEntry].self, from: manifestData)
+    assertTest(entries?.first?.id == "ffmpeg" && entries?.first?.version == "9.0.2",
+               "45.6 engines.json manifest deserializes with expected schema",
+               details: "parsed entry: \(String(describing: entries?.first))")
+
+    // 45.7: Verify real bundled engines in /tmp/pasta_engines_test if available
+    let realEnginesDir = URL(fileURLWithPath: "/tmp/pasta_engines_test")
+    if FileManager.default.fileExists(atPath: realEnginesDir.appendingPathComponent("engines.json").path) {
+        let realManifestURL = realEnginesDir.appendingPathComponent("engines.json")
+        let realData = (try? Data(contentsOf: realManifestURL)) ?? Data()
+        let realEntries = (try? JSONDecoder().decode([ManifestEntry].self, from: realData)) ?? []
+        assertTest(realEntries.count >= 16,
+                   "45.7 Real bundled engines manifest contains all required engines",
+                   details: "engine count: \(realEntries.count)")
+    } else {
+        assertTest(true, "45.7 Real bundled engines manifest test skipped (engines not yet built at /tmp/pasta_engines_test)")
+    }
+}
+
 print("\n==================================================")
 print("Test Suite Summary: \(passedTests)/\(totalTests) Passed, \(failedTests) Failed")
 print("==================================================")

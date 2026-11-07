@@ -7,6 +7,6 @@ runs:
       shell: bash
       run: |
         brew update --quiet
-        brew install ffmpeg imagemagick qpdf ghostscript poppler pandoc exiftool webp unar sevenzip librsvg
+        brew install ffmpeg imagemagick qpdf ghostscript poppler pandoc exiftool webp unar sevenzip librsvg libavif
         brew install --cask libreoffice
         /Applications/LibreOffice.app/Contents/MacOS/soffice --version

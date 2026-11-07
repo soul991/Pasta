@@ -1,6 +1,6 @@
 ==================================================
 Pasta Local Mac Verification Report
-Generated at: 2026-11-06T22:38:53Z
+Generated at: 2026-11-06T23:51:39Z
 ==================================================
 
 --- 1. Environment Diagnostics ---
@@ -18,10 +18,10 @@ swift-driver version: 1.168.6 Apple Swift version 6.4.2 (swiftlang-6.4.2.1.9 cla
 Target: arm64-apple-macosx27.2.0
 
 --- 2. PastaTests (Debug) ---
-Test Suite Summary: 938/938 Passed, 0 Failed
+Test Suite Summary: 945/945 Passed, 0 Failed
 
 --- 3. PastaTests (Release) ---
-Test Suite Summary: 938/938 Passed, 0 Failed
+Test Suite Summary: 945/945 Passed, 0 Failed
 
 --- 4. Section 8 Hardening Tests (Debug Binary) ---
 Section 8 Test Results: 47/47 Passed, 0 Failed
@@ -29,18 +29,87 @@ Section 8 Test Results: 47/47 Passed, 0 Failed
 --- 5. Build Application Bundle (./scripts/build_app.sh) ---
 Building Pasta in release configuration...
 Building for production...
-[2 / 4] Pasta-product
-[4 / 7] Pasta-product
-[5 / 8] Pasta-product
-[7 / 8] Pasta-product
-[8 / 8] Pasta-product
-Build complete! (1.39 sec)
+Build complete! (0.19 sec)
 Creating application bundle structure at Pasta.app...
 Copying AppIcon.icns to Resources...
 Copying MenuBarIcon to Resources...
 Copying theme_tokens.json to Resources...
+Packaging bundled relocatable engines into Pasta.app/Contents/Resources/Engines...
+==> Packaging relocatable engines into: <REPO_ROOT>/Pasta.app/Contents/Resources/Engines
+  [macho] ffmpeg -> <REPO_ROOT>/Pasta.app/Contents/Resources/Engines/bin/ffmpeg (9.0.2)
+  [macho] ffprobe -> <REPO_ROOT>/Pasta.app/Contents/Resources/Engines/bin/ffprobe (9.0.2)
+  [macho] cwebp -> <REPO_ROOT>/Pasta.app/Contents/Resources/Engines/bin/cwebp (1.6.0)
+  [macho_wrapper] magick -> <REPO_ROOT>/Pasta.app/Contents/Resources/Engines/bin/magick (7.1.2-35)
+  [macho_wrapper] gs -> <REPO_ROOT>/Pasta.app/Contents/Resources/Engines/bin/gs (10.08.0)
+  [macho] qpdf -> <REPO_ROOT>/Pasta.app/Contents/Resources/Engines/bin/qpdf (12.4.2)
+  [macho] pdftoppm -> <REPO_ROOT>/Pasta.app/Contents/Resources/Engines/bin/pdftoppm (26.10.0)
+  [macho] pdftotext -> <REPO_ROOT>/Pasta.app/Contents/Resources/Engines/bin/pdftotext (26.10.0)
+  [perl] exiftool -> <REPO_ROOT>/Pasta.app/Contents/Resources/Engines/bin/exiftool (13.55)
+  [macho] pandoc -> <REPO_ROOT>/Pasta.app/Contents/Resources/Engines/bin/pandoc (3.13)
+  [macho] rsvg-convert -> <REPO_ROOT>/Pasta.app/Contents/Resources/Engines/bin/rsvg-convert (2.63.4)
+  [macho] unar -> <REPO_ROOT>/Pasta.app/Contents/Resources/Engines/bin/unar (1.10.7)
+  [macho] 7zz -> <REPO_ROOT>/Pasta.app/Contents/Resources/Engines/bin/7zz (26.05)
+  [system] sips -> /usr/bin/sips (sips-316)
+  [system] ditto -> /usr/bin/ditto (Usage: ditto [ <options> ] src)
+  [system] tar -> /usr/bin/tar (3.5.3)
+  [skip optional] soffice (LibreOffice.app not installed)
+  [skip optional] ebook-convert (calibre.app not installed)
+  [macho] avifenc -> <REPO_ROOT>/Pasta.app/Contents/Resources/Engines/bin/avifenc (1.4.2)
+==> Resolving and copying transitive Mach-O dynamic libraries...
+==> Copied 88 shared dynamic libraries to <REPO_ROOT>/Pasta.app/Contents/Resources/Engines/lib
+==> Rewriting library load paths to relative @loader_path...
+==> Signing all Mach-O binaries and dylibs with hardened runtime...
+==> Verifying Mach-O isolation...
+✓ All bundled Mach-O files are 100% free of external Homebrew/local paths!
+==> Verifying bundled engine execution under clean PATH (/usr/bin:/bin)...
+  ✓ ffmpeg         launched cleanly: ffmpeg version 9.0.2 Copyright (c) 2000-
+  ✓ ffprobe        launched cleanly: ffprobe version 9.0.2 Copyright (c) 2007
+  ✓ cwebp          launched cleanly: 1.6.0
+  ✓ magick         launched cleanly: Version: ImageMagick 7.1.2-35 Q16-HDRI a
+  ✓ gs             launched cleanly: 10.08.0
+  ✓ qpdf           launched cleanly: qpdf version 12.4.2
+  ✓ pdftoppm       launched cleanly: pdftoppm version 26.10.0
+  ✓ pdftotext      launched cleanly: pdftotext version 26.10.0
+  ✓ exiftool       launched cleanly: 13.55
+  ✓ pandoc         launched cleanly: pandoc 3.13
+  ✓ rsvg-convert   launched cleanly: rsvg-convert version 2.63.4
+  ✓ unar           launched cleanly: v1.10.7
+  ✓ 7zz            launched cleanly: 7-Zip (z) 26.05 (arm64) : Copyright (c) 
+  ✓ sips           launched cleanly: sips-316
+  ✓ ditto          launched cleanly: Usage: ditto [ <options> ] src [ ... src
+  ✓ tar            launched cleanly: bsdtar 3.5.3 - libarchive 3.7.4 zlib/1.2
+  ✓ avifenc        launched cleanly: Version: 1.4.2 (dav1d [dec]:1.5.4, aom [
+==> Wrote manifest (17 tools) to <REPO_ROOT>/Pasta.app/Contents/Resources/Engines/engines.json
+
+==================================================
+           PASTA ENGINES SIZE REPORT              
+==================================================
+Engine ID       Version            Size (KB)    Entry Point
+-----------------------------------------------------------------
+7zz             26.05              2383.7       bin/7zz
+avifenc         1.4.2              127.3        bin/avifenc
+cwebp           1.6.0              75.0         bin/cwebp
+ditto           Usage: ditto [ <options> ] src 264.1        bin/ditto
+exiftool        13.55              344.0        bin/exiftool
+ffmpeg          9.0.2              416.5        bin/ffmpeg
+ffprobe         9.0.2              247.5        bin/ffprobe
+gs              10.08.0            12597.5      bin/gs
+magick          7.1.2-35           34.6         bin/magick
+pandoc          3.13               282278.2     bin/pandoc
+pdftoppm        26.10.0            73.7         bin/pdftoppm
+pdftotext       26.10.0            108.1        bin/pdftotext
+qpdf            12.4.2             37.1         bin/qpdf
+rsvg-convert    2.63.4             6434.0       bin/rsvg-convert
+sips            sips-316           492.6        bin/sips
+tar             3.5.3              412.0        bin/tar
+unar            1.10.7             2274.9       bin/unar
+-----------------------------------------------------------------
+Total Engines Directory Size: 442.85 MB
+Total Pasta.app Bundle Size:  445.83 MB
+==================================================
+
 Generating Info.plist...
-Signing application bundle with stable designated requirement...
+Signing application bundle with stable designated requirement and hardened runtime...
 Pasta.app: replacing existing signature
 Verifying code signature...
 Pasta.app built and signed successfully at: ./Pasta.app
@@ -56,13 +125,12 @@ Codesign: VALID
   "allRequiredAvailable" : true,
   "missingOptional" : [
     "soffice",
-    "ebook-convert",
-    "avifenc"
+    "ebook-convert"
   ],
   "missingRequired" : [
 
   ],
-  "optionalInstallCommand" : "brew install libavif && brew install --cask calibre libreoffice",
+  "optionalInstallCommand" : "brew install --cask calibre libreoffice",
   "tools" : [
     {
       "dependentActions" : [
@@ -90,10 +158,11 @@ Codesign: VALID
         "audio.compress"
       ],
       "formula" : "ffmpeg",
+      "isBundled" : true,
       "isCask" : false,
       "isOptional" : false,
       "name" : "ffmpeg",
-      "path" : "\/opt\/homebrew\/bin\/ffmpeg",
+      "path" : "<REPO_ROOT>\/Pasta.app\/Contents\/Resources\/Engines\/bin\/ffmpeg",
       "version" : "ffmpeg version 9.0.2 Copyright (c) 2000-2026 the FFmpeg developers"
     },
     {
@@ -104,10 +173,11 @@ Codesign: VALID
         "video.crop"
       ],
       "formula" : "ffmpeg",
+      "isBundled" : true,
       "isCask" : false,
       "isOptional" : false,
       "name" : "ffprobe",
-      "path" : "\/opt\/homebrew\/bin\/ffprobe",
+      "path" : "<REPO_ROOT>\/Pasta.app\/Contents\/Resources\/Engines\/bin\/ffprobe",
       "version" : "ffprobe version 9.0.2 Copyright (c) 2007-2026 the FFmpeg developers"
     },
     {
@@ -115,10 +185,11 @@ Codesign: VALID
         "image.to.webp"
       ],
       "formula" : "webp",
+      "isBundled" : true,
       "isCask" : false,
       "isOptional" : false,
       "name" : "cwebp",
-      "path" : "\/opt\/homebrew\/bin\/cwebp",
+      "path" : "<REPO_ROOT>\/Pasta.app\/Contents\/Resources\/Engines\/bin\/cwebp",
       "version" : "1.6.0"
     },
     {
@@ -133,10 +204,11 @@ Codesign: VALID
         "image.compress"
       ],
       "formula" : "imagemagick",
+      "isBundled" : true,
       "isCask" : false,
       "isOptional" : false,
       "name" : "magick",
-      "path" : "\/opt\/homebrew\/bin\/magick",
+      "path" : "<REPO_ROOT>\/Pasta.app\/Contents\/Resources\/Engines\/bin\/magick",
       "version" : "Version: ImageMagick 7.1.2-35 Q16-HDRI aarch64 acaf7e418:20261031 https:\/\/imagem"
     },
     {
@@ -145,10 +217,11 @@ Codesign: VALID
         "pdf.compress"
       ],
       "formula" : "ghostscript",
+      "isBundled" : true,
       "isCask" : false,
       "isOptional" : false,
       "name" : "gs",
-      "path" : "\/opt\/homebrew\/bin\/gs",
+      "path" : "<REPO_ROOT>\/Pasta.app\/Contents\/Resources\/Engines\/bin\/gs",
       "version" : "10.08.0"
     },
     {
@@ -159,10 +232,11 @@ Codesign: VALID
         "pdf.extract.pages"
       ],
       "formula" : "qpdf",
+      "isBundled" : true,
       "isCask" : false,
       "isOptional" : false,
       "name" : "qpdf",
-      "path" : "\/opt\/homebrew\/bin\/qpdf",
+      "path" : "<REPO_ROOT>\/Pasta.app\/Contents\/Resources\/Engines\/bin\/qpdf",
       "version" : "qpdf version 12.4.2"
     },
     {
@@ -172,10 +246,11 @@ Codesign: VALID
         "pdf.to.images"
       ],
       "formula" : "poppler",
+      "isBundled" : true,
       "isCask" : false,
       "isOptional" : false,
       "name" : "pdftoppm",
-      "path" : "\/opt\/homebrew\/bin\/pdftoppm",
+      "path" : "<REPO_ROOT>\/Pasta.app\/Contents\/Resources\/Engines\/bin\/pdftoppm",
       "version" : "pdftoppm version 26.10.0"
     },
     {
@@ -183,10 +258,11 @@ Codesign: VALID
         "pdf.to.txt"
       ],
       "formula" : "poppler",
+      "isBundled" : true,
       "isCask" : false,
       "isOptional" : false,
       "name" : "pdftotext",
-      "path" : "\/opt\/homebrew\/bin\/pdftotext",
+      "path" : "<REPO_ROOT>\/Pasta.app\/Contents\/Resources\/Engines\/bin\/pdftotext",
       "version" : "pdftotext version 26.10.0"
     },
     {
@@ -195,10 +271,11 @@ Codesign: VALID
         "image.remove.exif"
       ],
       "formula" : "exiftool",
+      "isBundled" : true,
       "isCask" : false,
       "isOptional" : false,
       "name" : "exiftool",
-      "path" : "\/opt\/homebrew\/bin\/exiftool",
+      "path" : "<REPO_ROOT>\/Pasta.app\/Contents\/Resources\/Engines\/bin\/exiftool",
       "version" : "13.55"
     },
     {
@@ -210,10 +287,11 @@ Codesign: VALID
         "md.to.pdf"
       ],
       "formula" : "pandoc",
+      "isBundled" : true,
       "isCask" : false,
       "isOptional" : false,
       "name" : "pandoc",
-      "path" : "\/opt\/homebrew\/bin\/pandoc",
+      "path" : "<REPO_ROOT>\/Pasta.app\/Contents\/Resources\/Engines\/bin\/pandoc",
       "version" : "pandoc 3.13"
     },
     {
@@ -222,10 +300,11 @@ Codesign: VALID
         "svg.to.pdf"
       ],
       "formula" : "librsvg",
+      "isBundled" : true,
       "isCask" : false,
       "isOptional" : false,
       "name" : "rsvg-convert",
-      "path" : "\/opt\/homebrew\/bin\/rsvg-convert",
+      "path" : "<REPO_ROOT>\/Pasta.app\/Contents\/Resources\/Engines\/bin\/rsvg-convert",
       "version" : "rsvg-convert version 2.63.4"
     },
     {
@@ -233,10 +312,11 @@ Codesign: VALID
         "archive.extract"
       ],
       "formula" : "unar",
+      "isBundled" : true,
       "isCask" : false,
       "isOptional" : false,
       "name" : "unar",
-      "path" : "\/opt\/homebrew\/bin\/unar",
+      "path" : "<REPO_ROOT>\/Pasta.app\/Contents\/Resources\/Engines\/bin\/unar",
       "version" : "v1.10.7"
     },
     {
@@ -245,10 +325,11 @@ Codesign: VALID
         "archive.create.7z"
       ],
       "formula" : "sevenzip",
+      "isBundled" : true,
       "isCask" : false,
       "isOptional" : false,
       "name" : "7zz",
-      "path" : "\/opt\/homebrew\/bin\/7zz",
+      "path" : "<REPO_ROOT>\/Pasta.app\/Contents\/Resources\/Engines\/bin\/7zz",
       "version" : "7-Zip (z) 26.05 (arm64) : Copyright (c) 1999-2026 Igor Pavlov : 2026-10-21"
     },
     {
@@ -256,10 +337,11 @@ Codesign: VALID
         "image.to.png",
         "image.to.jpg"
       ],
+      "isBundled" : true,
       "isCask" : false,
       "isOptional" : false,
       "name" : "sips",
-      "path" : "\/usr\/bin\/sips",
+      "path" : "<REPO_ROOT>\/Pasta.app\/Contents\/Resources\/Engines\/bin\/sips",
       "version" : "sips-316"
     },
     {
@@ -267,10 +349,11 @@ Codesign: VALID
         "archive.extract",
         "archive.create.zip"
       ],
+      "isBundled" : true,
       "isCask" : false,
       "isOptional" : false,
       "name" : "ditto",
-      "path" : "\/usr\/bin\/ditto",
+      "path" : "<REPO_ROOT>\/Pasta.app\/Contents\/Resources\/Engines\/bin\/ditto",
       "version" : "Usage: ditto [ <options> ] src [ ... src ] dst"
     },
     {
@@ -278,10 +361,11 @@ Codesign: VALID
         "archive.extract",
         "archive.create.tar"
       ],
+      "isBundled" : true,
       "isCask" : false,
       "isOptional" : false,
       "name" : "tar",
-      "path" : "\/usr\/bin\/tar",
+      "path" : "<REPO_ROOT>\/Pasta.app\/Contents\/Resources\/Engines\/bin\/tar",
       "version" : "bsdtar 3.5.3 - libarchive 3.7.4 zlib\/1.2.12 liblzma\/5.4.3 bz2lib\/1.0.8"
     },
     {
@@ -291,6 +375,7 @@ Codesign: VALID
         "office.slides.to.pdf"
       ],
       "formula" : "libreoffice",
+      "isBundled" : false,
       "isCask" : true,
       "isOptional" : true,
       "name" : "soffice"
@@ -301,6 +386,7 @@ Codesign: VALID
         "ebook.mobi.to.epub"
       ],
       "formula" : "calibre",
+      "isBundled" : false,
       "isCask" : true,
       "isOptional" : true,
       "name" : "ebook-convert"
@@ -310,12 +396,15 @@ Codesign: VALID
         "image.to.avif"
       ],
       "formula" : "libavif",
+      "isBundled" : true,
       "isCask" : false,
       "isOptional" : true,
-      "name" : "avifenc"
+      "name" : "avifenc",
+      "path" : "<REPO_ROOT>\/Pasta.app\/Contents\/Resources\/Engines\/bin\/avifenc",
+      "version" : "Version: 1.4.2 (dav1d [dec]:1.5.4, aom [enc\/dec]:3.15.3)"
     }
   ],
-  "unifiedInstallCommand" : "brew install libavif && brew install --cask calibre libreoffice"
+  "unifiedInstallCommand" : "brew install --cask calibre libreoffice"
 }
 
 --- 9. Icon Corner Alpha Verification ---
