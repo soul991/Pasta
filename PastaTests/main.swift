@@ -6426,8 +6426,12 @@ do {
 
         let realJob1 = UUID()
         let realJob2 = UUID()
-        let realOut1 = concurrentDir.appendingPathComponent("real1.pdf")
-        let realOut2 = concurrentDir.appendingPathComponent("real2.pdf")
+        let dir1 = concurrentDir.appendingPathComponent("sub1")
+        let dir2 = concurrentDir.appendingPathComponent("sub2")
+        try! FileManager.default.createDirectory(at: dir1, withIntermediateDirectories: true)
+        try! FileManager.default.createDirectory(at: dir2, withIntermediateDirectories: true)
+        let realOut1 = dir1.appendingPathComponent("real1.pdf")
+        let realOut2 = dir2.appendingPathComponent("real2.pdf")
 
         var err1: Error?
         var err2: Error?
