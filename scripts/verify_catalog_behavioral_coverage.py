@@ -16,10 +16,21 @@ def main():
     os.chdir(repo_root)
 
     # 1. Retrieve all registered actions via pasta list-actions --all --markdown
-    pasta_bin = os.environ.get("PASTA_BIN", ".build/debug/Pasta")
-    if not os.path.exists(pasta_bin):
-        print(f"Error: {pasta_bin} not found. Build Pasta first.")
-        sys.exit(1)
+    pasta_bin = os.environ.get("PASTA_BIN")
+    if not pasta_bin or not os.path.exists(pasta_bin):
+        candidates = [
+            ".build/debug/Pasta",
+            ".build/release/Pasta",
+            "Pasta.app/Contents/MacOS/Pasta",
+            ".build/arm64-apple-macosx/debug/Pasta",
+            ".build/arm64-apple-macosx/release/Pasta"
+        ]
+        found = next((p for p in candidates if os.path.isfile(p)), None)
+        if found:
+            pasta_bin = found
+        else:
+            print(f"Error: Pasta binary not found at '{pasta_bin}'. Build Pasta first.")
+            sys.exit(1)
 
     result = subprocess.run([pasta_bin, "list-actions", "--all", "--markdown"], capture_output=True, text=True, check=True)
     lines = result.stdout.strip().split("\n")

@@ -29,43 +29,48 @@ log "[swift --version]"
 swift --version 2>&1 | tee -a "$REPORT"
 
 log ""
-log "--- 2. PastaTests (Debug) ---"
+log "--- 2. Swift Build (Debug & Release) ---"
+swift build 2>&1 | tee -a "$REPORT"
+swift build -c release 2>&1 | tee -a "$REPORT"
+
+log ""
+log "--- 3. PastaTests (Debug) ---"
 swift run PastaTests 2>&1 | grep -E 'Test Suite Summary:|FAIL:' | tee -a "$REPORT" || true
 
 log ""
-log "--- 3. PastaTests (Release) ---"
+log "--- 4. PastaTests (Release) ---"
 swift run -c release PastaTests 2>&1 | grep -E 'Test Suite Summary:|FAIL:' | tee -a "$REPORT" || true
 
 log ""
-log "--- 4. Section 8 Hardening Tests (Debug Binary) ---"
+log "--- 5. Section 8 Hardening Tests (Debug Binary) ---"
 PASTA_BIN=.build/debug/Pasta ./scripts/run_section8_tests.sh 2>&1 | grep -E 'Section 8 Test Results:|FAIL:' | tee -a "$REPORT" || true
 
 log ""
-log "--- 5. Build Application Bundle (./scripts/build_app.sh) ---"
+log "--- 6. Build Application Bundle (./scripts/build_app.sh) ---"
 ./scripts/build_app.sh 2>&1 | tee -a "$REPORT"
 
 log ""
-log "--- 6. Section 8 Hardening Tests (against Pasta.app) ---"
+log "--- 7. Section 8 Hardening Tests (against Pasta.app) ---"
 PASTA_BIN=Pasta.app/Contents/MacOS/Pasta ./scripts/run_section8_tests.sh 2>&1 | grep -E 'Section 8 Test Results:|FAIL:' | tee -a "$REPORT" || true
 
 log ""
-log "--- 7. Codesign Verification ---"
+log "--- 8. Codesign Verification ---"
 codesign --verify --deep --strict Pasta.app 2>&1 | tee -a "$REPORT" && log "Codesign: VALID"
 
 log ""
-log "--- 8. Pasta Doctor JSON Report (from Pasta.app) ---"
+log "--- 9. Pasta Doctor JSON Report (from Pasta.app) ---"
 Pasta.app/Contents/MacOS/Pasta doctor --json 2>&1 | tee -a "$REPORT"
 
 log ""
-log "--- 9. Icon Corner Alpha Verification ---"
+log "--- 10. Icon Corner Alpha Verification ---"
 python3 scripts/verify_app_icon.py assets/AppIcon-1024.png 2>&1 | tee -a "$REPORT"
 
 log ""
-log "--- 10. Step E2 Clean-Machine & Isolation Test (./scripts/test_isolation.sh) ---"
+log "--- 11. Step E2 Clean-Machine & Isolation Test (./scripts/test_isolation.sh) ---"
 ./scripts/test_isolation.sh 2>&1 | grep -E 'PASS:|Checked |FAILED' | tee -a "$REPORT" || true
 
 log ""
-log "--- 11. Step E4 Behavioral Completeness Gate (./scripts/verify_catalog_behavioral_coverage.py) ---"
+log "--- 12. Step E4 Behavioral Completeness Gate (./scripts/verify_catalog_behavioral_coverage.py) ---"
 PASTA_BIN=.build/debug/Pasta python3 scripts/verify_catalog_behavioral_coverage.py 2>&1 | tee -a "$REPORT"
 
 log ""
