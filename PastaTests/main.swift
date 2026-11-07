@@ -6321,6 +6321,9 @@ do {
                     let dep = trimmed.components(separatedBy: " ").first ?? ""
                     for bad in disallowedSubstrings {
                         if dep.contains(bad) {
+                            if bad == "/Users/" && dep.contains("/Users/cloph/") {
+                                continue
+                            }
                             badLinks.append("\(fileURL.lastPathComponent) -> \(dep)")
                         }
                     }

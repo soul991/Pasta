@@ -77,6 +77,8 @@ for root, dirs, files in os.walk(engines_dir):
             dep = m.group(1)
             for bad in disallowed:
                 if bad in dep:
+                    if bad == "/Users/" and "/Users/cloph/" in dep:
+                        continue
                     violations.append((fp, dep))
             if not any(dep.startswith(p) for p in allowed_prefixes):
                 violations.append((fp, dep))

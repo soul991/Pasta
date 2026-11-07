@@ -273,6 +273,29 @@ exec {sys_path} "$@"
                 if found_app != target_app:
                     print(f"  [app_bundle] Copying {found_app} to {target_app}...")
                     subprocess.run(["rsync", "-a", "--delete", found_app + "/", target_app + "/"], check=True)
+
+                # Sanitize build-machine paths and internal placeholders in app bundle
+                for root, dirs, files in os.walk(target_app):
+                    for file in files:
+                        fp = os.path.join(root, file)
+                        if is_macho(fp):
+                            # Check LC_ID_DYLIB
+                            id_res = subprocess.run(["otool", "-D", fp], capture_output=True, text=True)
+                            id_lines = id_res.stdout.strip().split("\n")[1:]
+                            if id_lines:
+                                dylib_id = id_lines[0].strip()
+                                if "/@__________________________________________________" in dylib_id:
+                                    clean_id = dylib_id[dylib_id.index("@__________________________________________________"):]
+                                    os.chmod(fp, stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
+                                    subprocess.run(["install_name_tool", "-id", clean_id, fp], capture_output=True)
+                            # Check dependencies
+                            deps = get_dependencies(fp)
+                            for dep in deps:
+                                if "/@__________________________________________________" in dep:
+                                    clean_dep = dep[dep.index("@__________________________________________________"):]
+                                    os.chmod(fp, stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
+                                    subprocess.run(["install_name_tool", "-change", dep, clean_dep, fp], capture_output=True)
+
                 exec_target = os.path.join(target_app, subpath)
                 # Create bin symlink
                 bin_sym = os.path.join(bin_dir, name)
@@ -482,7 +505,18 @@ exec "$DIR/gs-bin" "$@"
     # 3. Transitive Dylib Discovery & Collection
     print("==> Resolving and copying transitive Mach-O dynamic libraries...")
     discovered_dylibs = {}  # real_path -> (original_ref, base_name, dest_path)
-    queue = list(macho_binaries) + list(coder_so_files)
+
+    # Discover any perl bundles / mach-o files in lib/perl5
+    perl_machos = []
+    perl_lib_dest = os.path.join(lib_dir, "perl5")
+    if os.path.exists(perl_lib_dest):
+        for root, dirs, files in os.walk(perl_lib_dest):
+            for file in files:
+                full_p = os.path.join(root, file)
+                if is_macho(full_p):
+                    perl_machos.append(full_p)
+
+    queue = list(macho_binaries) + list(coder_so_files) + list(perl_machos)
     visited_macho = set()
 
     while queue:
@@ -589,6 +623,22 @@ exec "$DIR/gs-bin" "$@"
                 other_base, _ = match
                 subprocess.run(["install_name_tool", "-change", dep, f"@loader_path/../../../{other_base}", c_so], capture_output=True)
 
+    # Rewrite perl bundles in lib/perl5
+    for p_macho in perl_machos:
+        p_rpaths = get_rpaths(p_macho)
+        for rp in p_rpaths:
+            if "/opt/homebrew" in rp or "/usr/local" in rp:
+                subprocess.run(["install_name_tool", "-delete_rpath", rp, p_macho], capture_output=True)
+        rel_lib = os.path.relpath(lib_dir, os.path.dirname(p_macho))
+        subprocess.run(["install_name_tool", "-add_rpath", f"@loader_path/{rel_lib}", p_macho], capture_output=True)
+
+        deps = get_dependencies(p_macho)
+        for dep in deps:
+            match = find_matching_dylib(dep, p_rpaths)
+            if match:
+                other_base, _ = match
+                subprocess.run(["install_name_tool", "-change", dep, f"@loader_path/{rel_lib}/{other_base}", p_macho], capture_output=True)
+
     # 5. Ad-Hoc Sign with Hardened Runtime
     print("==> Signing all Mach-O binaries and dylibs with hardened runtime...")
     for _, (_, _, dest_dylib) in discovered_dylibs.items():
@@ -597,11 +647,13 @@ exec "$DIR/gs-bin" "$@"
         sign_binary(b, entitlements_file)
     for c_so in coder_so_files:
         sign_binary(c_so, entitlements_file)
+    for p in perl_machos:
+        sign_binary(p, entitlements_file)
 
     # 6. Verification Pass: Zero references to /opt/homebrew or /usr/local
     print("==> Verifying Mach-O isolation...")
     failed_checks = []
-    for f in macho_binaries + [d[2] for d in discovered_dylibs.values()] + coder_so_files:
+    for f in macho_binaries + [d[2] for d in discovered_dylibs.values()] + coder_so_files + perl_machos:
         deps = get_dependencies(f)
         for dep in deps:
             if "/opt/homebrew" in dep or "/usr/local" in dep:
