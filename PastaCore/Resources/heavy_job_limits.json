@@ -1,0 +1,47 @@
+{
+  "video": {
+    "cost_threshold": 500000000.0,
+    "duration_threshold_seconds": 600.0,
+    "codec_factors": {
+      "h264": 1.0,
+      "avc": 1.0,
+      "avc1": 1.0,
+      "hevc": 1.5,
+      "h265": 1.5,
+      "hev1": 1.5,
+      "hvc1": 1.5,
+      "prores": 0.8,
+      "vp9": 1.8,
+      "av1": 2.5,
+      "av01": 2.5,
+      "default": 1.0
+    }
+  },
+  "audio": {
+    "duration_threshold_seconds": 1800.0
+  },
+  "image": {
+    "megapixels_threshold": 50.0
+  },
+  "pdf": {
+    "pages_threshold": 100
+  },
+  "archive": {
+    "declared_size_bytes_threshold": 1073741824
+  },
+  "ocr": {
+    "pages_threshold": 20
+  },
+  "disk_safety": {
+    "safety_buffer_multiplier": 1.5,
+    "minimum_headroom_bytes": 524288000
+  },
+  "thermal": {
+    "pause_on_serious": true,
+    "pause_on_critical": true,
+    "auto_resume_on_cooldown": true
+  },
+  "concurrency": {
+    "max_concurrent_heavy_jobs": 1
+  }
+}

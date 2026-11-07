@@ -4,6 +4,7 @@ public final class JobRunner {
     public static let shared = JobRunner()
 
     private var runningProcesses: [UUID: Process] = [:]
+    private var pausedJobIds: Set<UUID> = []
     private var cancelledJobIds: Set<UUID> = []
     private let processLock = NSLock()
 
@@ -39,9 +40,13 @@ public final class JobRunner {
     public func cancel(jobId: UUID) {
         processLock.lock()
         cancelledJobIds.insert(jobId)
-        let proc = runningProcesses[jobId]
+        pausedJobIds.remove(jobId)
+        let proc = runningProcesses.removeValue(forKey: jobId)
         processLock.unlock()
         if let proc = proc {
+            if proc.isRunning && proc.processIdentifier > 0 {
+                kill(proc.processIdentifier, SIGCONT)
+            }
             terminateGracefully(proc)
         }
         try? FileManager.default.removeItem(atPath: "/tmp/Pasta_lo_\(jobId.uuidString)")
@@ -57,8 +62,13 @@ public final class JobRunner {
         for (id, _) in runningProcesses {
             cancelledJobIds.insert(id)
         }
+        pausedJobIds.removeAll()
+        runningProcesses.removeAll()
         processLock.unlock()
         for proc in procs {
+            if proc.isRunning && proc.processIdentifier > 0 {
+                kill(proc.processIdentifier, SIGCONT)
+            }
             terminateGracefully(proc)
         }
     }
@@ -67,6 +77,43 @@ public final class JobRunner {
         processLock.lock()
         defer { processLock.unlock() }
         return runningProcesses[jobId]?.isRunning ?? false
+    }
+
+    public func isJobPaused(_ jobId: UUID) -> Bool {
+        processLock.lock()
+        defer { processLock.unlock() }
+        return pausedJobIds.contains(jobId)
+    }
+
+    public func trackExternalProcess(_ process: Process, for jobId: UUID) {
+        _ = trackProcess(process, for: jobId)
+    }
+
+    public func pause(jobId: UUID) throws {
+        processLock.lock()
+        defer { processLock.unlock() }
+        guard let proc = runningProcesses[jobId], proc.isRunning else {
+            return
+        }
+        let pid = proc.processIdentifier
+        if pid > 0 {
+            kill(pid, SIGSTOP)
+            pausedJobIds.insert(jobId)
+        }
+    }
+
+    public func resume(jobId: UUID) throws {
+        processLock.lock()
+        defer { processLock.unlock() }
+        guard let proc = runningProcesses[jobId], proc.isRunning else {
+            pausedJobIds.remove(jobId)
+            return
+        }
+        let pid = proc.processIdentifier
+        if pid > 0 {
+            kill(pid, SIGCONT)
+            pausedJobIds.remove(jobId)
+        }
     }
 
     public func terminateGracefully(_ proc: Process, gracePeriod: TimeInterval = 2.0) {
@@ -478,6 +525,7 @@ extension JobRunner {
         }
 
         let process = Process()
+        process.qualityOfService = .utility
         process.executableURL = toolURL
         process.arguments = processArgs
         process.standardInput = FileHandle.nullDevice
@@ -873,6 +921,7 @@ extension JobRunner {
         }
 
         let process = Process()
+        process.qualityOfService = .utility
         process.executableURL = toolURL
         process.arguments = processArgs
         process.standardInput = FileHandle.nullDevice

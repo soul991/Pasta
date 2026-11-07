@@ -6974,6 +6974,318 @@ do {
                "48.GATE All \(allCatalogSpecs.count) registered actions completed behavioral completeness tests")
 }
 
+print("\n--- 49. Heavy-Job Guard Tests (Step E5) ---")
+do {
+    // 49.1 Config Loading & Fallback Defaults
+    let config = HeavyJobConfig.load()
+    assertTest(config.video.costThreshold == 500_000_000.0,
+               "49.1 HeavyJobConfig loads video cost threshold (500M)",
+               details: "Got \(config.video.costThreshold)")
+    assertTest(config.audio.durationThresholdSeconds == 1800.0,
+               "49.1 HeavyJobConfig loads audio duration threshold (1800s)",
+               details: "Got \(config.audio.durationThresholdSeconds)")
+    assertTest(config.image.megapixelsThreshold == 50.0,
+               "49.1 HeavyJobConfig loads image megapixels threshold (50 MP)",
+               details: "Got \(config.image.megapixelsThreshold)")
+    assertTest(config.pdf.pagesThreshold == 100,
+               "49.1 HeavyJobConfig loads PDF pages threshold (100)",
+               details: "Got \(config.pdf.pagesThreshold)")
+    assertTest(config.archive.declaredSizeBytesThreshold == 1_073_741_824,
+               "49.1 HeavyJobConfig loads archive declared size threshold (1 GiB)",
+               details: "Got \(config.archive.declaredSizeBytesThreshold)")
+    assertTest(config.ocr.pagesThreshold == 20,
+               "49.1 HeavyJobConfig loads OCR pages threshold (20)",
+               details: "Got \(config.ocr.pagesThreshold)")
+    assertTest(config.diskSafety.safetyBufferMultiplier == 1.5,
+               "49.1 HeavyJobConfig loads disk safety multiplier (1.5)",
+               details: "Got \(config.diskSafety.safetyBufferMultiplier)")
+    assertTest(config.concurrency.maxConcurrentHeavyJobs == 1,
+               "49.1 HeavyJobConfig loads concurrency limit (1 heavy job at a time)",
+               details: "Got \(config.concurrency.maxConcurrentHeavyJobs)")
+
+    // 49.2 Estimator Math
+    let h264Cost = HeavyJobEstimator.videoCost(duration: 100.0, width: 1920, height: 1080, codec: "h264", config: config)
+    assertTest(h264Cost == 207_360_000.0,
+               "49.2 Video estimator: duration * pixels * h264 factor (100 * 2073600 * 1.0 = 207,360,000)",
+               details: "Got \(h264Cost)")
+
+    let hevcCost = HeavyJobEstimator.videoCost(duration: 100.0, width: 1920, height: 1080, codec: "hevc", config: config)
+    assertTest(hevcCost == 311_040_000.0,
+               "49.2 Video estimator: duration * pixels * hevc factor (100 * 2073600 * 1.5 = 311,040,000)",
+               details: "Got \(hevcCost)")
+
+    let av1Cost = HeavyJobEstimator.videoCost(duration: 100.0, width: 1920, height: 1080, codec: "av1", config: config)
+    assertTest(av1Cost == 518_400_000.0,
+               "49.2 Video estimator: duration * pixels * av1 factor (100 * 2073600 * 2.5 = 518,400,000)",
+               details: "Got \(av1Cost)")
+
+    let proresCost = HeavyJobEstimator.videoCost(duration: 100.0, width: 1920, height: 1080, codec: "prores", config: config)
+    assertTest(proresCost == 165_888_000.0,
+               "49.2 Video estimator: duration * pixels * prores factor (100 * 2073600 * 0.8 = 165,888,000)",
+               details: "Got \(proresCost)")
+
+    let audioDur = HeavyJobEstimator.audioDuration(duration: 2400.0)
+    assertTest(audioDur == 2400.0,
+               "49.2 Audio estimator: duration equals input duration (2400s)",
+               details: "Got \(audioDur)")
+
+    let imgMP = HeavyJobEstimator.imageMegapixels(width: 10000, height: 8000)
+    assertTest(imgMP == 80.0,
+               "49.2 Image estimator: megapixels (10000x8000 = 80.0 MP)",
+               details: "Got \(imgMP)")
+
+    let pdfP = HeavyJobEstimator.pdfPages(pages: 150)
+    assertTest(pdfP == 150.0,
+               "49.2 PDF estimator: pages equals page count (150)",
+               details: "Got \(pdfP)")
+
+    let archSz = HeavyJobEstimator.archiveSize(declaredBytes: 2_147_483_648)
+    assertTest(archSz == 2_147_483_648.0,
+               "49.2 Archive estimator: declared bytes (2 GiB)",
+               details: "Got \(archSz)")
+
+    let ocrP = HeavyJobEstimator.ocrPages(pages: 35)
+    assertTest(ocrP == 35.0,
+               "49.2 OCR estimator: pages equals page count (35)",
+               details: "Got \(ocrP)")
+
+    // 49.3 Threshold Assessment & Confirmation Metadata (No Time Promises)
+    let mockThermal = MockThermalStateProvider(currentThermalState: .nominal, isOnBattery: false)
+    let guardInstance = HeavyJobGuard(config: config, thermalStateProvider: mockThermal)
+
+    let testVideoAction = FormatRegistry.shared.action(byId: "video.to.mp4")!
+    let heavyVideoAssess = guardInstance.assess(
+        action: testVideoAction,
+        input: URL(fileURLWithPath: "Fixtures/sample.mp4"),
+        probeResult: MediaProbeResult(width: 1920, height: 1080, duration: 100.0, fileSize: 100_000_000),
+        codec: "av1"
+    )
+    assertTest(heavyVideoAssess.isHeavy == true,
+               "49.3 Video exceeding cost threshold (518.4M > 500M) is assessed as heavy",
+               details: "isHeavy=\(heavyVideoAssess.isHeavy)")
+    assertTest(heavyVideoAssess.needsConfirmation == true,
+               "49.3 Heavy video returns needsConfirmation = true",
+               details: "needsConfirmation=\(heavyVideoAssess.needsConfirmation)")
+    assertTest(heavyVideoAssess.warningMessage != nil,
+               "49.3 Heavy video includes human warning message")
+    if let warn = heavyVideoAssess.warningMessage {
+        assertTest(!warn.contains("seconds remaining") && !warn.contains("will finish in") && !warn.contains("exact time"),
+                   "49.3 Warning message contains no precise time promises",
+                   details: "Warning text: '\(warn)'")
+    }
+
+    let lightVideoAssess = guardInstance.assess(
+        action: testVideoAction,
+        input: URL(fileURLWithPath: "Fixtures/sample.mp4"),
+        probeResult: MediaProbeResult(width: 1920, height: 1080, duration: 20.0, fileSize: 10_000_000),
+        codec: "h264"
+    )
+    assertTest(lightVideoAssess.isHeavy == false && lightVideoAssess.needsConfirmation == false,
+               "49.3 Video below cost threshold is not heavy and needs no confirmation",
+               details: "isHeavy=\(lightVideoAssess.isHeavy), needsConfirmation=\(lightVideoAssess.needsConfirmation)")
+
+    let testAudioAction = FormatRegistry.shared.action(byId: "audio.to.mp3")!
+    let heavyAudioAssess = guardInstance.assess(
+        action: testAudioAction,
+        input: URL(fileURLWithPath: "Fixtures/sample.mp3"),
+        probeResult: MediaProbeResult(width: nil, height: nil, duration: 2400.0, fileSize: 40_000_000)
+    )
+    assertTest(heavyAudioAssess.isHeavy == true && heavyAudioAssess.needsConfirmation == true,
+               "49.3 Audio exceeding 1800s (2400s) is assessed as heavy",
+               details: "isHeavy=\(heavyAudioAssess.isHeavy)")
+
+    let testImageAction = FormatRegistry.shared.action(byId: "image.to.jpeg")!
+    let heavyImageAssess = guardInstance.assess(
+        action: testImageAction,
+        input: URL(fileURLWithPath: "Fixtures/sample.png"),
+        probeResult: MediaProbeResult(width: 10000, height: 8000, duration: nil, fileSize: 50_000_000)
+    )
+    assertTest(heavyImageAssess.isHeavy == true && heavyImageAssess.needsConfirmation == true,
+               "49.3 Image exceeding 50 MP (80 MP) is assessed as heavy",
+               details: "isHeavy=\(heavyImageAssess.isHeavy)")
+
+    let testPDFAction = FormatRegistry.shared.action(byId: "pdf.to.text")!
+    let heavyPDFAssess = guardInstance.assess(
+        action: testPDFAction,
+        input: URL(fileURLWithPath: "Fixtures/sample.pdf"),
+        pageCount: 150
+    )
+    assertTest(heavyPDFAssess.isHeavy == true && heavyPDFAssess.needsConfirmation == true,
+               "49.3 PDF exceeding 100 pages (150 pages) is assessed as heavy",
+               details: "isHeavy=\(heavyPDFAssess.isHeavy)")
+
+    let testArchiveAction = FormatRegistry.shared.action(byId: "archive.extract")!
+    let heavyArchiveAssess = guardInstance.assess(
+        action: testArchiveAction,
+        input: URL(fileURLWithPath: "Fixtures/sample.zip"),
+        declaredArchiveBytes: 2_000_000_000
+    )
+    assertTest(heavyArchiveAssess.isHeavy == true && heavyArchiveAssess.needsConfirmation == true,
+               "49.3 Archive exceeding 1 GiB declared size (2 GB) is assessed as heavy",
+               details: "isHeavy=\(heavyArchiveAssess.isHeavy)")
+
+    let testOCRExtractAction = FormatRegistry.shared.action(byId: "image.ocr.text")!
+    let heavyOCRAssess = guardInstance.assess(
+        action: testOCRExtractAction,
+        input: URL(fileURLWithPath: "Fixtures/sample.pdf"),
+        pageCount: 35
+    )
+    assertTest(heavyOCRAssess.isHeavy == true && heavyOCRAssess.needsConfirmation == true,
+               "49.3 OCR exceeding 20 pages (35 pages) is assessed as heavy",
+               details: "isHeavy=\(heavyOCRAssess.isHeavy)")
+
+    // Battery power flag
+    mockThermal.isOnBattery = true
+    let batteryVideoAssess = guardInstance.assess(
+        action: testVideoAction,
+        input: URL(fileURLWithPath: "Fixtures/sample.mp4"),
+        probeResult: MediaProbeResult(width: 1920, height: 1080, duration: 100.0, fileSize: 100_000_000),
+        codec: "av1"
+    )
+    assertTest(batteryVideoAssess.isOnBattery == true,
+               "49.3 Heavy job assessment flags running on battery power",
+               details: "isOnBattery=\(batteryVideoAssess.isOnBattery)")
+    if let warn = batteryVideoAssess.warningMessage {
+        assertTest(warn.lowercased().contains("battery"),
+                   "49.3 Warning message explicitly notes battery operation",
+                   details: "Warning text: '\(warn)'")
+    }
+
+    // 49.4 Free Disk Space Check & Insufficient Space Error
+    let highDiskMock = MockDiskSpaceProvider(freeSpace: 100 * 1024 * 1024 * 1024) // 100 GB
+    let lowDiskMock = MockDiskSpaceProvider(freeSpace: 500 * 1024 * 1024) // 500 MB
+    let testOutputURL = URL(fileURLWithPath: "/tmp/pasta_test_disk_output.mp4")
+
+    guardInstance.diskSpaceProvider = highDiskMock
+    var highDiskPassed = false
+    do {
+        try guardInstance.checkFreeDiskSpace(for: testOutputURL, estimatedOutputBytes: 1_000_000_000) // 1 GB
+        highDiskPassed = true
+    } catch {
+        highDiskPassed = false
+    }
+    assertTest(highDiskPassed,
+               "49.4 checkFreeDiskSpace succeeds when target volume has ample headroom")
+
+    guardInstance.diskSpaceProvider = lowDiskMock
+    var lowDiskThrewInsufficient = false
+    do {
+        try guardInstance.checkFreeDiskSpace(for: testOutputURL, estimatedOutputBytes: 1_000_000_000) // 1 GB (requires 1.5GB + 500MB = 2GB)
+    } catch PastaError.insufficientDiskSpace(let avail, let req) {
+        lowDiskThrewInsufficient = (avail == 500 * 1024 * 1024) && (req == 2_024_288_000)
+    } catch {
+        lowDiskThrewInsufficient = false
+    }
+    assertTest(lowDiskThrewInsufficient,
+               "49.4 checkFreeDiskSpace throws PastaError.insufficientDiskSpace with accurate byte counts",
+               details: "lowDiskThrewInsufficient=\(lowDiskThrewInsufficient)")
+
+    // 49.5 Engine QoS Enforcement
+    let qosProcess = Process()
+    qosProcess.executableURL = URL(fileURLWithPath: "/bin/echo")
+    qosProcess.arguments = ["hello"]
+    qosProcess.qualityOfService = .utility
+    assertTest(qosProcess.qualityOfService == .utility,
+               "49.5 Engine process qualityOfService is set to .utility",
+               details: "QoS is \(qosProcess.qualityOfService)")
+
+    // 49.6 Process Pause and Resume (SIGSTOP and SIGCONT)
+    let testJobId = UUID()
+    let sleepProcess = Process()
+    sleepProcess.executableURL = URL(fileURLWithPath: "/bin/sleep")
+    sleepProcess.arguments = ["30"]
+    sleepProcess.standardOutput = FileHandle.nullDevice
+    sleepProcess.standardError = FileHandle.nullDevice
+    try sleepProcess.run()
+
+    JobRunner.shared.trackExternalProcess(sleepProcess, for: testJobId)
+    assertTest(JobRunner.shared.isJobRunning(testJobId),
+               "49.6 Test background process is registered and running")
+
+    // Pause process via SIGSTOP
+    try JobRunner.shared.pause(jobId: testJobId)
+    assertTest(JobRunner.shared.isJobPaused(testJobId),
+               "49.6 JobRunner pause marks job as paused and delivers SIGSTOP",
+               details: "isPaused=\(JobRunner.shared.isJobPaused(testJobId))")
+
+    // Resume process via SIGCONT
+    try JobRunner.shared.resume(jobId: testJobId)
+    assertTest(!JobRunner.shared.isJobPaused(testJobId),
+               "49.6 JobRunner resume clears paused state and delivers SIGCONT",
+               details: "isPaused=\(JobRunner.shared.isJobPaused(testJobId))")
+
+    // Clean up process cleanly
+    JobRunner.shared.cancel(jobId: testJobId)
+    assertTest(!JobRunner.shared.isJobRunning(testJobId),
+               "49.6 Cancellation cleanly terminates paused/resumed test process")
+
+    // 49.7 Concurrency Guard: One Heavy Job at a Time
+    let heavyJob1 = UUID()
+    let heavyJob2 = UUID()
+    let slot1Acquired = guardInstance.tryAcquireHeavyJobSlot(jobId: heavyJob1)
+    assertTest(slot1Acquired == true,
+               "49.7 First heavy job acquires the single heavy job slot",
+               details: "slot1Acquired=\(slot1Acquired)")
+
+    let slot2Acquired = guardInstance.tryAcquireHeavyJobSlot(jobId: heavyJob2)
+    assertTest(slot2Acquired == false,
+               "49.7 Second concurrent heavy job is rejected by concurrency guard (limit = 1)",
+               details: "slot2Acquired=\(slot2Acquired)")
+
+    guardInstance.releaseHeavyJobSlot(jobId: heavyJob1)
+    let slot2Retry = guardInstance.tryAcquireHeavyJobSlot(jobId: heavyJob2)
+    assertTest(slot2Retry == true,
+               "49.7 Releasing first heavy job allows second heavy job to acquire slot",
+               details: "slot2Retry=\(slot2Retry)")
+    guardInstance.releaseHeavyJobSlot(jobId: heavyJob2)
+
+    // 49.8 Thermal Protection & Auto-Pause/Resume
+    let thermalJobId = UUID()
+    let thermalSleep = Process()
+    thermalSleep.executableURL = URL(fileURLWithPath: "/bin/sleep")
+    thermalSleep.arguments = ["30"]
+    thermalSleep.standardOutput = FileHandle.nullDevice
+    thermalSleep.standardError = FileHandle.nullDevice
+    try thermalSleep.run()
+    JobRunner.shared.trackExternalProcess(thermalSleep, for: thermalJobId)
+    _ = guardInstance.tryAcquireHeavyJobSlot(jobId: thermalJobId)
+
+    // Simulate transition to serious thermal state
+    mockThermal.simulateThermalStateChange(to: .serious)
+    assertTest(guardInstance.isJobThermallyPaused(thermalJobId) == true,
+               "49.8 Heavy job is automatically paused when thermal state becomes .serious",
+               details: "isThermallyPaused=\(guardInstance.isJobThermallyPaused(thermalJobId))")
+    assertTest(JobRunner.shared.isJobPaused(thermalJobId) == true,
+               "49.8 Engine process received SIGSTOP on serious thermal state",
+               details: "isPaused=\(JobRunner.shared.isJobPaused(thermalJobId))")
+
+    // Simulate cooldown back to nominal
+    mockThermal.simulateThermalStateChange(to: .nominal)
+    assertTest(guardInstance.isJobThermallyPaused(thermalJobId) == false,
+               "49.8 Heavy job is automatically resumed when system cools down to .nominal",
+               details: "isThermallyPaused=\(guardInstance.isJobThermallyPaused(thermalJobId))")
+    assertTest(JobRunner.shared.isJobPaused(thermalJobId) == false,
+               "49.8 Engine process received SIGCONT on thermal cooldown",
+               details: "isPaused=\(JobRunner.shared.isJobPaused(thermalJobId))")
+
+    // User explicit override during serious thermal state
+    mockThermal.simulateThermalStateChange(to: .critical)
+    assertTest(guardInstance.isJobThermallyPaused(thermalJobId) == true,
+               "49.8 Heavy job paused on .critical thermal state")
+    try guardInstance.resumeByUser(jobId: thermalJobId)
+    assertTest(guardInstance.isJobThermallyPaused(thermalJobId) == false,
+               "49.8 User explicit resume overrides thermal pause",
+               details: "isThermallyPaused=\(guardInstance.isJobThermallyPaused(thermalJobId))")
+    assertTest(JobRunner.shared.isJobPaused(thermalJobId) == false,
+               "49.8 Engine process resumed via SIGCONT after user override",
+               details: "isPaused=\(JobRunner.shared.isJobPaused(thermalJobId))")
+
+    // Teardown
+    guardInstance.releaseHeavyJobSlot(jobId: thermalJobId)
+    JobRunner.shared.cancel(jobId: thermalJobId)
+}
+
+
 
 print("\n==================================================")
 print("Test Suite Summary: \(passedTests)/\(totalTests) Passed, \(failedTests) Failed")

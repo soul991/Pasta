@@ -8,6 +8,9 @@ public enum PastaError: LocalizedError, Equatable {
     case invalidInput(String)
     case cancelled
     case timedOut(tool: String)
+    case insufficientDiskSpace(availableBytes: Int64, requiredBytes: Int64)
+    case heavyJobConfirmationRequired(reason: String)
+    case heavyJobBusy
 
     public var errorDescription: String? {
         switch self {
@@ -25,6 +28,14 @@ public enum PastaError: LocalizedError, Equatable {
             return "Conversion was cancelled"
         case .timedOut(let tool):
             return "Execution of '\(tool)' timed out"
+        case .insufficientDiskSpace(let avail, let req):
+            let availMB = avail / (1024 * 1024)
+            let reqMB = req / (1024 * 1024)
+            return "Insufficient disk space: \(availMB) MB available, but estimated requirement is \(reqMB) MB"
+        case .heavyJobConfirmationRequired(let reason):
+            return "Heavy job confirmation required: \(reason)"
+        case .heavyJobBusy:
+            return "Another heavy conversion job is already in progress. Only one heavy job may run at a time."
         }
     }
 }
