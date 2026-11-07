@@ -23,6 +23,8 @@ public final class PreferencesManager {
     private let maxConcurrentJobsKey = "pasta_max_concurrent_jobs"
     private let recentConversionsEnabledKey = "pasta_recent_conversions_enabled"
     private let recentConversionsStoreFullPathKey = "pasta_recent_conversions_store_full_path"
+    private let deleteOriginalKey = "pasta_delete_original_enabled"
+    private let deleteOriginalConfirmationKey = "pasta_delete_original_confirmation_record"
 
     public init() {}
 
@@ -205,6 +207,58 @@ public final class PreferencesManager {
         set {
             UserDefaults.standard.set(newValue, forKey: recentConversionsStoreFullPathKey)
         }
+    }
+
+    // MARK: - Delete-Original Double-Confirmation Settings
+
+    /// Whether delete-original is enabled. Can only evaluate to true if backed by a valid stored confirmation.
+    public var deleteOriginalEnabled: Bool {
+        get {
+            guard UserDefaults.standard.bool(forKey: deleteOriginalKey) else { return false }
+            guard let record = UserDefaults.standard.string(forKey: deleteOriginalConfirmationKey),
+                  DeleteOriginalGuard.validateConfirmationRecord(record) else {
+                return false
+            }
+            return true
+        }
+        set {
+            // Cannot enable without valid stored confirmation
+            if newValue {
+                guard hasValidDeleteOriginalConfirmation else { return }
+                UserDefaults.standard.set(true, forKey: deleteOriginalKey)
+            } else {
+                UserDefaults.standard.set(false, forKey: deleteOriginalKey)
+            }
+        }
+    }
+
+    /// Checks whether a valid cryptographic confirmation record exists in stored preferences.
+    public var hasValidDeleteOriginalConfirmation: Bool {
+        guard let record = UserDefaults.standard.string(forKey: deleteOriginalConfirmationKey) else {
+            return false
+        }
+        return DeleteOriginalGuard.validateConfirmationRecord(record)
+    }
+
+    /// Enables delete-original with required confirmation phrase.
+    @discardableResult
+    public func enableDeleteOriginal(confirmationPhrase: String) -> Bool {
+        guard confirmationPhrase == DeleteOriginalGuard.confirmationPhrase else {
+            return false
+        }
+        let record = DeleteOriginalGuard.generateConfirmationRecord(confirmedAt: Date(), phrase: confirmationPhrase)
+        guard !record.isEmpty, DeleteOriginalGuard.validateConfirmationRecord(record) else {
+            return false
+        }
+        UserDefaults.standard.set(record, forKey: deleteOriginalConfirmationKey)
+        UserDefaults.standard.set(true, forKey: deleteOriginalKey)
+        return true
+    }
+
+    /// Disables delete-original and clears stored confirmation.
+    public func disableDeleteOriginal() {
+        UserDefaults.standard.set(false, forKey: deleteOriginalKey)
+        UserDefaults.standard.removeObject(forKey: deleteOriginalConfirmationKey)
     }
 
     // MARK: - Last-Used Parameters Per Action

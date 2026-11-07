@@ -274,6 +274,7 @@
 | **Step E3** | Quality Policy & Compression Suite (PR #16) | **Complete** | All 111 catalog actions mapped to quality classes in `PastaCore/QualityPolicy.swift` |
 | **Step E4** | Behavioral Completeness of Action Catalog (PR #17) | **Complete** | All 111 actions have verified end-to-end execution, corrupt/missing input tests |
 | **Step E5** | Heavy-job guard (logic only) | **Complete** | Limits config JSON, estimator math, disk safety check, QoS .utility, pause/resume SIGSTOP/SIGCONT, thermal protection (1,331 local / 1,352 CI passed) |
+| **Step E6** | Delete-original logic (no UI yet) | **Complete** | Original moved to Trash via `TrashProvider`; verified output check (exists, non-zero, type match, job success); skip reasons for collision, read-only volume, untrashable, modified source; double-confirmation preference guard with cryptographic signature (1,361 local passed) |
 
 
 

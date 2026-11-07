@@ -7285,6 +7285,330 @@ do {
     JobRunner.shared.cancel(jobId: thermalJobId)
 }
 
+// --- 50. Delete-Original Logic & Safety Verification Gate (Step E6) ---
+do {
+    print("\n--- 50. Delete-Original Logic & Safety Verification Gate (Step E6) ---")
+
+    let prefs = PreferencesManager()
+    let mockTrash = MockTrashProvider()
+    DeleteOriginalGuard.sharedTrashProvider = mockTrash
+
+    // 50.1 Stored Confirmation Requirement & Tamper Guard
+    prefs.disableDeleteOriginal()
+    assertTest(prefs.deleteOriginalEnabled == false,
+               "50.1 Delete-original is disabled by default")
+
+    // Direct defaults write simulation without confirmation
+    UserDefaults.standard.set(true, forKey: "pasta_delete_original_enabled")
+    assertTest(prefs.deleteOriginalEnabled == false,
+               "50.1 Direct defaults write without confirmation record does NOT enable delete-original")
+
+    // Tampered confirmation record
+    UserDefaults.standard.set("tampered_garbage_token", forKey: "pasta_delete_original_confirmation_record")
+    assertTest(prefs.deleteOriginalEnabled == false,
+               "50.1 Tampered confirmation record is rejected; delete-original remains disabled")
+
+    // Invalid confirmation phrase
+    let wrongPhraseResult = prefs.enableDeleteOriginal(confirmationPhrase: "Yes please delete files")
+    assertTest(wrongPhraseResult == false && prefs.deleteOriginalEnabled == false,
+               "50.1 Arbitrary confirmation phrase is rejected")
+
+    // Legitimate user confirmation with exact required phrase
+    let validEnable = prefs.enableDeleteOriginal(confirmationPhrase: DeleteOriginalGuard.confirmationPhrase)
+    assertTest(validEnable == true && prefs.deleteOriginalEnabled == true,
+               "50.1 Valid confirmation phrase enables deleteOriginalEnabled with valid cryptographic token")
+    assertTest(prefs.hasValidDeleteOriginalConfirmation == true,
+               "50.1 hasValidDeleteOriginalConfirmation reports true for valid stored confirmation")
+
+    // Disabling clears both flag and token
+    prefs.disableDeleteOriginal()
+    assertTest(prefs.deleteOriginalEnabled == false && prefs.hasValidDeleteOriginalConfirmation == false,
+               "50.1 Disabling delete-original clears both preference flag and confirmation token")
+
+    // Re-enable for subsequent verification tests
+    _ = prefs.enableDeleteOriginal(confirmationPhrase: DeleteOriginalGuard.confirmationPhrase)
+
+    // Setup temporary files for testing verification rules
+    let tempDir = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("pasta_sec50_\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+    defer {
+        try? FileManager.default.removeItem(at: tempDir)
+    }
+
+    let sourceFile = tempDir.appendingPathComponent("sample_source.txt")
+    try "Original content for delete test".data(using: .utf8)?.write(to: sourceFile)
+
+    // 50.2 Pre-conversion Snapshot
+    let snapshotOpt = SourceSnapshot.capture(for: sourceFile)
+    assertTest(snapshotOpt != nil, "50.2 Source snapshot captures positive file size")
+    let snapshot = snapshotOpt ?? SourceSnapshot(url: sourceFile, fileSize: 10, modificationDate: Date())
+    assertTest(snapshot.verifyUnchanged(against: sourceFile) == true,
+               "50.2 Source snapshot verifies unchanged for identical file")
+
+    // 50.3 Output Missing Gate
+    let missingOutput = tempDir.appendingPathComponent("nonexistent_output.png")
+    let missingDecision = DeleteOriginalGuard.assess(
+        source: sourceFile,
+        output: missingOutput,
+        expectedExtension: "png",
+        snapshot: snapshot,
+        jobStatus: .success,
+        preferences: prefs,
+        trashProvider: mockTrash
+    )
+    assertTest(missingDecision == .rejected(.outputMissing(missingOutput)),
+               "50.3 Missing output file fails assessment with .outputMissing; original is protected",
+               details: "\(missingDecision)")
+    let missingExec = DeleteOriginalGuard.execute(
+        source: sourceFile,
+        output: missingOutput,
+        expectedExtension: "png",
+        snapshot: snapshot,
+        jobStatus: .success,
+        preferences: prefs,
+        trashProvider: mockTrash
+    )
+    assertTest(missingExec == .skipped(source: sourceFile, reason: .outputMissing(missingOutput)),
+               "50.3 Missing output results in .skipped; mockTrash received no calls")
+    assertTest(mockTrash.trashedURLs.isEmpty, "50.3 Trash provider was not called for missing output")
+
+    // 50.4 Zero-Byte Output Gate
+    let zeroByteOutput = tempDir.appendingPathComponent("zero_output.png")
+    FileManager.default.createFile(atPath: zeroByteOutput.path, contents: Data())
+    let zeroByteDecision = DeleteOriginalGuard.assess(
+        source: sourceFile,
+        output: zeroByteOutput,
+        expectedExtension: "png",
+        snapshot: snapshot,
+        jobStatus: .success,
+        preferences: prefs,
+        trashProvider: mockTrash
+    )
+    assertTest(zeroByteDecision == .rejected(.outputZeroBytes(zeroByteOutput)),
+               "50.4 Zero-byte output fails assessment with .outputZeroBytes; original is protected",
+               details: "\(zeroByteDecision)")
+    let zeroByteExec = DeleteOriginalGuard.execute(
+        source: sourceFile,
+        output: zeroByteOutput,
+        expectedExtension: "png",
+        snapshot: snapshot,
+        jobStatus: .success,
+        preferences: prefs,
+        trashProvider: mockTrash
+    )
+    assertTest(zeroByteExec == .skipped(source: sourceFile, reason: .outputZeroBytes(zeroByteOutput)),
+               "50.4 Zero-byte output results in .skipped; original remains intact")
+
+    // 50.5 Output Type Mismatch Gate
+    let mismatchedOutput = tempDir.appendingPathComponent("mismatched_output.txt")
+    try "Non-empty content".data(using: .utf8)?.write(to: mismatchedOutput)
+    let mismatchDecision = DeleteOriginalGuard.assess(
+        source: sourceFile,
+        output: mismatchedOutput,
+        expectedExtension: "png",
+        snapshot: snapshot,
+        jobStatus: .success,
+        preferences: prefs,
+        trashProvider: mockTrash
+    )
+    assertTest(mismatchDecision == .rejected(.outputTypeMismatch(expected: "png", actual: "txt")),
+               "50.5 Mismatched output extension fails assessment with .outputTypeMismatch",
+               details: "\(mismatchDecision)")
+    let mismatchExec = DeleteOriginalGuard.execute(
+        source: sourceFile,
+        output: mismatchedOutput,
+        expectedExtension: "png",
+        snapshot: snapshot,
+        jobStatus: .success,
+        preferences: prefs,
+        trashProvider: mockTrash
+    )
+    assertTest(mismatchExec == .skipped(source: sourceFile, reason: .outputTypeMismatch(expected: "png", actual: "txt")),
+               "50.5 Mismatched output results in .skipped; original remains intact")
+
+    // 50.6 Job Failed Gate
+    let validOutput = tempDir.appendingPathComponent("valid_output.png")
+    try "Non-empty png data".data(using: .utf8)?.write(to: validOutput)
+    let failedJobDecision = DeleteOriginalGuard.assess(
+        source: sourceFile,
+        output: validOutput,
+        expectedExtension: "png",
+        snapshot: snapshot,
+        jobStatus: .failed(exitCode: 1, errorOutput: "Conversion error"),
+        preferences: prefs,
+        trashProvider: mockTrash
+    )
+    assertTest(failedJobDecision == .rejected(.jobFailed("Conversion error")),
+               "50.6 Non-zero exit code / job failure blocks delete-original; original is protected",
+               details: "\(failedJobDecision)")
+
+    // 50.7 Job Cancelled Gate
+    let cancelledDecision = DeleteOriginalGuard.assess(
+        source: sourceFile,
+        output: validOutput,
+        expectedExtension: "png",
+        snapshot: snapshot,
+        jobStatus: .cancelled,
+        preferences: prefs,
+        trashProvider: mockTrash
+    )
+    assertTest(cancelledDecision == .rejected(.jobCancelled),
+               "50.7 Cancelled job blocks delete-original; original is protected",
+               details: "\(cancelledDecision)")
+
+    // 50.8 Source Equals Output Collision Gate
+    let collisionDecision = DeleteOriginalGuard.assess(
+        source: sourceFile,
+        output: sourceFile,
+        expectedExtension: "txt",
+        snapshot: snapshot,
+        jobStatus: .success,
+        preferences: prefs,
+        trashProvider: mockTrash
+    )
+    assertTest(collisionDecision == .rejected(.sourceEqualsOutput),
+               "50.8 Source equals output collision is detected and rejected with .sourceEqualsOutput",
+               details: "\(collisionDecision)")
+
+    // 50.9 Read-Only Volume / Permissions Gate
+    mockTrash.readOnlyURLs.insert(sourceFile)
+    let readOnlyDecision = DeleteOriginalGuard.assess(
+        source: sourceFile,
+        output: validOutput,
+        expectedExtension: "png",
+        snapshot: snapshot,
+        jobStatus: .success,
+        preferences: prefs,
+        trashProvider: mockTrash
+    )
+    assertTest(readOnlyDecision == .rejected(.readOnlyVolume),
+               "50.9 Read-only volume blocks delete-original with .readOnlyVolume",
+               details: "\(readOnlyDecision)")
+    mockTrash.readOnlyURLs.remove(sourceFile)
+
+    mockTrash.untrashableURLs.insert(sourceFile)
+    let untrashableDecision = DeleteOriginalGuard.assess(
+        source: sourceFile,
+        output: validOutput,
+        expectedExtension: "png",
+        snapshot: snapshot,
+        jobStatus: .success,
+        preferences: prefs,
+        trashProvider: mockTrash
+    )
+    assertTest(untrashableDecision == .rejected(.cannotTrash("Source file cannot be moved to Trash on this filesystem")),
+               "50.9 Untrashable source file is skipped with .cannotTrash",
+               details: "\(untrashableDecision)")
+    mockTrash.untrashableURLs.remove(sourceFile)
+
+    // 50.10 Source Changed During Conversion Gate
+    let modifiedSourceFile = tempDir.appendingPathComponent("mod_source.txt")
+    try "Initial content".data(using: .utf8)?.write(to: modifiedSourceFile)
+    let modSnapshotOpt = SourceSnapshot.capture(for: modifiedSourceFile)
+    let modSnapshot = modSnapshotOpt ?? SourceSnapshot(url: modifiedSourceFile, fileSize: 10, modificationDate: Date())
+    // Simulate source file being modified while conversion ran
+    try "Altered content that changed file size and checksum".data(using: .utf8)?.write(to: modifiedSourceFile)
+
+    let modifiedDecision = DeleteOriginalGuard.assess(
+        source: modifiedSourceFile,
+        output: validOutput,
+        expectedExtension: "png",
+        snapshot: modSnapshot,
+        jobStatus: .success,
+        preferences: prefs,
+        trashProvider: mockTrash
+    )
+    assertTest(modifiedDecision == .rejected(.sourceModifiedDuringConversion(reason: "File size or checksum changed during conversion")),
+               "50.10 Source file modified during conversion blocks deletion with .sourceModifiedDuringConversion",
+               details: "\(modifiedDecision)")
+
+    // 50.11 Verified Success & Trashing
+    mockTrash.trashedURLs.removeAll()
+    let successExec = DeleteOriginalGuard.execute(
+        source: sourceFile,
+        output: validOutput,
+        expectedExtension: "png",
+        snapshot: snapshot,
+        jobStatus: .success,
+        preferences: prefs,
+        trashProvider: mockTrash
+    )
+    let expectedTrashURL = URL(fileURLWithPath: "/tmp/.Trash/\(sourceFile.lastPathComponent)")
+    assertTest(successExec == .trashed(source: sourceFile, trashURL: expectedTrashURL),
+               "50.11 All verification checks pass: source is safely moved to Trash",
+               details: "\(successExec)")
+    assertTest(mockTrash.trashedURLs == [sourceFile],
+               "50.11 MockTrashProvider recorded the trashed source URL exactly once")
+
+    // 50.12 JobRunner End-to-End Trashing & Error Preservation Integration
+    let dummyAction = ConversionAction(
+        id: "test.dummy.copy",
+        displayName: "Test Dummy Copy",
+        outputExtension: "copy",
+        category: .image,
+        qualityClass: .lossless,
+        customRunner: { inURL, outURL, _, _, _ in
+            try FileManager.default.copyItem(at: inURL, to: outURL)
+        }
+    )
+
+    let dummyFailingAction = ConversionAction(
+        id: "test.dummy.fail",
+        displayName: "Test Dummy Fail",
+        outputExtension: "fail",
+        category: .image,
+        qualityClass: .lossless,
+        customRunner: { _, _, _, _, _ in
+            throw PastaError.executionFailed(tool: "test", exitCode: 1, output: "Simulated conversion failure")
+        }
+    )
+
+    let runnerTestDir = tempDir.appendingPathComponent("runner_tests")
+    try FileManager.default.createDirectory(at: runnerTestDir, withIntermediateDirectories: true)
+
+    // A. With delete-original DISABLED: original stays untouched
+    prefs.disableDeleteOriginal()
+    mockTrash.trashedURLs.removeAll()
+    let untouchedInput = runnerTestDir.appendingPathComponent("untouched.txt")
+    try "Untouched data".data(using: .utf8)?.write(to: untouchedInput)
+    let untouchedOut = try JobRunner.shared.run(action: dummyAction, input: untouchedInput)
+    assertTest(FileManager.default.fileExists(atPath: untouchedInput.path),
+               "50.12 JobRunner run with delete-original disabled preserves source file on disk")
+    assertTest(mockTrash.trashedURLs.isEmpty,
+               "50.12 MockTrashProvider received 0 trash calls when delete-original disabled")
+    try? FileManager.default.removeItem(at: untouchedOut)
+
+    // B. With delete-original ENABLED: original is trashed after successful publish
+    _ = prefs.enableDeleteOriginal(confirmationPhrase: DeleteOriginalGuard.confirmationPhrase)
+    mockTrash.trashedURLs.removeAll()
+    let trashedInput = runnerTestDir.appendingPathComponent("will_trash.txt")
+    try "Will trash data".data(using: .utf8)?.write(to: trashedInput)
+    let trashedOut = try JobRunner.shared.run(action: dummyAction, input: trashedInput)
+    assertTest(mockTrash.trashedURLs.contains(trashedInput),
+               "50.12 JobRunner run with delete-original enabled moves verified source to Trash")
+    try? FileManager.default.removeItem(at: trashedOut)
+
+    // C. With delete-original ENABLED but job FAILS: original is never trashed
+    mockTrash.trashedURLs.removeAll()
+    let failedInput = runnerTestDir.appendingPathComponent("failed_job.txt")
+    try "Failed job data".data(using: .utf8)?.write(to: failedInput)
+    var failedCaught = false
+    do {
+        _ = try JobRunner.shared.run(action: dummyFailingAction, input: failedInput)
+    } catch {
+        failedCaught = true
+    }
+    assertTest(failedCaught, "50.12 Failing action threw error")
+    assertTest(mockTrash.trashedURLs.isEmpty,
+               "50.12 Failing action NEVER trashes original file")
+    assertTest(FileManager.default.fileExists(atPath: failedInput.path),
+               "50.12 Source file remains intact after conversion failure")
+
+    // Cleanup preferences
+    prefs.disableDeleteOriginal()
+    DeleteOriginalGuard.sharedTrashProvider = SystemTrashProvider.shared
+}
+
 
 
 print("\n==================================================")
