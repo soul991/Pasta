@@ -204,6 +204,9 @@ public final class JobRunner {
 
         PastaLogger.shared.info("Starting action \(action.id) on '\(input.lastPathComponent)' -> '\(finalDestinationURL.lastPathComponent)'")
 
+        // Capture pre-conversion snapshot for delete-original safety guard
+        let sourceSnapshot = DeleteOriginalGuard.captureSnapshot(for: input)
+
         // Create temporary isolated scratch space
         let tempDir = try OutputPlanner.makeTempDirectory()
         let loProfileDir = URL(fileURLWithPath: "/tmp/Pasta_lo_\(jobId.uuidString)")
@@ -268,6 +271,18 @@ public final class JobRunner {
             }
             try Self.validateFolderJail(at: tempWorkingOutputURL)
             try reservation.publish(from: tempWorkingOutputURL)
+            RecentConversionsStore.shared.record(actionId: action.id, outputURL: finalDestinationURL)
+            if PreferencesManager.shared.deleteOriginalEnabled {
+                _ = DeleteOriginalGuard.execute(
+                    source: input,
+                    output: finalDestinationURL,
+                    expectedExtension: "",
+                    snapshot: sourceSnapshot,
+                    jobStatus: .success,
+                    preferences: PreferencesManager.shared,
+                    trashProvider: DeleteOriginalGuard.sharedTrashProvider
+                )
+            }
             return finalDestinationURL
         }
 
@@ -287,6 +302,18 @@ public final class JobRunner {
         // Safe atomic publish over reserved placeholder
         try reservation.publish(from: tempWorkingOutputURL)
         RecentConversionsStore.shared.record(actionId: action.id, outputURL: finalDestinationURL)
+
+        if PreferencesManager.shared.deleteOriginalEnabled {
+            _ = DeleteOriginalGuard.execute(
+                source: input,
+                output: finalDestinationURL,
+                expectedExtension: action.outputExtension,
+                snapshot: sourceSnapshot,
+                jobStatus: .success,
+                preferences: PreferencesManager.shared,
+                trashProvider: DeleteOriginalGuard.sharedTrashProvider
+            )
+        }
 
         PastaLogger.shared.info("Successfully completed \(action.id) -> '\(finalDestinationURL.path)'")
         return finalDestinationURL
@@ -353,6 +380,31 @@ public final class JobRunner {
 
         PastaLogger.shared.info("Starting batch action \(action.id) on \(inputs.count) files -> '\(finalDestinationURL.lastPathComponent)'")
 
+        // Capture pre-conversion snapshots for delete-original safety guard
+        let batchSnapshots = inputs.map { DeleteOriginalGuard.captureSnapshot(for: $0) }
+
+        func trashBatchOriginalsIfEnabled() {
+            if PreferencesManager.shared.deleteOriginalEnabled {
+                let isFolderOutput: Bool
+                switch action.outputKind {
+                case .folder: isFolderOutput = true
+                case .file: isFolderOutput = isCompressBatch
+                }
+                for (idx, inp) in inputs.enumerated() {
+                    let snap = idx < batchSnapshots.count ? batchSnapshots[idx] : nil
+                    _ = DeleteOriginalGuard.execute(
+                        source: inp,
+                        output: finalDestinationURL,
+                        expectedExtension: isFolderOutput ? "" : action.outputExtension,
+                        snapshot: snap,
+                        jobStatus: .success,
+                        preferences: PreferencesManager.shared,
+                        trashProvider: DeleteOriginalGuard.sharedTrashProvider
+                    )
+                }
+            }
+        }
+
         let tempDir = try OutputPlanner.makeTempDirectory()
         let loProfileDir = URL(fileURLWithPath: "/tmp/Pasta_lo_\(jobId.uuidString)")
         defer {
@@ -413,6 +465,7 @@ public final class JobRunner {
         if isCompressBatch {
             try reservation.publish(from: tempWorkingOutputURL)
             RecentConversionsStore.shared.record(actionId: action.id, outputURL: finalDestinationURL)
+            trashBatchOriginalsIfEnabled()
             PastaLogger.shared.info("Successfully completed batch \(action.id) -> '\(finalDestinationURL.path)'")
             return finalDestinationURL
         }
@@ -444,6 +497,7 @@ public final class JobRunner {
             try Self.validateFolderJail(at: tempWorkingOutputURL)
             try reservation.publish(from: tempWorkingOutputURL)
             RecentConversionsStore.shared.record(actionId: action.id, outputURL: finalDestinationURL)
+            trashBatchOriginalsIfEnabled()
             return finalDestinationURL
         case .file:
             if !fm.fileExists(atPath: tempWorkingOutputURL.path) {
@@ -459,6 +513,7 @@ public final class JobRunner {
             }
             try reservation.publish(from: tempWorkingOutputURL)
             RecentConversionsStore.shared.record(actionId: action.id, outputURL: finalDestinationURL)
+            trashBatchOriginalsIfEnabled()
             PastaLogger.shared.info("Successfully completed batch \(action.id) -> '\(finalDestinationURL.path)'")
             return finalDestinationURL
         }
