@@ -1,6 +1,6 @@
 ==================================================
 Pasta Local Mac Verification Report
-Generated at: 2026-11-07T00:57:56Z
+Generated at: 2026-11-07T02:02:53Z
 ==================================================
 
 --- 1. Environment Diagnostics ---
@@ -29,10 +29,12 @@ Section 8 Test Results: 47/47 Passed, 0 Failed
 --- 5. Build Application Bundle (./scripts/build_app.sh) ---
 Building Pasta in release configuration...
 Building for production...
-[2 / 5] PastaTests-product
-[4 / 5] Pasta-product
-[5 / 5] Pasta-product
-Build complete! (0.69 sec)
+[2 / 6]
+[4 / 7] Pasta-product
+[5 / 8] Pasta-product
+[7 / 8] Pasta-product
+[8 / 8] Pasta-product
+Build complete! (1.54 sec)
 Creating application bundle structure at Pasta.app...
 Copying AppIcon.icns to Resources...
 Copying MenuBarIcon to Resources...
@@ -108,7 +110,7 @@ tar             3.5.3              412.0        bin/tar
 unar            1.10.7             2274.9       bin/unar
 -----------------------------------------------------------------
 Total Engines Directory Size: 442.85 MB
-Total Pasta.app Bundle Size:  445.83 MB
+Total Pasta.app Bundle Size:  445.82 MB
 ==================================================
 
 Generating Info.plist...
