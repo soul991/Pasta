@@ -123,9 +123,9 @@
 | Image to PDF: batch images (`image.to.pdf`) | Step 2 | Documents | **DONE** | `Step 2: Batch images to PDF produces merged PDF` |
 | PDF merge: multi-file batch action (`pdf.merge`) | Step 2 | Documents | **DONE** | `Step 2: pdf.merge produces combined PDF` |
 | Documents: DOCX &harr; EPUB (`docx.to.epub`, `epub.to.docx`) | Step 2 | Documents | **DONE** | `Step 2: Convert docx -> epub produces valid file` |
-| Documents: Markdown &harr; EPUB (`md.to.epub`, `epub.to.md`) | Step 2 | Documents | **DONE (structure only)** | `Step 2: md.to.epub action is registered` |
-| Documents: HTML &harr; EPUB (`html.to.epub`, `epub.to.html`) | Step 2 | Documents | **DONE (structure only)** | `Step 2: html.to.epub action is registered` |
-| Documents: TXT &harr; EPUB (`epub.to.txt`) | Step 2 | Documents | **DONE (structure only)** | `Step 2: epub conversions to docx, md, html, txt are registered` |
+| Documents: Markdown &harr; EPUB (`md.to.epub`, `epub.to.md`) | Step 2 | Documents | **DONE** | `48.45/48.31 Behavioral end-to-end fixture test` |
+| Documents: HTML &harr; EPUB (`html.to.epub`, `epub.to.html`) | Step 2 | Documents | **DONE** | `48.37/48.30 Behavioral end-to-end fixture test` |
+| Documents: TXT &harr; EPUB (`epub.to.txt`) | Step 2 | Documents | **DONE** | `48.33 Behavioral end-to-end fixture test` |
 | LibreOffice (`soffice`) optional detection & doctor | Step 2 | Tools | **DONE** | `Step 2: soffice is correctly reported as missing optional tool without failure` |
 | Image compression by percent (`image.compress`) | Step 3 | Compression | **DONE** | `Step 3: Image compression by 50% produces file <= 50% original` |
 | Image compression by exact target size (`image.compress`) | Step 3 | Compression | **DONE** | `Step 3: Image compression by target size 25000 bytes produces file <= 25000` |

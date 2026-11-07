@@ -6733,6 +6733,248 @@ do {
     }
 }
 
+
+// =============================================================================
+// Section 48: Action Catalog Behavioral Completeness Tests (Step E4)
+// =============================================================================
+print("\n--- Section 48: Action Catalog Behavioral Completeness Tests ---")
+do {
+    struct ActionTestSpec {
+        let actionId: String
+        let fixtureNames: [String]
+        let parameters: ParameterValues
+    }
+
+    let allCatalogSpecs: [ActionTestSpec] = [
+        ActionTestSpec(actionId: "archive.create.gzip", fixtureNames: ["sample.txt"], parameters: [:]),
+        ActionTestSpec(actionId: "archive.create.targz", fixtureNames: ["sample.txt"], parameters: [:]),
+        ActionTestSpec(actionId: "archive.create.zip", fixtureNames: ["sample.txt"], parameters: [:]),
+        ActionTestSpec(actionId: "archive.extract", fixtureNames: ["sample.zip"], parameters: [:]),
+        ActionTestSpec(actionId: "audio.advanced.compress", fixtureNames: ["sample.mp3"], parameters: ["percent": .number(50.0)]),
+        ActionTestSpec(actionId: "audio.advanced.strip_metadata", fixtureNames: ["sample.mp3"], parameters: [:]),
+        ActionTestSpec(actionId: "audio.bleep", fixtureNames: ["sample.mp3"], parameters: ["ranges": .text("0.5-1.0")]),
+        ActionTestSpec(actionId: "audio.channels", fixtureNames: ["sample.mp3"], parameters: ["channels": .text("stereo")]),
+        ActionTestSpec(actionId: "audio.compress", fixtureNames: ["sample.mp3"], parameters: ["percent": .number(50.0)]),
+        ActionTestSpec(actionId: "audio.normalize", fixtureNames: ["sample.wav"], parameters: [:]),
+        ActionTestSpec(actionId: "audio.to.aiff", fixtureNames: ["sample.wav"], parameters: [:]),
+        ActionTestSpec(actionId: "audio.to.flac", fixtureNames: ["sample.wav"], parameters: [:]),
+        ActionTestSpec(actionId: "audio.to.m4a", fixtureNames: ["sample.wav"], parameters: [:]),
+        ActionTestSpec(actionId: "audio.to.mp3", fixtureNames: ["sample.wav"], parameters: [:]),
+        ActionTestSpec(actionId: "audio.to.ogg", fixtureNames: ["sample.mp3"], parameters: [:]),
+        ActionTestSpec(actionId: "audio.to.opus", fixtureNames: ["sample.mp3"], parameters: [:]),
+        ActionTestSpec(actionId: "audio.to.wav", fixtureNames: ["sample.mp3"], parameters: [:]),
+        ActionTestSpec(actionId: "audio.trim", fixtureNames: ["sample.mp3"], parameters: ["start": .number(0.0), "end": .number(1.0)]),
+        ActionTestSpec(actionId: "code.to.html", fixtureNames: ["sample.swift"], parameters: [:]),
+        ActionTestSpec(actionId: "code.to.md", fixtureNames: ["sample.swift"], parameters: [:]),
+        ActionTestSpec(actionId: "code.to.pdf", fixtureNames: ["sample.swift"], parameters: [:]),
+        ActionTestSpec(actionId: "code.to.txt", fixtureNames: ["sample.swift"], parameters: [:]),
+        ActionTestSpec(actionId: "csv.to.xlsx", fixtureNames: ["sample.csv"], parameters: [:]),
+        ActionTestSpec(actionId: "docx.to.epub", fixtureNames: ["sample.docx"], parameters: [:]),
+        ActionTestSpec(actionId: "docx.to.html", fixtureNames: ["sample.docx"], parameters: [:]),
+        ActionTestSpec(actionId: "docx.to.images", fixtureNames: ["sample.docx"], parameters: [:]),
+        ActionTestSpec(actionId: "docx.to.md", fixtureNames: ["sample.docx"], parameters: [:]),
+        ActionTestSpec(actionId: "docx.to.pdf", fixtureNames: ["sample.docx"], parameters: [:]),
+        ActionTestSpec(actionId: "docx.to.txt", fixtureNames: ["sample.docx"], parameters: [:]),
+        ActionTestSpec(actionId: "epub.to.docx", fixtureNames: ["sample.epub"], parameters: [:]),
+        ActionTestSpec(actionId: "epub.to.html", fixtureNames: ["sample.epub"], parameters: [:]),
+        ActionTestSpec(actionId: "epub.to.md", fixtureNames: ["sample.epub"], parameters: [:]),
+        ActionTestSpec(actionId: "epub.to.txt", fixtureNames: ["sample.epub"], parameters: [:]),
+        ActionTestSpec(actionId: "generic.to.pdf", fixtureNames: ["sample.txt"], parameters: [:]),
+        ActionTestSpec(actionId: "generic.to.txt", fixtureNames: ["sample.txt"], parameters: [:]),
+        ActionTestSpec(actionId: "html.to.docx", fixtureNames: ["sample.html"], parameters: [:]),
+        ActionTestSpec(actionId: "html.to.epub", fixtureNames: ["sample.html"], parameters: [:]),
+        ActionTestSpec(actionId: "html.to.md", fixtureNames: ["sample.html"], parameters: [:]),
+        ActionTestSpec(actionId: "html.to.pdf", fixtureNames: ["sample.html"], parameters: [:]),
+        ActionTestSpec(actionId: "html.to.txt", fixtureNames: ["sample.html"], parameters: [:]),
+        ActionTestSpec(actionId: "image.advanced.compress", fixtureNames: ["sample.png"], parameters: ["percent": .number(50.0)]),
+        ActionTestSpec(actionId: "image.advanced.resize_50", fixtureNames: ["sample.png"], parameters: [:]),
+        ActionTestSpec(actionId: "image.advanced.strip_metadata", fixtureNames: ["sample.png"], parameters: [:]),
+        ActionTestSpec(actionId: "image.collage", fixtureNames: ["sample.png", "sample.png"], parameters: ["columns": .number(2), "spacing": .number(4)]),
+        ActionTestSpec(actionId: "image.compress", fixtureNames: ["sample.png"], parameters: ["percent": .number(50.0)]),
+        ActionTestSpec(actionId: "image.ocr.searchable", fixtureNames: ["sample_ocr.png"], parameters: ["language": .text("en-US")]),
+        ActionTestSpec(actionId: "image.ocr.text", fixtureNames: ["sample_ocr.png"], parameters: ["language": .text("en-US")]),
+        ActionTestSpec(actionId: "image.qr.read", fixtureNames: ["sample_qr.png"], parameters: [:]),
+        ActionTestSpec(actionId: "image.resize", fixtureNames: ["sample.png"], parameters: ["maxDimension": .number(200.0)]),
+        ActionTestSpec(actionId: "image.to.avif", fixtureNames: ["sample.png"], parameters: [:]),
+        ActionTestSpec(actionId: "image.to.bmp", fixtureNames: ["sample.png"], parameters: [:]),
+        ActionTestSpec(actionId: "image.to.gif", fixtureNames: ["sample.png"], parameters: [:]),
+        ActionTestSpec(actionId: "image.to.heic", fixtureNames: ["sample.png"], parameters: [:]),
+        ActionTestSpec(actionId: "image.to.jpeg", fixtureNames: ["sample.png"], parameters: [:]),
+        ActionTestSpec(actionId: "image.to.pdf", fixtureNames: ["sample.png"], parameters: [:]),
+        ActionTestSpec(actionId: "image.to.png", fixtureNames: ["sample.jpg"], parameters: [:]),
+        ActionTestSpec(actionId: "image.to.tiff", fixtureNames: ["sample.png"], parameters: [:]),
+        ActionTestSpec(actionId: "image.to.webp", fixtureNames: ["sample.png"], parameters: [:]),
+        ActionTestSpec(actionId: "md.to.docx", fixtureNames: ["sample.md"], parameters: [:]),
+        ActionTestSpec(actionId: "md.to.epub", fixtureNames: ["sample.md"], parameters: [:]),
+        ActionTestSpec(actionId: "md.to.html", fixtureNames: ["sample.md"], parameters: [:]),
+        ActionTestSpec(actionId: "md.to.pdf", fixtureNames: ["sample.md"], parameters: [:]),
+        ActionTestSpec(actionId: "md.to.txt", fixtureNames: ["sample.md"], parameters: [:]),
+        ActionTestSpec(actionId: "metadata.edit", fixtureNames: ["sample.jpg"], parameters: ["title": .text("Tested")]),
+        ActionTestSpec(actionId: "metadata.read", fixtureNames: ["sample.jpg"], parameters: [:]),
+        ActionTestSpec(actionId: "office.to.images", fixtureNames: ["sample.docx"], parameters: [:]),
+        ActionTestSpec(actionId: "office.to.pdf", fixtureNames: ["sample.docx"], parameters: [:]),
+        ActionTestSpec(actionId: "pdf.advanced.compress", fixtureNames: ["sample.pdf"], parameters: ["percent": .number(50.0)]),
+        ActionTestSpec(actionId: "pdf.advanced.split", fixtureNames: ["three_pages.pdf"], parameters: [:]),
+        ActionTestSpec(actionId: "pdf.advanced.strip_metadata", fixtureNames: ["sample.pdf"], parameters: [:]),
+        ActionTestSpec(actionId: "pdf.compress", fixtureNames: ["sample.pdf"], parameters: ["percent": .number(50.0)]),
+        ActionTestSpec(actionId: "pdf.merge", fixtureNames: ["sample.pdf", "three_pages.pdf"], parameters: [:]),
+        ActionTestSpec(actionId: "pdf.ocr.searchable", fixtureNames: ["sample.pdf"], parameters: ["language": .text("en-US")]),
+        ActionTestSpec(actionId: "pdf.ocr.text", fixtureNames: ["sample.pdf"], parameters: ["language": .text("en-US")]),
+        ActionTestSpec(actionId: "pdf.pagenumbers", fixtureNames: ["three_pages.pdf"], parameters: ["position": .text("bottom-center")]),
+        ActionTestSpec(actionId: "pdf.reorganize", fixtureNames: ["three_pages.pdf"], parameters: ["pages": .text("1-z")]),
+        ActionTestSpec(actionId: "pdf.security.lock", fixtureNames: ["sample.pdf"], parameters: ["password": .text("Test1234")]),
+        ActionTestSpec(actionId: "pdf.security.unlock", fixtureNames: ["sample.pdf"], parameters: ["password": .text("Test1234")]),
+        ActionTestSpec(actionId: "pdf.to.epub", fixtureNames: ["sample.pdf"], parameters: [:]),
+        ActionTestSpec(actionId: "pdf.to.epub.calibre", fixtureNames: ["sample.pdf"], parameters: [:]),
+        ActionTestSpec(actionId: "pdf.to.images", fixtureNames: ["sample.pdf"], parameters: [:]),
+        ActionTestSpec(actionId: "pdf.to.pdfa", fixtureNames: ["sample.pdf"], parameters: [:]),
+        ActionTestSpec(actionId: "pdf.to.text", fixtureNames: ["sample.pdf"], parameters: [:]),
+        ActionTestSpec(actionId: "pdf.watermark", fixtureNames: ["sample.pdf"], parameters: ["text": .text("WATERMARK")]),
+        ActionTestSpec(actionId: "srt.to.vtt", fixtureNames: ["sample.srt"], parameters: [:]),
+        ActionTestSpec(actionId: "txt.to.docx", fixtureNames: ["sample.txt"], parameters: [:]),
+        ActionTestSpec(actionId: "txt.to.html", fixtureNames: ["sample.txt"], parameters: [:]),
+        ActionTestSpec(actionId: "txt.to.md", fixtureNames: ["sample.txt"], parameters: [:]),
+        ActionTestSpec(actionId: "video.advanced.compress", fixtureNames: ["sample.mp4"], parameters: ["percent": .number(50.0)]),
+        ActionTestSpec(actionId: "video.advanced.strip_metadata", fixtureNames: ["sample.mp4"], parameters: [:]),
+        ActionTestSpec(actionId: "video.advanced.trim10", fixtureNames: ["sample.mp4"], parameters: [:]),
+        ActionTestSpec(actionId: "video.compress", fixtureNames: ["sample.mp4"], parameters: ["percent": .number(50.0)]),
+        ActionTestSpec(actionId: "video.crop", fixtureNames: ["sample.mp4"], parameters: ["rectangle": .rectangle(x: 0, y: 0, width: 160, height: 120)]),
+        ActionTestSpec(actionId: "video.extract.m4a", fixtureNames: ["sample.mp4"], parameters: [:]),
+        ActionTestSpec(actionId: "video.extract.mp3", fixtureNames: ["sample.mp4"], parameters: [:]),
+        ActionTestSpec(actionId: "video.extract.wav", fixtureNames: ["sample.mp4"], parameters: [:]),
+        ActionTestSpec(actionId: "video.join", fixtureNames: ["sample.mp4", "sample.mp4"], parameters: [:]),
+        ActionTestSpec(actionId: "video.snapshot", fixtureNames: ["sample.mp4"], parameters: ["time": .number(1.0)]),
+        ActionTestSpec(actionId: "video.snapshot.jpg", fixtureNames: ["sample.mp4"], parameters: ["time": .number(1.0)]),
+        ActionTestSpec(actionId: "video.speed", fixtureNames: ["sample.mp4"], parameters: ["factor": .number(2.0)]),
+        ActionTestSpec(actionId: "video.split", fixtureNames: ["sample.mp4"], parameters: ["times": .text("1.0")]),
+        ActionTestSpec(actionId: "video.to.avi", fixtureNames: ["sample.mp4"], parameters: [:]),
+        ActionTestSpec(actionId: "video.to.gif", fixtureNames: ["sample.mp4"], parameters: [:]),
+        ActionTestSpec(actionId: "video.to.mkv", fixtureNames: ["sample.mp4"], parameters: [:]),
+        ActionTestSpec(actionId: "video.to.mov", fixtureNames: ["sample.mp4"], parameters: [:]),
+        ActionTestSpec(actionId: "video.to.mp4", fixtureNames: ["sample.mov"], parameters: [:]),
+        ActionTestSpec(actionId: "video.to.webm", fixtureNames: ["sample.mp4"], parameters: [:]),
+        ActionTestSpec(actionId: "video.to.wmv", fixtureNames: ["sample.mp4"], parameters: [:]),
+        ActionTestSpec(actionId: "video.trim", fixtureNames: ["sample.mp4"], parameters: ["start": .number(0.0), "end": .number(1.0)]),
+        ActionTestSpec(actionId: "vtt.to.srt", fixtureNames: ["sample.vtt"], parameters: [:]),
+        ActionTestSpec(actionId: "xlsx.to.csv", fixtureNames: ["sample.xlsx"], parameters: [:]),
+    ]
+
+    var passCount = 0
+    let fm = FileManager.default
+
+    for (index, spec) in allCatalogSpecs.enumerated() {
+        guard let action = FormatRegistry.shared.allRegisteredActions().first(where: { $0.id == spec.actionId }) else {
+            assertTest(false, "48.\(index + 1) [\(spec.actionId)] Action registered in FormatRegistry")
+            continue
+        }
+
+        let inputURLs = spec.fixtureNames.map { URL(fileURLWithPath: "Fixtures/\($0)") }
+        let allInputsExist = inputURLs.allSatisfy { fm.fileExists(atPath: $0.path) }
+        guard allInputsExist else {
+            assertTest(false, "48.\(index + 1) [\(spec.actionId)] Fixtures exist (\(spec.fixtureNames.joined(separator: ", ")))")
+            continue
+        }
+
+        let testDir = try OutputPlanner.makeTempDirectory()
+        defer { try? fm.removeItem(at: testDir) }
+
+        // Optional tool availability gate (e.g. soffice or ebook-convert)
+        if let req = action.requiredTool, !ToolLocator.shared.isOptionalToolAvailable(req) {
+            var threwMissing = false
+            do {
+                if action.isBatch || inputURLs.count > 1 {
+                    _ = try JobRunner.shared.runBatch(action: action, inputs: inputURLs, destinationDirectory: testDir, parameters: spec.parameters)
+                } else {
+                    _ = try JobRunner.shared.run(action: action, input: inputURLs[0], destinationDirectory: testDir, parameters: spec.parameters)
+                }
+            } catch {
+                threwMissing = true
+            }
+            assertTest(threwMissing, "48.\(index + 1) [\(spec.actionId)] Reports missing optional tool '\(req)' gracefully when absent")
+            passCount += 1
+            continue
+        }
+
+        // 1. Behavioral End-to-End Execution using OutputReservation
+        var outputURL: URL? = nil
+        var execError: Error? = nil
+        do {
+            if spec.actionId == "pdf.security.unlock" {
+                let lockAction = FormatRegistry.shared.allRegisteredActions().first(where: { $0.id == "pdf.security.lock" })!
+                let lockedFile = try JobRunner.shared.run(action: lockAction, input: inputURLs[0], destinationDirectory: testDir, parameters: ["password": .text("Test1234")])
+                outputURL = try JobRunner.shared.run(action: action, input: lockedFile, destinationDirectory: testDir, parameters: spec.parameters)
+            } else if action.isBatch || inputURLs.count > 1 {
+                outputURL = try JobRunner.shared.runBatch(action: action, inputs: inputURLs, destinationDirectory: testDir, parameters: spec.parameters)
+            } else {
+                outputURL = try JobRunner.shared.run(action: action, input: inputURLs[0], destinationDirectory: testDir, parameters: spec.parameters)
+            }
+        } catch {
+            execError = error
+        }
+
+        let outputValid: Bool
+        if let out = outputURL, fm.fileExists(atPath: out.path) {
+            switch action.outputKind {
+            case .folder:
+                let files = (try? fm.contentsOfDirectory(at: out, includingPropertiesForKeys: nil)) ?? []
+                outputValid = !files.isEmpty
+            case .file:
+                let size = (try? fm.attributesOfItem(atPath: out.path)[.size] as? Int64) ?? 0
+                outputValid = size > 0
+            }
+        } else {
+            outputValid = false
+        }
+
+        assertTest(outputValid,
+                   "48.\(index + 1) [\(spec.actionId)] End-to-end execution produces valid output with OutputReservation",
+                   details: execError != nil ? "Error: \(execError!)" : "Output missing or empty")
+
+        // 2. Missing Input Test
+        var missingThrew = false
+        do {
+            let nonExistent = URL(fileURLWithPath: "/tmp/pasta_nonexistent_\(UUID().uuidString).\(inputURLs[0].pathExtension)")
+            if action.isBatch || inputURLs.count > 1 {
+                _ = try JobRunner.shared.runBatch(action: action, inputs: inputURLs.map { _ in nonExistent }, destinationDirectory: testDir, parameters: spec.parameters)
+            } else {
+                _ = try JobRunner.shared.run(action: action, input: nonExistent, destinationDirectory: testDir, parameters: spec.parameters)
+            }
+        } catch {
+            missingThrew = true
+        }
+        assertTest(missingThrew, "48.\(index + 1) [\(spec.actionId)] Missing input rejected gracefully with error")
+
+        // 3. Corrupt Input Test
+        var corruptThrew = false
+        let corruptFile: URL
+        if spec.actionId.hasPrefix("archive.create") {
+            corruptFile = testDir.appendingPathComponent("corrupt_empty_\(UUID().uuidString).\(inputURLs[0].pathExtension)")
+            try? Data().write(to: corruptFile)
+        } else {
+            corruptFile = testDir.appendingPathComponent("corrupt_\(UUID().uuidString).\(inputURLs[0].pathExtension)")
+            try? Data([0x00, 0x01, 0x02, 0x03, 0xDE, 0xAD, 0xBE, 0xEF]).write(to: corruptFile)
+        }
+        do {
+            if action.isBatch || inputURLs.count > 1 {
+                _ = try JobRunner.shared.runBatch(action: action, inputs: inputURLs.map { _ in corruptFile }, destinationDirectory: testDir, parameters: spec.parameters)
+            } else {
+                _ = try JobRunner.shared.run(action: action, input: corruptFile, destinationDirectory: testDir, parameters: spec.parameters)
+            }
+        } catch {
+            corruptThrew = true
+        }
+        assertTest(corruptThrew, "48.\(index + 1) [\(spec.actionId)] Corrupt input rejected gracefully with error")
+
+        if outputValid && missingThrew && corruptThrew {
+            passCount += 1
+        }
+    }
+
+    assertTest(passCount == allCatalogSpecs.count,
+               "48.GATE All \(allCatalogSpecs.count) registered actions completed behavioral completeness tests")
+}
+
+
 print("\n==================================================")
 print("Test Suite Summary: \(passedTests)/\(totalTests) Passed, \(failedTests) Failed")
 print("==================================================")

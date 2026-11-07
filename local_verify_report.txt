@@ -1,6 +1,6 @@
 ==================================================
 Pasta Local Mac Verification Report
-Generated at: 2026-11-07T02:47:09Z
+Generated at: 2026-11-07T03:55:17Z
 ==================================================
 
 --- 1. Environment Diagnostics ---
@@ -18,10 +18,10 @@ swift-driver version: 1.168.6 Apple Swift version 6.4.2 (swiftlang-6.4.2.1.9 cla
 Target: arm64-apple-macosx27.2.0
 
 --- 2. PastaTests (Debug) ---
-Test Suite Summary: 967/967 Passed, 0 Failed
+Test Suite Summary: 1285/1285 Passed, 0 Failed
 
 --- 3. PastaTests (Release) ---
-Test Suite Summary: 967/967 Passed, 0 Failed
+Test Suite Summary: 1285/1285 Passed, 0 Failed
 
 --- 4. Section 8 Hardening Tests (Debug Binary) ---
 Section 8 Test Results: 47/47 Passed, 0 Failed
@@ -29,12 +29,13 @@ Section 8 Test Results: 47/47 Passed, 0 Failed
 --- 5. Build Application Bundle (./scripts/build_app.sh) ---
 Building Pasta in release configuration...
 Building for production...
+[Planning deferred tasks]
 [2 / 6]
 [4 / 7] Pasta-product
 [5 / 8] Pasta-product
 [7 / 8] Pasta-product
 [8 / 8] Pasta-product
-Build complete! (1.50 sec)
+Build complete! (1.61 sec)
 Creating application bundle structure at Pasta.app...
 Copying AppIcon.icns to Resources...
 Copying MenuBarIcon to Resources...
@@ -472,6 +473,11 @@ Checked 233 Mach-O binaries and dylibs.
   ✓ PASS: pasta doctor --json produces valid JSON schema with tools and availability
   ✓ PASS: pasta list-actions --all --markdown generates valid markdown action table
   ✓ PASS: Binary contains zero network requests, tracking, or telemetry
+
+--- 11. Step E4 Behavioral Completeness Gate (./scripts/verify_catalog_behavioral_coverage.py) ---
+Discovered 111 registered catalog actions.
+
+[PASS] Step E4 Gate: All 111 registered actions have verified behavioral test coverage.
 
 ==================================================
 Local Verification Completed Successfully

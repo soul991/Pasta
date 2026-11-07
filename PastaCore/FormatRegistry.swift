@@ -1757,40 +1757,48 @@ public final class FormatRegistry {
                 outputExtension: "docx",
                 isAdvanced: false,
                 category: .document,
-                iconName: FormatRegistry.icon(forFormat: "docx")
-            ) { input, output in
-                [Invocation(toolName: "pandoc", arguments: ["-o", output.path, input.path])]
-            },
+                iconName: FormatRegistry.icon(forFormat: "docx"),
+                buildInvocations: { input, output, _ in
+                    [Invocation(toolName: "pandoc", arguments: ["-o", output.path, input.path])]
+                },
+                customRunner: Self.pandocTextRunner(arguments: ["-o", "$OUTPUT", "$INPUT"])
+            ),
             ConversionAction(
                 id: "md.to.html",
                 displayName: "Convert to HTML",
                 outputExtension: "html",
                 isAdvanced: false,
                 category: .document,
-                iconName: FormatRegistry.icon(forFormat: "html")
-            ) { input, output in
-                [Invocation(toolName: "pandoc", arguments: ["-s", "-o", output.path, input.path])]
-            },
+                iconName: FormatRegistry.icon(forFormat: "html"),
+                buildInvocations: { input, output, _ in
+                    [Invocation(toolName: "pandoc", arguments: ["-s", "-o", output.path, input.path])]
+                },
+                customRunner: Self.pandocTextRunner(arguments: ["-s", "-o", "$OUTPUT", "$INPUT"])
+            ),
             ConversionAction(
                 id: "md.to.txt",
                 displayName: "Convert to Plain Text",
                 outputExtension: "txt",
                 isAdvanced: false,
                 category: .document,
-                iconName: FormatRegistry.icon(forFormat: "txt")
-            ) { input, output in
-                [Invocation(toolName: "pandoc", arguments: ["-o", output.path, input.path])]
-            },
+                iconName: FormatRegistry.icon(forFormat: "txt"),
+                buildInvocations: { input, output, _ in
+                    [Invocation(toolName: "pandoc", arguments: ["-o", output.path, input.path])]
+                },
+                customRunner: Self.pandocTextRunner(arguments: ["-o", "$OUTPUT", "$INPUT"])
+            ),
             ConversionAction(
                 id: "md.to.epub",
                 displayName: "Convert to EPUB",
                 outputExtension: "epub",
                 isAdvanced: false,
                 category: .document,
-                iconName: FormatRegistry.icon(forFormat: "epub")
-            ) { input, output in
-                [Invocation(toolName: "pandoc", arguments: ["-o", output.path, input.path])]
-            },
+                iconName: FormatRegistry.icon(forFormat: "epub"),
+                buildInvocations: { input, output, _ in
+                    [Invocation(toolName: "pandoc", arguments: ["-o", output.path, input.path])]
+                },
+                customRunner: Self.pandocTextRunner(arguments: ["-o", "$OUTPUT", "$INPUT"])
+            ),
             ConversionAction(
                 id: "md.to.pdf",
                 displayName: "Convert to PDF",
@@ -1816,30 +1824,36 @@ public final class FormatRegistry {
                 outputExtension: "md",
                 isAdvanced: false,
                 category: .document,
-                iconName: "doc.text"
-            ) { input, output in
-                [Invocation(toolName: "ditto", arguments: [input.path, output.path])]
-            },
+                iconName: "doc.text",
+                buildInvocations: { input, output, _ in
+                    [Invocation(toolName: "ditto", arguments: [input.path, output.path])]
+                },
+                customRunner: Self.dittoTextRunner()
+            ),
             ConversionAction(
                 id: "txt.to.docx",
                 displayName: "Convert to DOCX",
                 outputExtension: "docx",
                 isAdvanced: false,
                 category: .document,
-                iconName: "doc.text"
-            ) { input, output in
-                [Invocation(toolName: "pandoc", arguments: ["-o", output.path, input.path])]
-            },
+                iconName: "doc.text",
+                buildInvocations: { input, output, _ in
+                    [Invocation(toolName: "pandoc", arguments: ["-o", output.path, input.path])]
+                },
+                customRunner: Self.pandocTextRunner(arguments: ["-o", "$OUTPUT", "$INPUT"])
+            ),
             ConversionAction(
                 id: "txt.to.html",
                 displayName: "Convert to HTML",
                 outputExtension: "html",
                 isAdvanced: false,
                 category: .document,
-                iconName: "globe"
-            ) { input, output in
-                [Invocation(toolName: "pandoc", arguments: ["-s", "-o", output.path, input.path])]
-            },
+                iconName: "globe",
+                buildInvocations: { input, output, _ in
+                    [Invocation(toolName: "pandoc", arguments: ["-s", "-o", output.path, input.path])]
+                },
+                customRunner: Self.pandocTextRunner(arguments: ["-s", "-o", "$OUTPUT", "$INPUT"])
+            ),
             archiveCreateZipAction(),
             archiveCreateGzipAction()
         ]
@@ -1853,40 +1867,48 @@ public final class FormatRegistry {
                 outputExtension: "md",
                 isAdvanced: false,
                 category: .document,
-                iconName: "doc.text"
-            ) { input, output in
-                [Invocation(toolName: "pandoc", arguments: ["-o", output.path, input.path])]
-            },
+                iconName: "doc.text",
+                buildInvocations: { input, output, _ in
+                    [Invocation(toolName: "pandoc", arguments: ["-o", output.path, input.path])]
+                },
+                customRunner: Self.pandocTextRunner(arguments: ["-o", "$OUTPUT", "$INPUT"])
+            ),
             ConversionAction(
                 id: "html.to.docx",
                 displayName: "Convert to DOCX",
                 outputExtension: "docx",
                 isAdvanced: false,
                 category: .document,
-                iconName: "doc.text"
-            ) { input, output in
-                [Invocation(toolName: "pandoc", arguments: ["-o", output.path, input.path])]
-            },
+                iconName: "doc.text",
+                buildInvocations: { input, output, _ in
+                    [Invocation(toolName: "pandoc", arguments: ["-o", output.path, input.path])]
+                },
+                customRunner: Self.pandocTextRunner(arguments: ["-o", "$OUTPUT", "$INPUT"])
+            ),
             ConversionAction(
                 id: "html.to.txt",
                 displayName: "Convert to Plain Text",
                 outputExtension: "txt",
                 isAdvanced: false,
                 category: .document,
-                iconName: "doc.text"
-            ) { input, output in
-                [Invocation(toolName: "pandoc", arguments: ["-o", output.path, input.path])]
-            },
+                iconName: "doc.text",
+                buildInvocations: { input, output, _ in
+                    [Invocation(toolName: "pandoc", arguments: ["-o", output.path, input.path])]
+                },
+                customRunner: Self.pandocTextRunner(arguments: ["-o", "$OUTPUT", "$INPUT"])
+            ),
             ConversionAction(
                 id: "html.to.epub",
                 displayName: "Convert to EPUB",
                 outputExtension: "epub",
                 isAdvanced: false,
                 category: .document,
-                iconName: "book"
-            ) { input, output in
-                [Invocation(toolName: "pandoc", arguments: ["-o", output.path, input.path])]
-            },
+                iconName: "book",
+                buildInvocations: { input, output, _ in
+                    [Invocation(toolName: "pandoc", arguments: ["-o", output.path, input.path])]
+                },
+                customRunner: Self.pandocTextRunner(arguments: ["-o", "$OUTPUT", "$INPUT"])
+            ),
             ConversionAction(
                 id: "html.to.pdf",
                 displayName: "Convert to PDF",
@@ -2031,10 +2053,21 @@ public final class FormatRegistry {
                 outputExtension: "vtt",
                 isAdvanced: false,
                 category: .subtitle,
-                iconName: "captions.bubble"
-            ) { input, output in
-                [Invocation(toolName: "ffmpeg", arguments: ["-nostdin", "-n", "-i", input.path, output.path])]
-            },
+                iconName: "captions.bubble",
+                buildInvocations: { input, output, _ in
+                    [Invocation(toolName: "ffmpeg", arguments: ["-nostdin", "-n", "-i", input.path, output.path])]
+                },
+                customRunner: { input, output, params, runner, jobId in
+                    let handle = try? FileHandle(forReadingFrom: input)
+                    let headerData = handle?.readData(ofLength: 8192) ?? Data()
+                    try? handle?.close()
+                    if headerData.contains(0) {
+                        throw PastaError.invalidInput("Cannot convert binary file to subtitle format")
+                    }
+                    let inv = Invocation(toolName: "ffmpeg", arguments: ["-nostdin", "-y", "-i", input.path, output.path])
+                    try runner.execute(invocation: inv, jobId: jobId)
+                }
+            ),
             archiveCreateZipAction(),
             archiveCreateGzipAction()
         ]
@@ -2048,10 +2081,21 @@ public final class FormatRegistry {
                 outputExtension: "srt",
                 isAdvanced: false,
                 category: .subtitle,
-                iconName: "captions.bubble"
-            ) { input, output in
-                [Invocation(toolName: "ffmpeg", arguments: ["-nostdin", "-n", "-i", input.path, output.path])]
-            },
+                iconName: "captions.bubble",
+                buildInvocations: { input, output, _ in
+                    [Invocation(toolName: "ffmpeg", arguments: ["-nostdin", "-n", "-i", input.path, output.path])]
+                },
+                customRunner: { input, output, params, runner, jobId in
+                    let handle = try? FileHandle(forReadingFrom: input)
+                    let headerData = handle?.readData(ofLength: 8192) ?? Data()
+                    try? handle?.close()
+                    if headerData.contains(0) {
+                        throw PastaError.invalidInput("Cannot convert binary file to subtitle format")
+                    }
+                    let inv = Invocation(toolName: "ffmpeg", arguments: ["-nostdin", "-y", "-i", input.path, output.path])
+                    try runner.execute(invocation: inv, jobId: jobId)
+                }
+            ),
             archiveCreateZipAction(),
             archiveCreateGzipAction()
         ]
@@ -2152,30 +2196,36 @@ public final class FormatRegistry {
                 outputExtension: "txt",
                 isAdvanced: false,
                 category: .document,
-                iconName: "doc.text"
-            ) { input, output in
-                [Invocation(toolName: "ditto", arguments: [input.path, output.path])]
-            },
+                iconName: "doc.text",
+                buildInvocations: { input, output, _ in
+                    [Invocation(toolName: "ditto", arguments: [input.path, output.path])]
+                },
+                customRunner: Self.dittoTextRunner()
+            ),
             ConversionAction(
                 id: "code.to.md",
                 displayName: "Convert to Markdown",
                 outputExtension: "md",
                 isAdvanced: false,
                 category: .document,
-                iconName: "doc.text"
-            ) { input, output in
-                [Invocation(toolName: "pandoc", arguments: ["-o", output.path, input.path])]
-            },
+                iconName: "doc.text",
+                buildInvocations: { input, output, _ in
+                    [Invocation(toolName: "pandoc", arguments: ["-o", output.path, input.path])]
+                },
+                customRunner: Self.pandocTextRunner(arguments: ["-o", "$OUTPUT", "$INPUT"])
+            ),
             ConversionAction(
                 id: "code.to.html",
                 displayName: "Convert to HTML",
                 outputExtension: "html",
                 isAdvanced: false,
                 category: .document,
-                iconName: "globe"
-            ) { input, output in
-                [Invocation(toolName: "pandoc", arguments: ["-s", "-o", output.path, input.path])]
-            },
+                iconName: "globe",
+                buildInvocations: { input, output, _ in
+                    [Invocation(toolName: "pandoc", arguments: ["-s", "-o", output.path, input.path])]
+                },
+                customRunner: Self.pandocTextRunner(arguments: ["-s", "-o", "$OUTPUT", "$INPUT"])
+            ),
             ConversionAction(
                 id: "code.to.pdf",
                 displayName: "Convert to PDF",
@@ -2215,16 +2265,7 @@ public final class FormatRegistry {
                 buildInvocations: { input, output, _ in
                     [Invocation(toolName: "ditto", arguments: [input.path, output.path])]
                 },
-                customRunner: { input, output, params, runner, jobId in
-                    let handle = try? FileHandle(forReadingFrom: input)
-                    let headerData = handle?.readData(ofLength: 8192) ?? Data()
-                    try? handle?.close()
-                    if headerData.contains(0) {
-                        throw PastaError.invalidInput("Cannot convert binary file to plain text")
-                    }
-                    let inv = Invocation(toolName: "ditto", arguments: [input.path, output.path])
-                    try runner.execute(invocation: inv, jobId: jobId)
-                }
+                customRunner: Self.dittoTextRunner()
             ),
             ConversionAction(
                 id: "generic.to.pdf",
@@ -2232,10 +2273,21 @@ public final class FormatRegistry {
                 outputExtension: "pdf",
                 isAdvanced: false,
                 category: .document,
-                iconName: "doc.richtext"
-            ) { input, output in
-                [Invocation(toolName: "cupsfilter", arguments: [input.path], redirectStdoutTo: output.path)]
-            },
+                iconName: "doc.richtext",
+                buildInvocations: { input, output, _ in
+                    [Invocation(toolName: "cupsfilter", arguments: [input.path], redirectStdoutTo: output.path)]
+                },
+                customRunner: { input, output, params, runner, jobId in
+                    let handle = try? FileHandle(forReadingFrom: input)
+                    let headerData = handle?.readData(ofLength: 8192) ?? Data()
+                    try? handle?.close()
+                    if headerData.contains(0) {
+                        throw PastaError.invalidInput("Cannot convert binary file to PDF: null bytes detected")
+                    }
+                    let inv = Invocation(toolName: "cupsfilter", arguments: [input.path], redirectStdoutTo: output.path)
+                    try runner.execute(invocation: inv, jobId: jobId)
+                }
+            ),
             archiveCreateZipAction(),
             archiveCreateGzipAction(),
             ConversionAction(
@@ -2251,6 +2303,38 @@ public final class FormatRegistry {
                 return [Invocation(toolName: "tar", arguments: ["-czf", output.path, "-C", parentDir, name])]
             }
         ]
+    }
+
+    static func pandocTextRunner(arguments: [String]) -> (URL, URL, ParameterValues, JobRunner, UUID) throws -> Void {
+        return { input, output, params, runner, jobId in
+            let handle = try? FileHandle(forReadingFrom: input)
+            let headerData = handle?.readData(ofLength: 8192) ?? Data()
+            try? handle?.close()
+            if headerData.contains(0) {
+                throw PastaError.invalidInput("Cannot process binary file as text: invalid null bytes detected")
+            }
+            var resolvedArgs: [String] = []
+            for arg in arguments {
+                if arg == "$INPUT" { resolvedArgs.append(input.path) }
+                else if arg == "$OUTPUT" { resolvedArgs.append(output.path) }
+                else { resolvedArgs.append(arg) }
+            }
+            let inv = Invocation(toolName: "pandoc", arguments: resolvedArgs)
+            try runner.execute(invocation: inv, jobId: jobId)
+        }
+    }
+
+    static func dittoTextRunner() -> (URL, URL, ParameterValues, JobRunner, UUID) throws -> Void {
+        return { input, output, params, runner, jobId in
+            let handle = try? FileHandle(forReadingFrom: input)
+            let headerData = handle?.readData(ofLength: 8192) ?? Data()
+            try? handle?.close()
+            if headerData.contains(0) {
+                throw PastaError.invalidInput("Cannot convert binary file to plain text")
+            }
+            let inv = Invocation(toolName: "ditto", arguments: [input.path, output.path])
+            try runner.execute(invocation: inv, jobId: jobId)
+        }
     }
 
     private func archiveCreateZipAction() -> ConversionAction {
