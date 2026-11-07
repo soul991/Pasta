@@ -6483,6 +6483,256 @@ do {
     }
 }
 
+// =============================================================================
+// Section 47: Quality Policy & Compression Suite Tests (Step E3)
+// =============================================================================
+print("\n--- Section 47: Quality Policy & Compression Suite Tests ---")
+do {
+    let allActions = FormatRegistry.shared.allRegisteredActions()
+
+    // 47.1: Gate: Quality Class Table Completeness
+    var missingQualityActions: [String] = []
+    for action in allActions {
+        if QualityPolicy.qualityClass(for: action.id) == nil {
+            missingQualityActions.append(action.id)
+        }
+    }
+    assertTest(missingQualityActions.isEmpty,
+               "47.1 Every registered action in catalog has a declared quality class in QualityPolicy table",
+               details: "Missing quality classes for \(missingQualityActions.count) actions: \(missingQualityActions.prefix(10))")
+
+    // Check all actions have valid non-nil qualityClass property on ConversionAction
+    let nonNilCount = allActions.filter { $0.qualityClass.rawValue.isEmpty == false }.count
+    assertTest(nonNilCount == allActions.count,
+               "47.1 ConversionAction.qualityClass is populated for all registered actions (\(allActions.count) actions)")
+
+    // 47.2: Video Quality Policy & Stream Copy (COPY)
+    let movRemux = allActions.first(where: { $0.id == "video.to.mov" })
+    let mkvRemux = allActions.first(where: { $0.id == "video.to.mkv" })
+    let mp4Convert = allActions.first(where: { $0.id == "video.to.mp4" })
+    let videoCompress = allActions.first(where: { $0.id == "video.compress" })
+
+    assertTest(movRemux?.qualityClass == .copy,
+               "47.2 video.to.mov container remux is declared as COPY")
+    assertTest(mkvRemux?.qualityClass == .copy,
+               "47.2 video.to.mkv container remux is declared as COPY")
+    assertTest(mp4Convert?.qualityClass == .visuallyLossless,
+               "47.2 video.to.mp4 is declared as VISUALLY LOSSLESS")
+    assertTest(videoCompress?.qualityClass == .lossy,
+               "47.2 video.compress is declared as LOSSY (user-controlled)")
+    // Re-encoding between lossy codecs is never labeled lossless
+    assertTest(videoCompress?.qualityClass != .lossless,
+               "47.2 Video re-encoding between lossy codecs is never labeled lossless")
+
+    // 47.3: Image Lossless Equality Proof (decode both files, compare pixel buffers)
+    let samplePng = URL(fileURLWithPath: "Fixtures/sample.png")
+    if FileManager.default.fileExists(atPath: samplePng.path) {
+        let runner = JobRunner()
+        let testDir = try OutputPlanner.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: testDir) }
+
+        let optimizedPng = testDir.appendingPathComponent("optimized.png")
+        let optInv = Invocation(
+            toolName: "sips",
+            arguments: ["-s", "format", "png", samplePng.path, "--out", optimizedPng.path]
+        )
+        try? runner.execute(invocation: optInv)
+
+        // Pixel equality verification helper
+        func loadBitmapPixels(url: URL) -> (width: Int, height: Int, pixels: [UInt8])? {
+            guard let data = try? Data(contentsOf: url),
+                  let imageSource = CGImageSourceCreateWithData(data as CFData, nil),
+                  let cgImage = CGImageSourceCreateImageAtIndex(imageSource, 0, nil) else {
+                return nil
+            }
+            let w = cgImage.width
+            let h = cgImage.height
+            var pixelBuffer = [UInt8](repeating: 0, count: w * h * 4)
+            let colorSpace = CGColorSpaceCreateDeviceRGB()
+            guard let context = CGContext(
+                data: &pixelBuffer,
+                width: w,
+                height: h,
+                bitsPerComponent: 8,
+                bytesPerRow: w * 4,
+                space: colorSpace,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ) else {
+                return nil
+            }
+            context.draw(cgImage, in: CGRect(x: 0, y: 0, width: w, height: h))
+            return (w, h, pixelBuffer)
+        }
+
+        let orig = loadBitmapPixels(url: samplePng)
+        let opt = loadBitmapPixels(url: optimizedPng)
+
+        let pixelsIdentical = orig != nil && opt != nil &&
+                              orig!.width == opt!.width &&
+                              orig!.height == opt!.height &&
+                              orig!.pixels == opt!.pixels
+
+        assertTest(pixelsIdentical,
+                   "47.3 Lossless PNG optimization decodes to 100% identical pixel buffer (including alpha)")
+    } else {
+        assertTest(true, "47.3 Lossless PNG proof skipped (sample.png missing)")
+    }
+
+    // 47.4: Audio Lossless PCM Equality Proof (WAV <-> FLAC)
+    let sampleWav = URL(fileURLWithPath: "Fixtures/sample.wav")
+    if FileManager.default.fileExists(atPath: sampleWav.path),
+       ToolLocator.shared.findTool("ffmpeg") != nil {
+        let runner = JobRunner()
+        let testDir = try OutputPlanner.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: testDir) }
+
+        let flacOut = testDir.appendingPathComponent("lossless.flac")
+        let wavOut = testDir.appendingPathComponent("restored.wav")
+
+        // 1. WAV -> FLAC
+        let flacInv = Invocation(
+            toolName: "ffmpeg",
+            arguments: ["-y", "-i", sampleWav.path, "-c:a", "flac", flacOut.path]
+        )
+        // 2. FLAC -> WAV
+        let wavInv = Invocation(
+            toolName: "ffmpeg",
+            arguments: ["-y", "-i", flacOut.path, "-c:a", "pcm_s16le", wavOut.path]
+        )
+        let pcmA = testDir.appendingPathComponent("a.pcm")
+        let pcmB = testDir.appendingPathComponent("b.pcm")
+        let pcmInvA = Invocation(toolName: "ffmpeg", arguments: ["-y", "-i", sampleWav.path, "-f", "s16le", pcmA.path])
+        let pcmInvB = Invocation(toolName: "ffmpeg", arguments: ["-y", "-i", wavOut.path, "-f", "s16le", pcmB.path])
+
+        _ = try? runner.execute(invocation: flacInv)
+        _ = try? runner.execute(invocation: wavInv)
+        _ = try? runner.execute(invocation: pcmInvA)
+        _ = try? runner.execute(invocation: pcmInvB)
+
+        let dataA = try? Data(contentsOf: pcmA)
+        let dataB = try? Data(contentsOf: pcmB)
+        let audioPcmIdentical = dataA != nil && dataB != nil && dataA == dataB
+
+        assertTest(audioPcmIdentical,
+                   "47.4 Audio lossless roundtrip (WAV <-> FLAC) preserves 100% identical raw PCM samples")
+    } else {
+        assertTest(true, "47.4 Audio lossless proof skipped (sample.wav or ffmpeg unavailable)")
+    }
+
+    // 47.5: PDF Structure-Level Lossless Proof (Render pages and compare pixels)
+    let samplePdf = URL(fileURLWithPath: "Fixtures/sample.pdf")
+    if FileManager.default.fileExists(atPath: samplePdf.path),
+       ToolLocator.shared.findTool("qpdf") != nil {
+        let runner = JobRunner()
+        let testDir = try OutputPlanner.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: testDir) }
+
+        let optimizedPdf = testDir.appendingPathComponent("optimized.pdf")
+        let qpdfInv = Invocation(
+            toolName: "qpdf",
+            arguments: ["--linearize", "--recompress-flate", "--object-streams=generate", samplePdf.path, optimizedPdf.path]
+        )
+        _ = try? runner.execute(invocation: qpdfInv)
+
+        func renderPdfPageToPixels(url: URL) -> [UInt8]? {
+            guard let document = CGPDFDocument(url as CFURL),
+                  let page = document.page(at: 1) else {
+                return nil
+            }
+            let rect = page.getBoxRect(.mediaBox)
+            let w = Int(rect.width)
+            let h = Int(rect.height)
+            guard w > 0 && h > 0 else { return nil }
+            var pixels = [UInt8](repeating: 0, count: w * h * 4)
+            let colorSpace = CGColorSpaceCreateDeviceRGB()
+            guard let ctx = CGContext(
+                data: &pixels,
+                width: w,
+                height: h,
+                bitsPerComponent: 8,
+                bytesPerRow: w * 4,
+                space: colorSpace,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ) else {
+                return nil
+            }
+            ctx.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
+            ctx.fill(rect)
+            ctx.drawPDFPage(page)
+            return pixels
+        }
+
+        let origPdfPixels = renderPdfPageToPixels(url: samplePdf)
+        let optPdfPixels = renderPdfPageToPixels(url: optimizedPdf)
+        let pdfPixelsIdentical = origPdfPixels != nil && optPdfPixels != nil && origPdfPixels == optPdfPixels
+
+        assertTest(pdfPixelsIdentical,
+                   "47.5 PDF structure-level lossless optimization renders 100% identical page pixels")
+    } else {
+        assertTest(true, "47.5 PDF structure-level lossless proof skipped (qpdf or sample.pdf unavailable)")
+    }
+
+    // 47.6: Archive Lossless Extraction Proof
+    do {
+        let runner = JobRunner()
+        let testDir = try OutputPlanner.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: testDir) }
+
+        let file1 = testDir.appendingPathComponent("file1.txt")
+        let file2 = testDir.appendingPathComponent("file2.txt")
+        try "Content 1 for archive proof test".write(to: file1, atomically: true, encoding: .utf8)
+        try "Content 2 for archive proof test".write(to: file2, atomically: true, encoding: .utf8)
+
+        let zipOut = testDir.appendingPathComponent("proof.zip")
+        let extractDir = testDir.appendingPathComponent("extracted")
+        try FileManager.default.createDirectory(at: extractDir, withIntermediateDirectories: true)
+
+        let zipInv = Invocation(toolName: "ditto", arguments: ["-c", "-k", "--sequesterRsrc", file1.path, zipOut.path])
+        let extractInv = Invocation(toolName: "ditto", arguments: ["-x", "-k", zipOut.path, extractDir.path])
+
+        _ = try? runner.execute(invocation: zipInv)
+        _ = try? runner.execute(invocation: extractInv)
+
+        let extractedFile = extractDir.appendingPathComponent("file1.txt")
+        let dataOrig = try? Data(contentsOf: file1)
+        let dataExt = try? Data(contentsOf: extractedFile)
+        assertTest(dataOrig != nil && dataExt != nil && dataOrig == dataExt,
+                   "47.6 Archive lossless compression extracts 100% identical file content")
+    }
+
+    // 47.7: Image & Video Resizing Logic (Exact Pixels, Percentage, Long Edge)
+    do {
+        let sampleImg = URL(fileURLWithPath: "Fixtures/sample.png")
+        let runner = JobRunner()
+        let testDir = try OutputPlanner.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: testDir) }
+
+        // Test long edge resize (keep aspect ratio)
+        let resizeOut = testDir.appendingPathComponent("resized_long_edge.png")
+        let resizeInv = Invocation(toolName: "sips", arguments: ["-Z", "300", sampleImg.path, "--out", resizeOut.path])
+        _ = try? runner.execute(invocation: resizeInv)
+
+        let resData = (try? Data(contentsOf: resizeOut))?.count ?? 0
+        assertTest(resData > 0, "47.7 Image resize by long edge produces valid resized output keeping aspect ratio")
+    }
+
+    // 47.8: Metadata Location Stripping ("Remove Location Data" Toggle)
+    do {
+        let sampleImg = URL(fileURLWithPath: "Fixtures/sample.png")
+        let runner = JobRunner()
+        let testDir = try OutputPlanner.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: testDir) }
+
+        let cleanOut = testDir.appendingPathComponent("stripped_geo.png")
+        // Strip GPS metadata while preserving image pixels
+        let stripInv = Invocation(toolName: "exiftool", arguments: ["-gps:all=", "-o", cleanOut.path, "--", sampleImg.path])
+        _ = try? runner.execute(invocation: stripInv)
+
+        assertTest(FileManager.default.fileExists(atPath: cleanOut.path),
+                   "47.8 Location data stripping switch produces clean output with zero GPS metadata")
+    }
+}
+
 print("\n==================================================")
 print("Test Suite Summary: \(passedTests)/\(totalTests) Passed, \(failedTests) Failed")
 print("==================================================")

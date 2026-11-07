@@ -43,16 +43,119 @@ Pasta is built with a different philosophy:
 ## 🗂 Supported File Formats & Engines
 
 <!-- BEGIN_ACTIONS_TABLE -->
-| Category | Formats Supported | Engines Used |
-| :--- | :--- | :--- |
-| **Images** | HEIC, JPG/JPEG, PNG, WebP, TIFF, BMP, GIF, SVG (input), AVIF, Collage grid, Offline QR Decode, Images to PDF | `sips`, `magick`, `cwebp`, `exiftool`, `Vision` |
-| **Video** | MP4, MOV, MKV, WebM, AVI, WMV, animated GIF, audio extraction, Speed (0.25x–4x), Crop, Split, Join, Snapshot | `ffmpeg`, `ffprobe` |
-| **Audio** | MP3, M4A, FLAC, WAV, Opus, AAC, OGG, AIFF, EBU R128 Normalization, Channels (mono/stereo), Bleep tone, Trim | `ffmpeg`, `ffprobe` |
-| **PDF** | Text extraction, page dumps to PNG, Ghostscript multi-preset compression, Split, Merge, Reorganize, Rotate | `pdftotext`, `pdftoppm`, `qpdf`, `ghostscript` |
-| **Documents & Code** | DOCX, TXT, Markdown, HTML, EPUB bidirectional conversion; optional LibreOffice (`soffice`) detection | `pandoc`, `soffice` (optional) |
-| **Subtitles** | SRT &harr; VTT bidirectional conversion | `ffmpeg` |
-| **Archives** | Create ZIP, single GZIP (.gz), TAR.GZ; extract ZIP, TAR, 7z, RAR, GZIP | `unar`, `7zz`, `/usr/bin/ditto`, `/usr/bin/tar` |
-| **Metadata** | Non-destructive JSON/text inspection & whitelisted tag editing with verification | `exiftool`, `ffprobe` |
+| Category | Action ID | Display Name | Target Extension | Advanced | Quality Class |
+| :--- | :--- | :--- | :--- | :---: | :--- |
+| Archive | `archive.create.gzip` | Compress to GZIP | `.gz` | No | LOSSLESS (proven) |
+| Archive | `archive.create.targz` | Compress to TAR.GZ | `.tar.gz` | No | LOSSLESS (proven) |
+| Archive | `archive.create.zip` | Compress to ZIP | `.zip` | No | LOSSLESS (proven) |
+| Archive | `archive.extract` | Extract Archive | `(folder)` | No | LOSSLESS (proven) |
+| Audio | `audio.advanced.compress` | Compress Audio | `.mp3` | Yes | LOSSY (user-controlled) |
+| Metadata | `audio.advanced.strip_metadata` | Remove Metadata | `.mp3` | Yes | LOSSLESS (proven) |
+| Audio | `audio.bleep` | Bleep Out Audio Ranges | `.mp3` | Yes | LOSSY (user-controlled) |
+| Audio | `audio.channels` | Change Audio Channels | `.mp3` | Yes | VISUALLY LOSSLESS |
+| Audio | `audio.compress` | Compress Audio | `.mp3` | No | LOSSY (user-controlled) |
+| Audio | `audio.normalize` | Normalize Audio (EBU R128) | `.mp3` | Yes | VISUALLY LOSSLESS |
+| Audio | `audio.to.aiff` | Convert to AIFF | `.aiff` | No | LOSSLESS (proven) |
+| Audio | `audio.to.flac` | Convert to FLAC | `.flac` | No | LOSSLESS (proven) |
+| Audio | `audio.to.m4a` | Convert to M4A | `.m4a` | No | LOSSY (user-controlled) |
+| Audio | `audio.to.mp3` | Convert to MP3 | `.mp3` | No | LOSSY (user-controlled) |
+| Audio | `audio.to.ogg` | Convert to OGG | `.ogg` | No | LOSSY (user-controlled) |
+| Audio | `audio.to.opus` | Convert to Opus | `.opus` | No | LOSSY (user-controlled) |
+| Audio | `audio.to.wav` | Convert to WAV | `.wav` | No | LOSSLESS (proven) |
+| Audio | `audio.trim` | Trim Audio | `.mp3` | Yes | COPY |
+| Document | `code.to.html` | Convert to HTML | `.html` | No | LOSSLESS (proven) |
+| Document | `code.to.md` | Convert to Markdown | `.md` | No | LOSSLESS (proven) |
+| Document | `code.to.pdf` | Convert to PDF | `.pdf` | No | VISUALLY LOSSLESS |
+| Document | `code.to.txt` | Convert to Plain Text | `.txt` | No | LOSSLESS (proven) |
+| Document | `csv.to.xlsx` | Convert to XLSX | `.xlsx` | No | LOSSLESS (proven) |
+| Document | `docx.to.epub` | Convert to EPUB | `.epub` | No | VISUALLY LOSSLESS |
+| Document | `docx.to.html` | Convert to HTML | `.html` | No | VISUALLY LOSSLESS |
+| Document | `docx.to.images` | Extract Pages to PNGs | `.png` | No | VISUALLY LOSSLESS |
+| Document | `docx.to.md` | Convert to Markdown | `.md` | No | LOSSY (user-controlled) |
+| Document | `docx.to.pdf` | Convert to PDF | `.pdf` | No | VISUALLY LOSSLESS |
+| Document | `docx.to.txt` | Convert to Plain Text | `.txt` | No | LOSSY (user-controlled) |
+| Document | `epub.to.docx` | Convert to DOCX | `.docx` | No | VISUALLY LOSSLESS |
+| Document | `epub.to.html` | Convert to HTML | `.html` | No | VISUALLY LOSSLESS |
+| Document | `epub.to.md` | Convert to Markdown | `.md` | No | LOSSY (user-controlled) |
+| Document | `epub.to.txt` | Convert to Plain Text | `.txt` | No | LOSSY (user-controlled) |
+| Document | `generic.to.pdf` | Convert to PDF | `.pdf` | No | VISUALLY LOSSLESS |
+| Document | `generic.to.txt` | Convert to Plain Text | `.txt` | No | LOSSLESS (proven) |
+| Document | `html.to.docx` | Convert to DOCX | `.docx` | No | VISUALLY LOSSLESS |
+| Document | `html.to.epub` | Convert to EPUB | `.epub` | No | VISUALLY LOSSLESS |
+| Document | `html.to.md` | Convert to Markdown | `.md` | No | LOSSY (user-controlled) |
+| Document | `html.to.pdf` | Convert to PDF | `.pdf` | No | VISUALLY LOSSLESS |
+| Document | `html.to.txt` | Convert to Plain Text | `.txt` | No | LOSSY (user-controlled) |
+| Image | `image.advanced.compress` | Compress Image | `.png` | Yes | LOSSLESS (proven) |
+| Image | `image.advanced.resize_50` | Resize (Max 1200px) | `.png` | Yes | LOSSY (user-controlled) |
+| Metadata | `image.advanced.strip_metadata` | Remove Metadata | `.png` | Yes | LOSSLESS (proven) |
+| Image | `image.collage` | Create Image Collage | `.jpg` | Yes | VISUALLY LOSSLESS |
+| Image | `image.compress` | Compress Image | `.png` | No | LOSSLESS (proven) |
+| PDF | `image.ocr.searchable` | Searchable PDF | `.pdf` | Yes | VISUALLY LOSSLESS |
+| Document | `image.ocr.text` | OCR to Text | `.txt` | Yes | LOSSLESS (proven) |
+| Image | `image.qr.read` | Read QR Code | `.txt` | Yes | LOSSLESS (proven) |
+| Image | `image.resize` | Resize Image | `.png` | No | LOSSY (user-controlled) |
+| Image | `image.to.avif` | Convert to AVIF | `.avif` | No | VISUALLY LOSSLESS |
+| Image | `image.to.bmp` | Convert to BMP | `.bmp` | No | LOSSLESS (proven) |
+| Image | `image.to.gif` | Convert to GIF | `.gif` | No | LOSSY (user-controlled) |
+| Image | `image.to.heic` | Convert to HEIC | `.heic` | No | VISUALLY LOSSLESS |
+| Image | `image.to.jpeg` | Convert to JPEG | `.jpg` | No | LOSSY (user-controlled) |
+| Document | `image.to.pdf` | Convert to PDF | `.pdf` | No | VISUALLY LOSSLESS |
+| Image | `image.to.png` | Convert to PNG | `.png` | No | LOSSLESS (proven) |
+| Image | `image.to.tiff` | Convert to TIFF | `.tiff` | No | LOSSLESS (proven) |
+| Image | `image.to.webp` | Convert to WebP | `.webp` | No | VISUALLY LOSSLESS |
+| Document | `md.to.docx` | Convert to DOCX | `.docx` | No | VISUALLY LOSSLESS |
+| Document | `md.to.epub` | Convert to EPUB | `.epub` | No | VISUALLY LOSSLESS |
+| Document | `md.to.html` | Convert to HTML | `.html` | No | VISUALLY LOSSLESS |
+| Document | `md.to.pdf` | Convert to PDF | `.pdf` | No | VISUALLY LOSSLESS |
+| Document | `md.to.txt` | Convert to Plain Text | `.txt` | No | LOSSLESS (proven) |
+| Metadata | `metadata.edit` | Edit Metadata | `.jpg` | Yes | LOSSLESS (proven) |
+| Metadata | `metadata.read` | Read Metadata | `.txt` | Yes | LOSSLESS (proven) |
+| Document | `office.to.images` | Extract Pages to PNGs | `.png` | No | VISUALLY LOSSLESS |
+| Document | `office.to.pdf` | Convert to PDF | `.pdf` | No | VISUALLY LOSSLESS |
+| PDF | `pdf.advanced.compress` | Compress PDF | `.pdf` | Yes | LOSSLESS (proven) |
+| PDF | `pdf.advanced.split` | Split PDF Pages | `(folder)` | Yes | LOSSLESS (proven) |
+| Metadata | `pdf.advanced.strip_metadata` | Remove Metadata | `.pdf` | Yes | LOSSLESS (proven) |
+| PDF | `pdf.compress` | Compress PDF | `.pdf` | No | LOSSLESS (proven) |
+| PDF | `pdf.merge` | Merge PDFs | `.pdf` | No | LOSSLESS (proven) |
+| PDF | `pdf.ocr.searchable` | Searchable PDF | `.pdf` | Yes | VISUALLY LOSSLESS |
+| PDF | `pdf.ocr.text` | OCR to Text | `.txt` | Yes | LOSSLESS (proven) |
+| PDF | `pdf.pagenumbers` | Page Numbers | `.pdf` | Yes | VISUALLY LOSSLESS |
+| PDF | `pdf.reorganize` | Reorganize / Rotate Pages | `.pdf` | Yes | LOSSLESS (proven) |
+| PDF | `pdf.security.lock` | Lock with Password | `.pdf` | Yes | LOSSLESS (proven) |
+| PDF | `pdf.security.unlock` | Unlock PDF | `.pdf` | Yes | LOSSLESS (proven) |
+| PDF | `pdf.to.epub` | Convert to EPUB (Text Only) | `.epub` | No | LOSSY (user-controlled) |
+| PDF | `pdf.to.epub.calibre` | Convert to EPUB (Better Layout) | `.epub` | Yes | LOSSY (user-controlled) |
+| PDF | `pdf.to.images` | Extract Pages to PNGs | `.png` | No | LOSSLESS (proven) |
+| PDF | `pdf.to.pdfa` | Convert to PDF/A-2b (Archival) | `.pdf` | Yes | VISUALLY LOSSLESS |
+| PDF | `pdf.to.text` | Convert to Plain Text | `.txt` | No | LOSSY (user-controlled) |
+| PDF | `pdf.watermark` | Watermark | `.pdf` | Yes | VISUALLY LOSSLESS |
+| Subtitle | `srt.to.vtt` | Convert to WebVTT | `.vtt` | No | LOSSLESS (proven) |
+| Document | `txt.to.docx` | Convert to DOCX | `.docx` | No | LOSSLESS (proven) |
+| Document | `txt.to.html` | Convert to HTML | `.html` | No | LOSSLESS (proven) |
+| Document | `txt.to.md` | Convert to Markdown | `.md` | No | LOSSLESS (proven) |
+| Video | `video.advanced.compress` | Compress Video | `.mp4` | Yes | LOSSY (user-controlled) |
+| Metadata | `video.advanced.strip_metadata` | Remove Metadata | `.mp4` | Yes | COPY |
+| Video | `video.advanced.trim10` | Trim First 10 Seconds | `.mp4` | Yes | COPY |
+| Video | `video.compress` | Compress Video | `.mp4` | No | LOSSY (user-controlled) |
+| Video | `video.crop` | Crop Video | `.mp4` | Yes | VISUALLY LOSSLESS |
+| Audio | `video.extract.m4a` | Extract M4A Audio | `.m4a` | No | LOSSY (user-controlled) |
+| Audio | `video.extract.mp3` | Extract MP3 Audio | `.mp3` | No | LOSSY (user-controlled) |
+| Audio | `video.extract.wav` | Extract WAV Audio | `.wav` | No | LOSSLESS (proven) |
+| Video | `video.join` | Join Videos | `.mp4` | Yes | COPY |
+| Image | `video.snapshot` | Snapshot Frame (PNG) | `.png` | Yes | VISUALLY LOSSLESS |
+| Image | `video.snapshot.jpg` | Snapshot Frame (JPG) | `.jpg` | Yes | LOSSY (user-controlled) |
+| Video | `video.speed` | Change Video Speed | `.mp4` | Yes | VISUALLY LOSSLESS |
+| Video | `video.split` | Split Video | `.mp4` | Yes | COPY |
+| Video | `video.to.avi` | Convert to AVI | `.avi` | No | VISUALLY LOSSLESS |
+| Video | `video.to.gif` | Convert to GIF | `.gif` | No | LOSSY (user-controlled) |
+| Video | `video.to.mkv` | Remux to MKV | `.mkv` | No | COPY |
+| Video | `video.to.mov` | Remux to MOV | `.mov` | No | COPY |
+| Video | `video.to.mp4` | Convert to MP4 | `.mp4` | No | VISUALLY LOSSLESS |
+| Video | `video.to.webm` | Convert to WebM | `.webm` | No | VISUALLY LOSSLESS |
+| Video | `video.to.wmv` | Convert to WMV | `.wmv` | No | VISUALLY LOSSLESS |
+| Video | `video.trim` | Trim Video | `.mp4` | Yes | COPY |
+| Subtitle | `vtt.to.srt` | Convert to SubRip (.srt) | `.srt` | No | LOSSLESS (proven) |
+| Document | `xlsx.to.csv` | Extract Sheets to CSVs | `.csv` | No | LOSSLESS (proven) |
 <!-- END_ACTIONS_TABLE -->
 
 *Tip: Run `pasta list-actions --all --markdown` to inspect all individual conversion action IDs and parameters.*

@@ -39,6 +39,11 @@ public struct ConversionAction: Identifiable, Equatable {
     public let outputKind: OutputKind
     public let parameters: [ActionParameter]
     public let isBatch: Bool
+    public let declaredQualityClass: QualityClass?
+
+    public var qualityClass: QualityClass {
+        return declaredQualityClass ?? QualityPolicy.qualityClass(for: id) ?? .lossy
+    }
     public typealias CustomRunner = (URL, URL, ParameterValues, JobRunner, UUID) throws -> Void
     public typealias CustomBatchRunner = ([URL], URL, ParameterValues, JobRunner, UUID) throws -> Void
 
@@ -135,6 +140,7 @@ public struct ConversionAction: Identifiable, Equatable {
         parameters: [ActionParameter] = [],
         isBatch: Bool = false,
         requiredTool: String? = nil,
+        qualityClass: QualityClass? = nil,
         buildInvocations: @escaping (URL, URL, ParameterValues) -> [Invocation] = { _, _, _ in [] },
         buildBatchInvocations: (([URL], URL, ParameterValues) -> [Invocation])? = nil,
         customRunner: CustomRunner? = nil,
@@ -149,6 +155,7 @@ public struct ConversionAction: Identifiable, Equatable {
         self.outputKind = outputKind
         self.parameters = parameters
         self.isBatch = isBatch
+        self.declaredQualityClass = qualityClass
         self.requiredTool = requiredTool
         self.buildInvocationsWithParams = buildInvocations
         self.buildBatchInvocationsWithParams = buildBatchInvocations ?? { inputs, out, params in

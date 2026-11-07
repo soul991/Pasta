@@ -194,13 +194,22 @@ public final class FormatRegistry {
             URL(fileURLWithPath: "sample.txt"),
             URL(fileURLWithPath: "sample.epub"),
             URL(fileURLWithPath: "sample.zip"),
-            URL(fileURLWithPath: "sample.tar.gz")
+            URL(fileURLWithPath: "sample.tar.gz"),
+            URL(fileURLWithPath: "sample.srt"),
+            URL(fileURLWithPath: "sample.vtt"),
+            URL(fileURLWithPath: "sample.swift"),
+            URL(fileURLWithPath: "sample.bin")
         ]
         for file in sampleFiles {
             for act in availableActions(for: file) {
                 if collected[act.id] == nil {
                     collected[act.id] = act
                 }
+            }
+        }
+        for act in directoryActions(for: URL(fileURLWithPath: "/dummy")) {
+            if collected[act.id] == nil {
+                collected[act.id] = act
             }
         }
         for act in metadataActions(for: "jpg") {
