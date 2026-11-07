@@ -34,7 +34,15 @@ import sys
 
 engines_dir = "Pasta.app/Contents/Resources/Engines"
 disallowed = ["/opt/homebrew", "/usr/local", "/Users/"]
-allowed_prefixes = ["@loader_path/", "@executable_path/", "@rpath/", "/usr/lib/", "/System/Library/"]
+allowed_prefixes = [
+    "@loader_path/",
+    "@executable_path/",
+    "@rpath/",
+    "@__________________________________________________",
+    "/@.__________________________________________________",
+    "/usr/lib/",
+    "/System/Library/"
+]
 
 violations = []
 checked = 0

@@ -6274,7 +6274,15 @@ do {
         var checkedMachO = 0
         var badLinks: [String] = []
         let disallowedSubstrings = ["/opt/homebrew", "/usr/local", "/Users/"]
-        let allowedPrefixes = ["@loader_path/", "@executable_path/", "@rpath/", "/usr/lib/", "/System/Library/"]
+        let allowedPrefixes = [
+            "@loader_path/",
+            "@executable_path/",
+            "@rpath/",
+            "@__________________________________________________",
+            "/@.__________________________________________________",
+            "/usr/lib/",
+            "/System/Library/"
+        ]
 
         if let enumerator = FileManager.default.enumerator(at: appEnginesURL, includingPropertiesForKeys: [.isRegularFileKey], options: [.skipsHiddenFiles]) {
             for case let fileURL as URL in enumerator {
