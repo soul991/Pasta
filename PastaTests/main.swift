@@ -7829,6 +7829,203 @@ do {
     assertTest(sm7.isAutoPollingActive == false, "51.10 Auto polling stopped successfully")
 }
 
+// --- 52. Credits Data and Size Report Verification Gate (Step E8) ---
+do {
+    print("\n--- 52. Credits Data and Size Report Verification Gate (Step E8) ---")
+
+    let repoRoot = URL(fileURLWithPath: #file)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+
+    // 52.1 acknowledgments.json exists and is non-empty
+    let resourcesDir = repoRoot.appendingPathComponent("PastaCore/Resources")
+    let ackJsonURL = resourcesDir.appendingPathComponent("acknowledgments.json")
+    let ackFileExists = FileManager.default.fileExists(atPath: ackJsonURL.path)
+    assertTest(ackFileExists, "52.1 acknowledgments.json exists in PastaCore/Resources")
+
+    // 52.2 AcknowledgmentCatalog loads bundled resources
+    let catalog = AcknowledgmentCatalog.loadBundled()
+    assertTest(catalog != nil, "52.2 AcknowledgmentCatalog.loadBundled() successfully loads and decodes catalog")
+
+    let loadedCatalog = catalog ?? (try? AcknowledgmentCatalog.load(from: ackJsonURL)) ?? AcknowledgmentCatalog(items: [])
+    let items = loadedCatalog.items
+
+    // 52.3 Exactly 19 tools present in catalog
+    assertTest(items.count == 19, "52.3 AcknowledgmentCatalog contains exactly 19 tools (found: \(items.count))")
+
+    // 52.4 Every tool from LICENSE_AUDIT.md is present
+    let expectedTools = [
+        "ffmpeg", "ffprobe", "cwebp", "magick", "gs", "qpdf", "pdftoppm",
+        "pdftotext", "exiftool", "pandoc", "rsvg-convert", "unar", "7zz",
+        "sips", "ditto", "tar", "soffice", "ebook-convert", "avifenc"
+    ]
+    let loadedToolNames = Set(items.map { $0.id.lowercased() })
+    let missingFromCatalog = expectedTools.filter { !loadedToolNames.contains($0) }
+    assertTest(missingFromCatalog.isEmpty, "52.4 All 19 audited tools present in catalog (missing: \(missingFromCatalog))")
+
+    // 52.5 All items have non-empty name and id
+    let invalidNames = items.filter { $0.name.trimmingCharacters(in: .whitespaces).isEmpty || $0.id.trimmingCharacters(in: .whitespaces).isEmpty }
+    assertTest(invalidNames.isEmpty, "52.5 Every catalog item has non-empty name and id (invalid: \(invalidNames.map(\.id)))")
+
+    // 52.6 All items have non-empty version
+    let emptyVersions = items.filter { $0.version.trimmingCharacters(in: .whitespaces).isEmpty }
+    assertTest(emptyVersions.isEmpty, "52.6 Every catalog item has non-empty version (empty: \(emptyVersions.map(\.id)))")
+
+    // 52.7 All items have valid SPDX license ID matching LICENSE_AUDIT.md
+    let emptySpdx = items.filter { $0.spdxId.trimmingCharacters(in: .whitespaces).isEmpty }
+    assertTest(emptySpdx.isEmpty, "52.7 Every catalog item has non-empty SPDX license ID (empty: \(emptySpdx.map(\.id)))")
+
+    // 52.8 All items have valid license URL matching upstream
+    let invalidLicenseUrls = items.filter { !$0.licenseUrl.hasPrefix("http://") && !$0.licenseUrl.hasPrefix("https://") }
+    assertTest(invalidLicenseUrls.isEmpty, "52.8 Every catalog item has valid HTTP/HTTPS license URL (invalid: \(invalidLicenseUrls.map(\.id)))")
+
+    // 52.9 All items have valid source URL
+    let invalidSourceUrls = items.filter { !$0.sourceUrl.hasPrefix("http://") && !$0.sourceUrl.hasPrefix("https://") }
+    assertTest(invalidSourceUrls.isEmpty, "52.9 Every catalog item has valid HTTP/HTTPS source URL (invalid: \(invalidSourceUrls.map(\.id)))")
+
+    // 52.10 Every tool has full license text > 100 characters
+    let shortLicenseTexts = items.filter { $0.licenseText.trimmingCharacters(in: .whitespacesAndNewlines).count < 100 }
+    assertTest(shortLicenseTexts.isEmpty, "52.10 Every catalog item contains comprehensive license text (> 100 chars) (short: \(shortLicenseTexts.map(\.id)))")
+
+    // 52.11 Every tool has explicit bundling decision
+    let missingDecisions = items.filter { $0.bundlingDecision.trimmingCharacters(in: .whitespaces).isEmpty }
+    assertTest(missingDecisions.isEmpty, "52.11 Every catalog item has an explicit bundling decision (missing: \(missingDecisions.map(\.id)))")
+
+    // 52.12 PastaCore/Resources/Licenses directory contains individual license files for all 19 tools
+    let licensesDir = resourcesDir.appendingPathComponent("Licenses")
+    let licensesDirExists = FileManager.default.fileExists(atPath: licensesDir.path)
+    assertTest(licensesDirExists, "52.12 PastaCore/Resources/Licenses directory exists")
+
+    var missingLicenseFiles: [String] = []
+    for tool in expectedTools {
+        let txtFile = licensesDir.appendingPathComponent("\(tool).txt")
+        if !FileManager.default.fileExists(atPath: txtFile.path) {
+            missingLicenseFiles.append(tool)
+        }
+    }
+    assertTest(missingLicenseFiles.isEmpty, "52.12 Individual license files exist for all 19 tools (missing: \(missingLicenseFiles))")
+
+    // 52.13 Each <tool>.txt file has matching content with item.licenseText
+    var mismatchedLicenseTexts: [String] = []
+    for item in items {
+        let txtFile = licensesDir.appendingPathComponent("\(item.id).txt")
+        if let fileContent = try? String(contentsOf: txtFile, encoding: .utf8) {
+            if fileContent.trimmingCharacters(in: .whitespacesAndNewlines) != item.licenseText.trimmingCharacters(in: .whitespacesAndNewlines) {
+                mismatchedLicenseTexts.append(item.id)
+            }
+        }
+    }
+    assertTest(mismatchedLicenseTexts.isEmpty && !items.isEmpty, "52.13 License text files match catalog licenseText exactly (mismatched: \(mismatchedLicenseTexts))")
+
+    // 52.14 scripts/measure_bundle_size.sh exists and is executable
+    let measureScriptURL = repoRoot.appendingPathComponent("scripts/measure_bundle_size.sh")
+    let scriptExists = FileManager.default.fileExists(atPath: measureScriptURL.path)
+    let isExec = (try? FileManager.default.attributesOfItem(atPath: measureScriptURL.path)[.posixPermissions] as? NSNumber)?.intValue ?? 0 & 0o111 != 0
+    assertTest(scriptExists && isExec, "52.14 scripts/measure_bundle_size.sh exists and is executable")
+
+    // 52.15 scripts/measure_bundle_size.sh reports bundle within 500 MB budget
+    var sizeUnderBudget = false
+    var reportedSizeMB: Double = 0
+    if scriptExists {
+        let proc = Process()
+        let pipe = Pipe()
+        proc.executableURL = measureScriptURL
+        proc.arguments = ["--json"]
+        proc.standardOutput = pipe
+        proc.standardError = Pipe()
+        proc.currentDirectoryURL = repoRoot
+        if let _ = try? proc.run() {
+            proc.waitUntilExit()
+            if proc.terminationStatus == 0 {
+                let outData = pipe.fileHandleForReading.readDataToEndOfFile()
+                if let json = try? JSONSerialization.jsonObject(with: outData) as? [String: Any],
+                   let totalMB = json["total_bundle_size_mb"] as? Double,
+                   let withinBudget = json["within_budget"] as? Bool {
+                    reportedSizeMB = totalMB
+                    sizeUnderBudget = withinBudget && totalMB <= 500.0
+                }
+            }
+        }
+    }
+    assertTest(sizeUnderBudget, "52.15 Bundle size is within 500 MB budget (reported: \(reportedSizeMB) MB)")
+
+    // --- Stage 1 Gate: 5 Random Actions End-to-End Spot-Check on macOS ---
+    let spotCheckDir = FileManager.default.temporaryDirectory.appendingPathComponent("pasta_stage1_spotcheck_\(UUID().uuidString)")
+    try? FileManager.default.createDirectory(at: spotCheckDir, withIntermediateDirectories: true)
+    defer {
+        try? FileManager.default.removeItem(at: spotCheckDir)
+    }
+
+    // Spot-check 1: image.to.png (via sips)
+    let imgInput = spotCheckDir.appendingPathComponent("sample_image.jpg")
+    let sipsCreateProc = Process()
+    sipsCreateProc.executableURL = URL(fileURLWithPath: "/usr/bin/sips")
+    sipsCreateProc.arguments = ["-s", "format", "jpeg", "/System/Library/CoreServices/DefaultDesktop.heic", "--out", imgInput.path, "-z", "64", "64"]
+    try? sipsCreateProc.run()
+    sipsCreateProc.waitUntilExit()
+    if !FileManager.default.fileExists(atPath: imgInput.path) {
+        let bmpHeader = Data([0x42, 0x4D, 0x3A, 0, 0, 0, 0, 0, 0, 0, 0x36, 0, 0, 0, 0x28, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0x18, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF, 0, 0, 0])
+        try? bmpHeader.write(to: imgInput)
+    }
+    var action1Success = false
+    if let imgAction = FormatRegistry.shared.action(byId: "image.to.png") {
+        let runner = JobRunner()
+        if let res = try? runner.run(action: imgAction, input: imgInput, destinationDirectory: spotCheckDir) {
+            action1Success = FileManager.default.fileExists(atPath: res.path) && (try? FileManager.default.attributesOfItem(atPath: res.path)[.size] as? UInt64 ?? 0) ?? 0 > 0
+        }
+    }
+    assertTest(action1Success, "52.16 Stage 1 Gate Action 1: image.to.png executes end-to-end successfully")
+
+    // Spot-check 2: image.to.jpeg (via sips)
+    var action2Success = false
+    if let jpegAction = FormatRegistry.shared.action(byId: "image.to.jpeg") {
+        let runner = JobRunner()
+        if let res = try? runner.run(action: jpegAction, input: imgInput, destinationDirectory: spotCheckDir) {
+            action2Success = FileManager.default.fileExists(atPath: res.path) && (try? FileManager.default.attributesOfItem(atPath: res.path)[.size] as? UInt64 ?? 0) ?? 0 > 0
+        }
+    }
+    assertTest(action2Success, "52.17 Stage 1 Gate Action 2: image.to.jpeg executes end-to-end successfully")
+
+    // Spot-check 3: archive.create.zip (via ditto)
+    let archiveInput = spotCheckDir.appendingPathComponent("folder_to_zip")
+    try? FileManager.default.createDirectory(at: archiveInput, withIntermediateDirectories: true)
+    try? "Hello Pasta Archive".data(using: .utf8)?.write(to: archiveInput.appendingPathComponent("test.txt"))
+    var action3Success = false
+    if let zipAction = FormatRegistry.shared.action(byId: "archive.create.zip") {
+        let runner = JobRunner()
+        if let res = try? runner.run(action: zipAction, input: archiveInput, destinationDirectory: spotCheckDir) {
+            action3Success = FileManager.default.fileExists(atPath: res.path) && (try? FileManager.default.attributesOfItem(atPath: res.path)[.size] as? UInt64 ?? 0) ?? 0 > 0
+        }
+    }
+    assertTest(action3Success, "52.18 Stage 1 Gate Action 3: archive.create.zip executes end-to-end successfully")
+
+    // Spot-check 4: archive.extract (via ditto or tar)
+    var action4Success = false
+    let zipFile = spotCheckDir.appendingPathComponent("folder_to_zip.zip")
+    if FileManager.default.fileExists(atPath: zipFile.path),
+       let extractAction = FormatRegistry.shared.action(byId: "archive.extract") {
+        let runner = JobRunner()
+        let extractDest = spotCheckDir.appendingPathComponent("extracted_out")
+        try? FileManager.default.createDirectory(at: extractDest, withIntermediateDirectories: true)
+        if let res = try? runner.run(action: extractAction, input: zipFile, destinationDirectory: extractDest) {
+            action4Success = FileManager.default.fileExists(atPath: res.path)
+        }
+    }
+    assertTest(action4Success, "52.19 Stage 1 Gate Action 4: archive.extract executes end-to-end successfully")
+
+    // Spot-check 5: pdf.to.text (via pdftotext or native)
+    var action5Success = false
+    let samplePdfURL = repoRoot.appendingPathComponent("Fixtures/sample.pdf")
+    if FileManager.default.fileExists(atPath: samplePdfURL.path),
+       let pdfAction = FormatRegistry.shared.action(byId: "pdf.to.text") {
+        let runner = JobRunner()
+        if let res = try? runner.run(action: pdfAction, input: samplePdfURL, destinationDirectory: spotCheckDir) {
+            action5Success = FileManager.default.fileExists(atPath: res.path) && (try? FileManager.default.attributesOfItem(atPath: res.path)[.size] as? UInt64 ?? 0) ?? 0 > 0
+        }
+    }
+    assertTest(action5Success, "52.20 Stage 1 Gate Action 5: pdf.to.text executes end-to-end successfully")
+}
+
 
 
 

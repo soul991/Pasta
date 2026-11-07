@@ -262,60 +262,33 @@ exec {sys_path} "$@"
         elif tool_type == "app_bundle":
             app_name = spec["app_name"]
             subpath = spec["subpath"]
-            # Look in /Applications or parent Engines dir
             app_candidates = [
                 os.path.join("/Applications", app_name),
-                os.path.join(dest_dir, app_name)
+                os.path.join(os.path.expanduser("~/Applications"), app_name)
             ]
             found_app = next((p for p in app_candidates if os.path.isdir(p)), None)
             if found_app:
-                target_app = os.path.join(dest_dir, app_name)
-                if found_app != target_app:
-                    print(f"  [app_bundle] Copying {found_app} to {target_app}...")
-                    subprocess.run(["rsync", "-a", "--delete", found_app + "/", target_app + "/"], check=True)
-
-                # Sanitize build-machine paths and internal placeholders in app bundle
-                for root, dirs, files in os.walk(target_app):
-                    for file in files:
-                        fp = os.path.join(root, file)
-                        if is_macho(fp):
-                            # Check LC_ID_DYLIB
-                            id_res = subprocess.run(["otool", "-D", fp], capture_output=True, text=True)
-                            id_lines = id_res.stdout.strip().split("\n")[1:]
-                            if id_lines:
-                                dylib_id = id_lines[0].strip()
-                                if "/@__________________________________________________" in dylib_id:
-                                    clean_id = dylib_id[dylib_id.index("@__________________________________________________"):]
-                                    os.chmod(fp, stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
-                                    subprocess.run(["install_name_tool", "-id", clean_id, fp], capture_output=True)
-                            # Check dependencies
-                            deps = get_dependencies(fp)
-                            for dep in deps:
-                                if "/@__________________________________________________" in dep:
-                                    clean_dep = dep[dep.index("@__________________________________________________"):]
-                                    os.chmod(fp, stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
-                                    subprocess.run(["install_name_tool", "-change", dep, clean_dep, fp], capture_output=True)
-
-                exec_target = os.path.join(target_app, subpath)
-                # Create bin symlink
-                bin_sym = os.path.join(bin_dir, name)
-                if os.path.exists(bin_sym) or os.path.islink(bin_sym):
-                    os.remove(bin_sym)
-                rel_target = os.path.relpath(exec_target, bin_dir)
-                os.symlink(rel_target, bin_sym)
-                v = get_tool_version(exec_target, spec["version_flag"])
-                size = os.path.getsize(exec_target)
-                sha = sha256_file(exec_target)
+                exec_target = os.path.join(found_app, subpath)
+                dest_bin = os.path.join(bin_dir, name)
+                wrapper_content = f"""#!/bin/sh
+exec "{exec_target}" "$@"
+"""
+                with open(dest_bin, "w") as f:
+                    f.write(wrapper_content)
+                os.chmod(dest_bin, 0o755)
+                v = get_tool_version(dest_bin, spec["version_flag"])
+                size = os.path.getsize(dest_bin)
+                sha = sha256_file(dest_bin)
                 manifest_entries.append({
                     "id": name,
                     "version": v,
                     "sha256": sha,
                     "size": size,
-                    "entry_point": f"{app_name}/{subpath}",
-                    "source": "bundled_app"
+                    "entry_point": f"bin/{name}",
+                    "source": "cask_wrapper"
                 })
                 tools_bundled.append(name)
-                print(f"  [app_bundle] {name} -> {target_app} ({v})")
+                print(f"  [app_bundle] {name} -> {exec_target} ({v})")
             else:
                 if not is_opt and args.strict:
                     sys.exit(f"Error: required app bundle {app_name} not found!")

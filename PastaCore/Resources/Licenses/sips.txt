@@ -1,0 +1,8 @@
+Apple Inc. Software License Agreement / macOS System Utility Notice
+
+sips (Scriptable Image Processing System) is a native command-line utility provided as an integrated component of Apple macOS system software.
+
+Use of sips is governed by the Apple Software License Agreement for macOS operating system software (https://www.apple.com/legal/sla/).
+Pasta executes sips strictly as an external system tool already installed on the host macOS system and does not distribute, redistribute, or modify Apple proprietary binaries or code.
+
+Copyright (c) Apple Inc. All rights reserved.
