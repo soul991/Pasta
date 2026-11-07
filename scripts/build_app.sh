@@ -34,6 +34,17 @@ if [ -f "PastaCore/Resources/theme_tokens.json" ]; then
     cp PastaCore/Resources/theme_tokens.json "$RESOURCES_DIR/theme_tokens.json"
 fi
 
+if [ -f "PastaCore/Resources/acknowledgments.json" ]; then
+    echo "Copying acknowledgments.json to Resources..."
+    cp PastaCore/Resources/acknowledgments.json "$RESOURCES_DIR/acknowledgments.json"
+fi
+
+if [ -d "PastaCore/Resources/Licenses" ]; then
+    echo "Copying Licenses/ directory to Resources..."
+    rm -rf "$RESOURCES_DIR/Licenses"
+    cp -R PastaCore/Resources/Licenses "$RESOURCES_DIR/Licenses"
+fi
+
 echo "Packaging bundled relocatable engines into $RESOURCES_DIR/Engines..."
 ./scripts/build_engines.sh "$RESOURCES_DIR/Engines"
 
