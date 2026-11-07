@@ -5786,6 +5786,43 @@ do {
 
     assertTest(!auditContent.isEmpty && missingAuditTools.isEmpty, "41.3 All 19 ToolLocator tools have a dedicated row in docs/LICENSE_AUDIT.md (missing: \(missingAuditTools))")
     assertTest(!auditContent.isEmpty && missingUrlsOrUnverified.isEmpty, "41.4 Every tool row in docs/LICENSE_AUDIT.md contains an upstream license URL or is marked UNVERIFIED (invalid: \(missingUrlsOrUnverified))")
+
+    // Test 41.5: Tools whose source in engines.json is bundled must not be described as "Do Not Bundle" in LICENSE_AUDIT.md
+    struct ManifestCheckEntry: Decodable {
+        let id: String
+        let source: String
+    }
+
+    let manifestCandidates = [
+        repoRoot.appendingPathComponent("Engines/engines.json"),
+        repoRoot.appendingPathComponent("Pasta.app/Contents/Resources/Engines/engines.json")
+    ]
+    let enginesManifestURL = manifestCandidates.first(where: { FileManager.default.fileExists(atPath: $0.path) })
+    let manifestData = enginesManifestURL.flatMap { try? Data(contentsOf: $0) }
+    let manifestEntries = manifestData.flatMap { try? JSONDecoder().decode([ManifestCheckEntry].self, from: $0) } ?? []
+
+    var improperlyDoNotBundleTools: [String] = []
+    var bundledToolsWithoutLicenseUrl: [String] = []
+
+    for entry in manifestEntries where entry.source.contains("bundled") {
+        let toolPattern = "| `\(entry.id)` |"
+        let toolPatternPlain = "| \(entry.id) |"
+        if let line = auditContent.components(separatedBy: .newlines).first(where: { $0.contains(toolPattern) || $0.contains(toolPatternPlain) }) {
+            if line.contains("Do Not Bundle") || line.contains("DO NOT BUNDLE") {
+                improperlyDoNotBundleTools.append(entry.id)
+            }
+            if !(line.contains("http://") || line.contains("https://") || line.contains("UNVERIFIED")) {
+                bundledToolsWithoutLicenseUrl.append(entry.id)
+            }
+        } else {
+            improperlyDoNotBundleTools.append("\(entry.id) (missing row)")
+        }
+    }
+
+    assertTest(!manifestEntries.isEmpty && improperlyDoNotBundleTools.isEmpty,
+               "41.5 A tool whose source in engines.json is bundled must not be described as 'Do Not Bundle' in LICENSE_AUDIT.md (violators: \(improperlyDoNotBundleTools))")
+    assertTest(!manifestEntries.isEmpty && bundledToolsWithoutLicenseUrl.isEmpty,
+               "41.6 Every bundled tool must have a row and a license URL or UNVERIFIED (violators: \(bundledToolsWithoutLicenseUrl))")
 }
 
 do {

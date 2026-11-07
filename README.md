@@ -15,7 +15,7 @@ Pasta is a personal, zero-cloud file converter for macOS. Drag any supported fil
 Most existing file converters either upload your confidential documents, private photos, and videos to remote third-party cloud servers, or wrap heavy, sluggish web runtimes.
 
 Pasta is built with a different philosophy:
-- **Verified Local Processing & Zero Telemetry**: No network frameworks or APIs (`URLSession`, BSD sockets) are imported or linked into the app binary (verified by CI symbol scan). Zero telemetry, tracking, or analytics exist in the codebase. Pasta invokes only the tools installed on your Mac, never downloads anything on its own, and files never leave the machine.
+- **Verified Local Processing & Zero Telemetry**: No network frameworks or APIs (`URLSession`, BSD sockets) are imported or linked into the app binary (verified by CI symbol scan). Zero telemetry, tracking, or analytics exist in the codebase. All 19 conversion and inspection engines are bundled self-contained inside the application bundle (`Contents/Resources/Engines/`). Pasta never downloads anything on its own, requires no external dependencies for end users, and files never leave the machine.
 - **Fast & Native**: Written in pure Swift with native AppKit components. No Electron, no web wrappers, no sluggish startup times.
 - **Battle-Tested Engines**: Drives industry-standard open-source CLI tools (`ffmpeg`, `imagemagick`, `poppler`, `pandoc`, etc.) directly via POSIX process isolation without shell string injection.
 - **Deliberate Frictionless Interaction**: Summons an intuitive circular wheel right under your cursor via Shift-drag hold.
@@ -25,7 +25,7 @@ Pasta is built with a different philosophy:
 
 ## ✨ Features
 
-- **Verified Local Processing**: No network APIs or external connections linked in the app binary. Pasta processes files strictly on your local machine using user-managed engines.
+- **Verified Local Processing**: No network APIs or external connections linked in the app binary. Pasta processes files strictly on your local machine using fully bundled, self-contained relocatable engines.
 - **Deliberate Shift-Hold Radial Wheel**: While a file drag is active, holding <kbd>Shift</kbd> for **450 ms** opens the radial wheel at the cursor. A quick graze or typing tap (<450 ms) is ignored. After a 120 ms delay, a thin charging progress ring fills around the cursor. Releasing Shift or pressing any other key cancels the charge. Once opened, the wheel **latches** and remains open after Shift is released. A second Shift-hold, dropping outside, or pressing <kbd>Esc</kbd> closes it. Fully configurable in Settings with a hold duration slider (300 ms to 1000 ms, default 450 ms), latch toggle, and charging ring toggle.
 - **Tab Flip Side for Extended Actions**: While the radial options wheel is open, pressing <kbd>Tab</kbd> flips the wheel to reveal secondary actions specifically mapped to the current file type. Pressing <kbd>Tab</kbd> again seamlessly returns to the primary action set.
 - **Per-File-Type Radial Profiles**: Dedicated primary and secondary action profiles customized per file format category (Images, Video, Audio, PDFs, Office Documents, Archives), ensuring the most relevant tools appear immediately without cluttering the interface.
@@ -164,24 +164,28 @@ Pasta is built with a different philosophy:
 
 ## 🚀 Installation & Setup
 
-### Prerequisites
+### Packaged Application (Recommended)
 
-Install the underlying open-source command-line engines via [Homebrew](https://brew.sh):
+1. Download `Pasta.app` or install from the release archive / DMG.
+2. Drag `Pasta.app` to `/Applications`.
+3. Launch Pasta from Applications or the menu bar.
+4. Grant Accessibility permissions when prompted (required for the global Shift-drag radial wheel).
+
+All 19 required conversion and inspection engines are fully bundled inside `Pasta.app/Contents/Resources/Engines/` out of the box — no Homebrew installation or extra downloads are required for end users.
+
+### Developer Builds & Source Compilation (Optional)
+
+If you are developing Pasta or testing against system-installed tools:
 
 ```bash
-brew install ffmpeg imagemagick webp ghostscript qpdf poppler exiftool pandoc librsvg unar sevenzip
+# Optional: Install tools via Homebrew for development
+brew install ffmpeg imagemagick webp ghostscript qpdf poppler exiftool pandoc librsvg unar sevenzip libavif
+brew install --cask libreoffice calibre
 ```
 
-*Optional Engines (for Office and eBook formats):*
-```bash
-brew install libavif && brew install --cask libreoffice calibre
-```
+In Pasta's settings, you can enable **"Developer mode: use my installed tools"** to prefer system-level binaries over bundled engines. Run `pasta doctor` at any time to verify system and bundled engine discovery.
 
-Run `pasta doctor` at any time to verify installed tools and generate copy-paste Homebrew commands for any missing engines.
-
-### Build & Install
-
-Run the included automated installer script:
+### Build & Install from Source
 
 ```bash
 # Build the native app bundle and command-line binary
@@ -205,7 +209,7 @@ For the **Shift-Drag** global radial wheel to intercept drag gestures outside th
 ## ⚠️ Current Limitations
 
 - **Ad-Hoc Signed (Not Notarized)**: Releases are currently ad-hoc signed and not notarized by an Apple Developer account. On first launch, macOS Gatekeeper may show a warning. Right-click (or Control-click) `Pasta.app`, select **Open**, and click **Open Anyway** (or go to **System Settings > Privacy & Security** and click **Open Anyway**).
-- **External CLI Engines**: Pasta does not bundle binary engines inside the application bundle. You must install the necessary engines via Homebrew.
+- **Self-Contained Bundled Engines**: All conversion engines and libraries are bundled self-contained within `Pasta.app/Contents/Resources/Engines/`. Developer mode is available in Settings for testing against local system tools.
 - **Atomic Placeholder Visibility**: During conversion, a zero-byte placeholder file is temporarily reserved in the destination folder to prevent concurrent name collisions. It is atomically replaced by the completed output once conversion succeeds.
 - **Accessibility Requirement**: Global Shift-drag gesture interception requires macOS Accessibility permissions. If not granted, Pasta operates via the Menu Bar drop zone and the CLI.
 

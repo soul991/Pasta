@@ -1,0 +1,138 @@
+[
+  {
+    "id": "7zz",
+    "version": "26.05",
+    "sha256": "110c6bc1a5a36a0cdf91dfbf62154830e4bd1f6eba380bfc8348668236b623dd",
+    "size": 2440880,
+    "entry_point": "bin/7zz",
+    "source": "bundled_macho"
+  },
+  {
+    "id": "avifenc",
+    "version": "1.4.2",
+    "sha256": "f439d236dd7889c146a7a5adc0ab42277a8ebb8d1338688f9aacb2731235e466",
+    "size": 130368,
+    "entry_point": "bin/avifenc",
+    "source": "bundled_macho"
+  },
+  {
+    "id": "cwebp",
+    "version": "1.6.0",
+    "sha256": "b31070342821b6316c756e22a336a72bbde4a6e4f2a9cabb22ffd49a73cc89cf",
+    "size": 76832,
+    "entry_point": "bin/cwebp",
+    "source": "bundled_macho"
+  },
+  {
+    "id": "ditto",
+    "version": "Usage: ditto [ <options> ] src",
+    "sha256": "4fc22b12bbb7327da592886eacdee80ac70b3c02177101283a27897e29d32ddb",
+    "size": 270464,
+    "entry_point": "bin/ditto",
+    "source": "system_wrapper"
+  },
+  {
+    "id": "exiftool",
+    "version": "13.55",
+    "sha256": "8acbe7b404a21f868f8b904d9a9b51600dea4ec85cacca76ddaf6de568efb5e2",
+    "size": 352272,
+    "entry_point": "bin/exiftool",
+    "source": "bundled_script"
+  },
+  {
+    "id": "ffmpeg",
+    "version": "9.0.2",
+    "sha256": "7f6028378534aa10a2dfa07d807ddcc0d18c869bf5c2f64c89efcc18ee88c4ee",
+    "size": 426512,
+    "entry_point": "bin/ffmpeg",
+    "source": "bundled_macho"
+  },
+  {
+    "id": "ffprobe",
+    "version": "9.0.2",
+    "sha256": "bfe676bfc3a889bebe63af07c71a926a6167f568c7a932a79c2f1fe51ae6d5a1",
+    "size": 253488,
+    "entry_point": "bin/ffprobe",
+    "source": "bundled_macho"
+  },
+  {
+    "id": "gs",
+    "version": "10.08.0",
+    "sha256": "1718e3198396e277f4ace305b7f26ebcf3bb5454ae1f1c4f95bdf000716cce8d",
+    "size": 12899808,
+    "entry_point": "bin/gs",
+    "source": "bundled_macho_wrapper"
+  },
+  {
+    "id": "magick",
+    "version": "7.1.2-35",
+    "sha256": "dcde6b9fc1ad978af361df0528de3f0e6e51da985ef92f557db30aaa7fe0b4bc",
+    "size": 35440,
+    "entry_point": "bin/magick",
+    "source": "bundled_macho_wrapper"
+  },
+  {
+    "id": "pandoc",
+    "version": "3.13",
+    "sha256": "6b5b3b2bf3c002186ad4a12dfb4c9689649cad48fe87520986ec8a397c98b4c3",
+    "size": 289052912,
+    "entry_point": "bin/pandoc",
+    "source": "bundled_macho"
+  },
+  {
+    "id": "pdftoppm",
+    "version": "26.10.0",
+    "sha256": "c4a597b71ecb039c1d38dfa7c956acd8ff648b82147a4f47be97842dcef4c3f6",
+    "size": 75504,
+    "entry_point": "bin/pdftoppm",
+    "source": "bundled_macho"
+  },
+  {
+    "id": "pdftotext",
+    "version": "26.10.0",
+    "sha256": "6aaac05a72dc928c0006ed763a89dff1b147c509735c3a666990320e0e969364",
+    "size": 110712,
+    "entry_point": "bin/pdftotext",
+    "source": "bundled_macho"
+  },
+  {
+    "id": "qpdf",
+    "version": "12.4.2",
+    "sha256": "d780c4f63f9bda31437c1228909557e8e577b32a2e792bae38ce140757c8c140",
+    "size": 37960,
+    "entry_point": "bin/qpdf",
+    "source": "bundled_macho"
+  },
+  {
+    "id": "rsvg-convert",
+    "version": "2.63.4",
+    "sha256": "1e37b0959cb39237136da53c4b348749b48c00110c1cd73e42d858b1ddbec77e",
+    "size": 6588400,
+    "entry_point": "bin/rsvg-convert",
+    "source": "bundled_macho"
+  },
+  {
+    "id": "sips",
+    "version": "sips-316",
+    "sha256": "0453d837d30f5e08e3ffc16429e25a63cd5433b2a32957af31ba71abb61c2bee",
+    "size": 504416,
+    "entry_point": "bin/sips",
+    "source": "system_wrapper"
+  },
+  {
+    "id": "tar",
+    "version": "3.5.3",
+    "sha256": "640f174362e1c0bd27450d0cbf77583d1811f8011a6de54de81c3118b7be0863",
+    "size": 421904,
+    "entry_point": "bin/tar",
+    "source": "system_wrapper"
+  },
+  {
+    "id": "unar",
+    "version": "1.10.7",
+    "sha256": "f3d452ad4140d86f59437f5d2a1996f9dcca1cf0cf1f7e081952a6a5fd3d6b9a",
+    "size": 2329504,
+    "entry_point": "bin/unar",
+    "source": "bundled_macho"
+  }
+]
