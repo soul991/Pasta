@@ -223,7 +223,7 @@ fi
 
 # metadata.read
 META_OUT=$("$PASTA_BIN" metadata read "Fixtures/user's document.jpg" --json 2>&1 || true)
-if echo "$META_OUT" | grep -q "ImageSize"; then
+if echo "$META_OUT" | grep "ImageSize" > /dev/null; then
     pass "metadata.read extracted JSON safely from hostile \"user's document.jpg\""
 else
     fail "metadata.read hostile filename" "Failed to read metadata: $META_OUT"
@@ -468,14 +468,14 @@ rm -f /tmp/escape.txt /tmp/pasta_abs_escape.txt
 # 7.4 CLI Doctor & Action List Tests
 echo -e "\n--- 7.4 CLI Doctor & Action List Tests ---"
 DOCTOR_JSON=$("$PASTA_BIN" doctor --json 2>/dev/null || true)
-if echo "$DOCTOR_JSON" | grep -q '"tools"' && echo "$DOCTOR_JSON" | grep -q '"allRequiredAvailable"'; then
+if python3 -c 'import sys, json; d = json.loads(sys.stdin.read()); assert "tools" in d and "allRequiredAvailable" in d' <<< "$DOCTOR_JSON" > /dev/null 2>&1; then
     pass "pasta doctor --json produces valid JSON schema with tools and availability"
 else
     fail "Doctor JSON schema invalid" "Output did not contain required JSON fields: $DOCTOR_JSON"
 fi
 
 ACTIONS_MD=$("$PASTA_BIN" list-actions --all --markdown 2>/dev/null || true)
-if echo "$ACTIONS_MD" | grep -q '| Category | Action ID |' && echo "$ACTIONS_MD" | grep -q 'image.to.png'; then
+if python3 -c 'import sys; s = sys.stdin.read(); assert "| Category | Action ID |" in s and "image.to.png" in s' <<< "$ACTIONS_MD" > /dev/null 2>&1; then
     pass "pasta list-actions --all --markdown generates valid markdown action table"
 else
     fail "List actions markdown table invalid" "Output did not contain markdown table header or actions: $ACTIONS_MD"
