@@ -262,6 +262,20 @@
 | Shift-hold duration and latching invariance | Step C3 | Interaction | **DONE** | `44.10 Existing Shift-hold duration and latch behavior preferences remain intact` |
 | Custom per-file-type profile override persistence | Step C3 | Storage | **DONE** | `44.11 Custom per-file-type profile can be updated and retrieved` |
 
+---
+
+## Phase P Progress & Verification
+
+| Step | Scope | Status | Verification & Gates |
+| :--- | :--- | :--- | :--- |
+| **Step P0** | Baseline re-verification, audit, PR #9 fallback record, hygiene | **Complete** | All 7 items verified, docs/R1_GATE_AUDIT.md committed |
+| **Step E1** | Bundled Relocatable Engines (`Pasta.app/Contents/Resources/Engines`) | **Complete** | 16 engines packaged, @loader_path rewritten, isolated execution verified |
+| **Step E2** | Clean-Machine & Isolation Gate (PR #14 & #15) | **Complete** | All 455 Mach-O binaries verified isolated; `scripts/test_isolation.sh` gate |
+| **Step E3** | Quality Policy & Compression Suite (PR #16) | **Complete** | All 111 catalog actions mapped to quality classes in `PastaCore/QualityPolicy.swift` |
+| **Step E4** | Behavioral Completeness of Action Catalog (PR #17) | **Complete** | All 111 actions have verified end-to-end execution, corrupt/missing input tests |
+| **Step E5** | Heavy-job guard (logic only) | **In Progress** | Limits config JSON, estimator math, disk safety check, QoS .utility, pause/resume SIGSTOP/SIGCONT, thermal protection |
+
+
 
 
 
