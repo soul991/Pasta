@@ -8,7 +8,13 @@ set -euo pipefail
 TARGET_DIR="${1:-/tmp/pasta_hostile_fixtures_$$}"
 mkdir -p "$TARGET_DIR"
 
-python3 - <<EOF
+# Use system python3 so hostile PATH tests do not intercept test fixture generation
+PYTHON_BIN="/usr/bin/python3"
+if [ ! -x "$PYTHON_BIN" ]; then
+    PYTHON_BIN="python3"
+fi
+
+"$PYTHON_BIN" - <<EOF
 import os
 import sys
 import zipfile

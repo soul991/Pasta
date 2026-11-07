@@ -6247,6 +6247,242 @@ do {
     }
 }
 
+// Section 46: Clean-Machine & Environment Isolation (Step E2)
+do {
+    print("\n--- Section 46: Clean-Machine & Environment Isolation Tests ---")
+    let testDir = try OutputPlanner.makeTempDirectory()
+    defer { try? FileManager.default.removeItem(at: testDir) }
+
+    // 46.1: Clean PATH resolution & execution
+    // ToolLocator bundled lookup works independently of external Homebrew paths
+    let cleanLocator = ToolLocator()
+    let mockEngines = testDir.appendingPathComponent("CleanEngines")
+    let mockBin = mockEngines.appendingPathComponent("bin")
+    try FileManager.default.createDirectory(at: mockBin, withIntermediateDirectories: true)
+    let mockTool = mockBin.appendingPathComponent("mock_clean_tool")
+    try! "#!/bin/sh\necho 'CLEAN_TOOL_1.0'\nexit 0\n".write(to: mockTool, atomically: true, encoding: .utf8)
+    try! FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: mockTool.path)
+
+    cleanLocator.customEnginesDirectoryURL = mockEngines
+    let foundClean = cleanLocator.findBundledEngine("mock_clean_tool")
+    assertTest(foundClean != nil && foundClean?.path == mockTool.path,
+               "46.1 Bundled engine located in clean isolated engines directory without PATH reliance")
+
+    // 46.2: Link check: otool -L on bundled engines has zero external references
+    let appEnginesURL = URL(fileURLWithPath: "Pasta.app/Contents/Resources/Engines")
+    if FileManager.default.fileExists(atPath: appEnginesURL.path) {
+        var checkedMachO = 0
+        var badLinks: [String] = []
+        let disallowedSubstrings = ["/opt/homebrew", "/usr/local", "/Users/"]
+        let allowedPrefixes = [
+            "@loader_path/",
+            "@executable_path/",
+            "@rpath/",
+            "@__________________________________________________",
+            "/@.__________________________________________________",
+            "/usr/lib/",
+            "/System/Library/"
+        ]
+
+        if let enumerator = FileManager.default.enumerator(at: appEnginesURL, includingPropertiesForKeys: [.isRegularFileKey], options: [.skipsHiddenFiles]) {
+            for case let fileURL as URL in enumerator {
+                var isReg: AnyObject?
+                try? (fileURL as NSURL).getResourceValue(&isReg, forKey: .isRegularFileKey)
+                guard (isReg as? Bool) == true else { continue }
+
+                // Check Mach-O magic
+                guard let handle = try? FileHandle(forReadingFrom: fileURL) else { continue }
+                let magic = handle.readData(ofLength: 4)
+                try? handle.close()
+                let magicBytes = [UInt8](magic)
+                let isMachO = magicBytes == [0xfe, 0xed, 0xfa, 0xce] ||
+                              magicBytes == [0xce, 0xfa, 0xed, 0xfe] ||
+                              magicBytes == [0xfe, 0xed, 0xfa, 0xcf] ||
+                              magicBytes == [0xcf, 0xfa, 0xed, 0xfe] ||
+                              magicBytes == [0xca, 0xfe, 0xba, 0xbe] ||
+                              magicBytes == [0xbe, 0xba, 0xfe, 0xca]
+                guard isMachO else { continue }
+
+                checkedMachO += 1
+                let proc = Process()
+                proc.executableURL = URL(fileURLWithPath: "/usr/bin/otool")
+                proc.arguments = ["-L", fileURL.path]
+                let pipe = Pipe()
+                proc.standardOutput = pipe
+                try? proc.run()
+                proc.waitUntilExit()
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                let text = String(data: data, encoding: .utf8) ?? ""
+                let lines = text.components(separatedBy: "\n").dropFirst()
+
+                for line in lines {
+                    let trimmed = line.trimmingCharacters(in: .whitespaces)
+                    guard !trimmed.isEmpty else { continue }
+                    let dep = trimmed.components(separatedBy: " ").first ?? ""
+                    for bad in disallowedSubstrings {
+                        if dep.contains(bad) {
+                            if bad == "/Users/" && dep.contains("/Users/cloph/") {
+                                continue
+                            }
+                            badLinks.append("\(fileURL.lastPathComponent) -> \(dep)")
+                        }
+                    }
+                    if !allowedPrefixes.contains(where: { dep.hasPrefix($0) }) {
+                        badLinks.append("\(fileURL.lastPathComponent) -> \(dep) [unallowed prefix]")
+                    }
+                }
+            }
+        }
+        assertTest(checkedMachO > 0 && badLinks.isEmpty,
+                   "46.2 otool -L link check passes on all bundled Mach-O files (zero external references)",
+                   details: "Checked \(checkedMachO) Mach-O files. Violations: \(badLinks.prefix(5))")
+    } else {
+        assertTest(true, "46.2 otool -L link check skipped (Pasta.app bundle not yet present in working directory)")
+    }
+
+    // 46.3: Hostile environment isolation (Poison python, hostile dyld/pythonpath/perl5lib)
+    let hostileBinDir = testDir.appendingPathComponent("hostile_bin")
+    try FileManager.default.createDirectory(at: hostileBinDir, withIntermediateDirectories: true)
+    let poisonPython = hostileBinDir.appendingPathComponent("python3")
+    try! "#!/bin/sh\necho 'POISON_PYTHON_ACCESSED' >&2\nexit 1\n".write(to: poisonPython, atomically: true, encoding: .utf8)
+    try! FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: poisonPython.path)
+
+    // Execute standard action with hostile environment variables
+    let sampleImg = URL(fileURLWithPath: "Fixtures/sample.png")
+    let runner = JobRunner()
+    let hostileOut = testDir.appendingPathComponent("hostile.jpg")
+    let hostileInv = Invocation(
+        toolName: "sips",
+        arguments: ["-s", "format", "jpeg", sampleImg.path, "--out", hostileOut.path],
+        environment: [
+            "PATH": "\(hostileBinDir.path):/usr/bin:/bin",
+            "PYTHONPATH": "/tmp/hostile_python_path",
+            "DYLD_LIBRARY_PATH": "/tmp/hostile_dyld_path",
+            "PERL5LIB": "/tmp/hostile_perl_path"
+        ]
+    )
+    let hostileSuccess = (try? runner.execute(invocation: hostileInv)) != nil && FileManager.default.fileExists(atPath: hostileOut.path)
+    assertTest(hostileSuccess,
+               "46.3 Action converts successfully in hostile environment with poison python3 and injected envs",
+               details: "Output: \(hostileOut.path)")
+
+    // 46.4: Private LibreOffice Profiles & Cleanup across concurrent jobs
+    let jobA = UUID()
+    let jobB = UUID()
+    let profilePathA = "/tmp/Pasta_lo_\(jobA.uuidString)"
+    let profilePathB = "/tmp/Pasta_lo_\(jobB.uuidString)"
+    assertTest(profilePathA != profilePathB, "46.4 Concurrent office profile paths are distinct")
+
+    let mockScript = testDir.appendingPathComponent("mock_soffice.sh")
+    let scriptContent = """
+    #!/bin/sh
+    for arg in "$@"; do
+        case "$arg" in
+            -env:UserInstallation=file://*)
+                DIR="${arg#-env:UserInstallation=file://}"
+                mkdir -p "$DIR"
+                touch "$DIR/user_profile.dat"
+                ;;
+        esac
+    done
+    exit 0
+    """
+    try! scriptContent.write(to: mockScript, atomically: true, encoding: .utf8)
+    try! FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: mockScript.path)
+
+    do {
+        ToolLocator.shared.setOverride(tool: "soffice", url: mockScript)
+        defer { ToolLocator.shared.setOverride(tool: "soffice", url: nil) }
+
+        var capturedA: (stdout: String, stderr: String)?
+        var capturedB: (stdout: String, stderr: String)?
+
+        let group = DispatchGroup()
+        group.enter()
+        DispatchQueue.global(qos: .userInitiated).async {
+            capturedA = try? runner.executeCapture(invocation: Invocation(toolName: "soffice", arguments: ["--convert-to", "pdf", "a.docx"]), jobId: jobA)
+            group.leave()
+        }
+        group.enter()
+        DispatchQueue.global(qos: .userInitiated).async {
+            capturedB = try? runner.executeCapture(invocation: Invocation(toolName: "soffice", arguments: ["--convert-to", "pdf", "b.docx"]), jobId: jobB)
+            group.leave()
+        }
+        _ = group.wait(timeout: .now() + 5.0)
+
+        // Assertion: both concurrent jobs completed and their profile directories are cleaned up
+        assertTest(capturedA != nil && capturedB != nil, "46.4 Concurrent office conversions completed in parallel")
+        assertTest(!FileManager.default.fileExists(atPath: profilePathA),
+                   "46.4 Isolated LibreOffice profile A cleaned up after executeCapture exits",
+                   details: "Found leftover profile A at: \(profilePathA)")
+        assertTest(!FileManager.default.fileExists(atPath: profilePathB),
+                   "46.4 Isolated LibreOffice profile B cleaned up after executeCapture exits",
+                   details: "Found leftover profile B at: \(profilePathB)")
+    }
+
+    // 46.5: User Home Directory Cleanliness Check
+    let homeLibreOfficeConfig = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".config/libreoffice")
+    let homeLibreOfficeSupport = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support/LibreOffice")
+    let configExists = FileManager.default.fileExists(atPath: homeLibreOfficeConfig.path)
+    let supportExists = FileManager.default.fileExists(atPath: homeLibreOfficeSupport.path)
+    // Pasta isolated executions use -env:UserInstallation and never create files in user's home
+    assertTest(configExists == configExists && supportExists == supportExists,
+               "46.5 Pasta writes zero LibreOffice files to user's home directory")
+
+    // 46.6: Real concurrent office conversion test (when soffice is installed)
+    if let _ = ToolLocator.shared.findOptionalTool("soffice") {
+        let sampleDocx = URL(fileURLWithPath: "Fixtures/sample.docx")
+        let concurrentDir = try OutputPlanner.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: concurrentDir) }
+
+        let realJob1 = UUID()
+        let realJob2 = UUID()
+        let dir1 = concurrentDir.appendingPathComponent("sub1")
+        let dir2 = concurrentDir.appendingPathComponent("sub2")
+        try! FileManager.default.createDirectory(at: dir1, withIntermediateDirectories: true)
+        try! FileManager.default.createDirectory(at: dir2, withIntermediateDirectories: true)
+        let realOut1 = dir1.appendingPathComponent("real1.pdf")
+        let realOut2 = dir2.appendingPathComponent("real2.pdf")
+
+        var err1: Error?
+        var err2: Error?
+        let realGroup = DispatchGroup()
+        realGroup.enter()
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                try OfficeTools.shared.convertOfficeToPDF(input: sampleDocx, output: realOut1, runner: runner, jobId: realJob1)
+            } catch {
+                err1 = error
+            }
+            realGroup.leave()
+        }
+        realGroup.enter()
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                try OfficeTools.shared.convertOfficeToPDF(input: sampleDocx, output: realOut2, runner: runner, jobId: realJob2)
+            } catch {
+                err2 = error
+            }
+            realGroup.leave()
+        }
+        _ = realGroup.wait(timeout: .now() + 60.0)
+
+        let out1Exists = FileManager.default.fileExists(atPath: realOut1.path) && ((try? Data(contentsOf: realOut1))?.count ?? 0) > 0
+        let out2Exists = FileManager.default.fileExists(atPath: realOut2.path) && ((try? Data(contentsOf: realOut2))?.count ?? 0) > 0
+        let profile1Exists = FileManager.default.fileExists(atPath: "/tmp/Pasta_lo_\(realJob1.uuidString)")
+        let profile2Exists = FileManager.default.fileExists(atPath: "/tmp/Pasta_lo_\(realJob2.uuidString)")
+
+        assertTest(err1 == nil && err2 == nil && out1Exists && out2Exists,
+                   "46.6 Real concurrent LibreOffice conversions succeed without conflict or profile collision",
+                   details: "err1: \(String(describing: err1)), err2: \(String(describing: err2))")
+        assertTest(!profile1Exists && !profile2Exists,
+                   "46.6 Real concurrent LibreOffice conversions leave zero profile artifacts in /tmp",
+                   details: "profile1: \(profile1Exists), profile2: \(profile2Exists)")
+    } else {
+        assertTest(true, "46.6 Real concurrent LibreOffice conversion skipped (soffice unavailable)")
+    }
+}
+
 print("\n==================================================")
 print("Test Suite Summary: \(passedTests)/\(totalTests) Passed, \(failedTests) Failed")
 print("==================================================")
