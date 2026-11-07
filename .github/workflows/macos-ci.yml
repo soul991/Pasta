@@ -106,6 +106,10 @@ jobs:
           echo "SHA-256 Checksum:"
           cat Pasta-macOS.zip.sha256
 
+      - name: Measure Bundle & Release Size (Report Only)
+        run: |
+          ./scripts/measure_bundle_size.sh
+
       - name: Upload Release Artifact
         uses: actions/upload-artifact@v4
         with:
